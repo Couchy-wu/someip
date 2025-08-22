@@ -1,7 +1,10 @@
 import os
 import subprocess
 import tkinter.messagebox as tk
-import platform  # 用于更准确的系统判断
+import platform
+import shutil
+
+# 模块功能：以只读的形式打开Excel表格文件
 
 class ViewCaseHandler:
     def __init__(self, selected_file, test_case_folder="测试用例集"):
@@ -21,16 +24,29 @@ class ViewCaseHandler:
             return
 
         try:
-            system = platform.system()  # 获取系统类型，如 'Linux', 'Darwin', 'Windows'
-
+            system = platform.system()
             if system == 'Windows':
-                os.startfile(file_path)
+                # 查找Excel的安装路径
+                excel_path = shutil.which('excel')
+                if excel_path:
+                    # 使用Excel的只读模式参数（/r）
+                    subprocess.run([excel_path, '/r', file_path], check=True)
+                else:
+                    tk.showerror("错误", "未找到Excel程序，请安装Excel")
+                    return
             elif system == 'Linux':
-                subprocess.run(['xdg-open', file_path], check=True)
-            elif system == 'Darwin':  # macOS
+                # 使用LibreOffice以只读模式打开文件
+                try:
+                    subprocess.run(['libreoffice', '--view', file_path], check=True)
+                except FileNotFoundError:
+                    tk.showerror("错误", "请安装LibreOffice以查看文件")
+                    return
+            elif system == 'Darwin':
+                # macOS目前无法直接以只读模式打开Excel文件，可以考虑其他方法
+                # 这里暂时使用默认打开
                 subprocess.run(['open', file_path], check=True)
             else:
                 tk.showerror("错误", f"不支持的系统: {system}")
-
+                return
         except Exception as e:
             tk.showerror("错误", f"无法打开文件：{e}")
