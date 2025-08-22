@@ -1,6 +1,7 @@
 import os
 import shutil
 from tkinter import filedialog, messagebox
+import json
 
 # 模块功能：上传测试用例
 
@@ -66,3 +67,22 @@ def handle_file_upload():
             except Exception as e:
                 messagebox.showerror("错误", f"文件上传失败：{str(e)}")
                 return
+            
+        refresh_json_file()
+            
+# 函数功能：更新test_cases.json
+def refresh_json_file():
+    target_folder = os.path.join(os.getcwd(), "测试用例集")
+    if not os.path.exists(target_folder):
+        os.makedirs(target_folder)
+    
+    json_file = os.path.join(target_folder, "test_cases.json")
+    file_list = []
+    
+    for file in os.listdir(target_folder):
+        if file.endswith(('.xls', '.xlsx')):
+            file_list.append(file)
+    
+    with open(json_file, 'w', encoding='utf-8') as f:
+        json.dump(file_list, f, indent=4, ensure_ascii=False)
+
