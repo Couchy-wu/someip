@@ -2,7 +2,7 @@ import os
 import shutil
 from tkinter import filedialog, messagebox
 import json
-import pandas as pd  # 用于解析 Excel 文件
+import pandas as pd
 
 # 函数：上传测试用例 Excel 文件
 def handle_file_upload():
@@ -57,12 +57,10 @@ def refresh_json_file(uploaded_file=None):
     json_file = os.path.join(target_folder, "test_cases.json")
     file_list = []
 
-    if uploaded_file:
-        file_list.append(uploaded_file)
-    else:
-        for file in os.listdir(target_folder):
-            if file.endswith(('.xls', '.xlsx')):
-                file_list.append(file)
+    # 遍历整个文件夹，更新所有 Excel 文件名
+    for file in os.listdir(target_folder):
+        if file.endswith(('.xls', '.xlsx')):
+            file_list.append(file)
 
     # 更新文件列表 JSON
     with open(json_file, 'w', encoding='utf-8') as f:
