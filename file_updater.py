@@ -5,6 +5,7 @@ from file_handler import handle_file_upload, refresh_json_file
 from delete_handler import delete_test_case
 
 class FileUpdater:
+    # 初始化方法，设置目标文件夹和JSON文件的路径，用于存储测试用例列表
     def __init__(self, target_folder="测试用例集", json_filename="test_cases.json"):
         self.target_folder = target_folder
         self.json_file = os.path.join(target_folder, json_filename)
