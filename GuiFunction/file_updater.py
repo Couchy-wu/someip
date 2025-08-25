@@ -1,8 +1,8 @@
 import os
 import json
 from tkinter import ttk
-from file_handler import handle_file_upload, refresh_json_file
-from delete_handler import delete_test_case
+from GuiFunction.file_handler import handle_file_upload, refresh_json_file
+from GuiFunction.delete_handler import delete_test_case
 
 class FileUpdater:
     # 初始化方法，设置目标文件夹和JSON文件的路径，用于存储测试用例列表

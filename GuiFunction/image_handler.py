@@ -3,6 +3,8 @@ import tkinter as tk
 from tkinter import filedialog, Toplevel
 from PIL import Image, ImageTk
 
+# 模块功能：打开一个图像并显示
+
 class ImageHandler:
     def __init__(self, root):
         self.root = root

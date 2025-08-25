@@ -1,11 +1,11 @@
 import tkinter as tk
 import os
 from tkinter import ttk
-from file_updater import FileUpdater
-from file_handler import handle_file_upload
-from delete_handler import delete_test_case
-from view_case_handler import ViewCaseHandler
-from image_handler import ImageHandler
+from GuiFunction.file_updater import FileUpdater
+from GuiFunction.file_handler import handle_file_upload
+from GuiFunction.delete_handler import delete_test_case
+from GuiFunction.view_case_handler import ViewCaseHandler
+from GuiFunction.image_handler import ImageHandler
 
 # 创建主窗口
 root = tk.Tk()
