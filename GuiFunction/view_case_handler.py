@@ -26,14 +26,25 @@ class ViewCaseHandler:
         try:
             system = platform.system()
             if system == 'Windows':
-                # 查找Excel的安装路径
-                excel_path = shutil.which('excel')
-                if excel_path:
-                    # 使用Excel的只读模式参数（/r）
-                    subprocess.run([excel_path, '/r', file_path], check=True)
+                # 查找WPS的安装路径
+                file_root_path = os.getcwd()
+                file_path = os.path.join(file_root_path,file_path)
+                # windows系统用wps打开似乎需要绝对路径？
+                wps_path = shutil.which('wps')
+                if wps_path == None :
+                    wps_path = r'C:\Program Files (x86)\Kingsoft\WPS Office\12.8.2.20324\office6\et.exe'
+                if wps_path:
+                    # 使用WPS打开文件
+                    subprocess.run([wps_path, file_path], check=True)
                 else:
-                    tk.showerror("错误", "未找到Excel程序，请安装Excel")
-                    return
+                    # 如果找不到WPS，尝试查找Excel
+                    excel_path = shutil.which('excel')
+                    if excel_path:
+                        # 使用Excel的只读模式参数（/r）
+                        subprocess.run([excel_path, '/r', file_path], check=True)
+                    else:
+                        tk.showerror("错误", "未找到WPS和Excel程序，请安装WPS或Excel")
+                        return
             elif system == 'Linux':
                 # 使用LibreOffice以只读模式打开文件
                 try:
