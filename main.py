@@ -5,6 +5,7 @@ from file_updater import FileUpdater
 from file_handler import handle_file_upload
 from delete_handler import delete_test_case
 from view_case_handler import ViewCaseHandler
+from image_handler import ImageHandler
 
 # 创建主窗口
 root = tk.Tk()
@@ -17,6 +18,9 @@ selected_file = tk.StringVar()
 
 # 初始化查看用例处理器
 view_case_handler = ViewCaseHandler(selected_file)
+
+# 初始化 ImageHandler，传入主窗口 root
+image_handler = ImageHandler(root)
 
 # 创建“上传测试用例”按钮
 upload_button = tk.Button(
@@ -58,6 +62,16 @@ view_button = tk.Button(
     height=2
 )
 view_button.grid(row=1, column=1, padx=20, pady=20)
+
+# 添加“打开图片”按钮
+image_button = tk.Button(
+    root,
+    text="打开图片",
+    command=image_handler.open_image,
+    width=15,
+    height=2
+)
+image_button.grid(row=2, column=0, padx=20, pady=20)
 
 # 运行主循环
 root.mainloop()
