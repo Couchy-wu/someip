@@ -13,8 +13,15 @@ class ImageHandler:
         # 打开文件选择对话框
         file_path = filedialog.askopenfilename(
             title="选择图片",
-            filetypes=[("Image files", "*.jpg *.jpeg *.png *.bmp *.tiff")]
+            filetypes=[("Image files", (
+                "*.jpg *.JPG "
+                "*.jpeg *.JPEG "
+                "*.png *.PNG "
+                "*.bmp *.BMP "
+                "*.tiff *.TIFF "
+            ))]
         )
+
         if not file_path:
             print("未选择图片")
             return
@@ -29,6 +36,9 @@ class ImageHandler:
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         pil_image = Image.fromarray(image)
 
+        # 获取图像分辨率
+        width, height = pil_image.size
+
         # 创建新窗口
         top = Toplevel(self.root)
         top.title("图片预览")
@@ -39,6 +49,10 @@ class ImageHandler:
         # 显示图片
         label = tk.Label(top, image=imgtk)
         label.pack(padx=10, pady=10)
+
+        # 显示分辨率信息
+        resolution_label = tk.Label(top, text=f"分辨率: {width}x{height}")
+        resolution_label.pack(padx=10, pady=5)
 
         # 保持图像引用，防止被垃圾回收
         label.image = imgtk
