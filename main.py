@@ -6,6 +6,7 @@ from GuiFunction.file_handler import handle_file_upload
 from GuiFunction.delete_handler import delete_test_case
 from GuiFunction.view_case_handler import ViewCaseHandler
 from GuiFunction.image_handler import ImageHandler
+from GuiFunction.video_processor import VideoProcessor 
 
 # 创建主窗口
 root = tk.Tk()
@@ -19,8 +20,11 @@ selected_file = tk.StringVar()
 # 初始化查看用例处理器
 view_case_handler = ViewCaseHandler(selected_file)
 
-# 初始化 ImageHandler，传入主窗口 root
+# 初始化 ImageHandler
 image_handler = ImageHandler(root)
+
+# 初始化 VideoProcessor
+video_processor = VideoProcessor(root)  # 传入主窗口
 
 # 创建“上传测试用例”按钮
 upload_button = tk.Button(
@@ -57,7 +61,7 @@ delete_button.config(command=lambda: file_updater.on_delete(selected_file, file_
 view_button = tk.Button(
     root,
     text="查看用例",
-    command=view_case_handler.open_selected_file,  # 调用模块方法
+    command=view_case_handler.open_selected_file,
     width=15,
     height=2
 )
@@ -72,6 +76,16 @@ image_button = tk.Button(
     height=2
 )
 image_button.grid(row=2, column=0, padx=20, pady=20)
+
+# 添加“读取视频”按钮
+video_button = tk.Button(
+    root,
+    text="读取视频",
+    command=video_processor.process_video,
+    width=15,
+    height=2
+)
+video_button.grid(row=2, column=1, padx=20, pady=20)
 
 # 运行主循环
 root.mainloop()
