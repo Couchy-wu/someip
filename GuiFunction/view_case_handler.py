@@ -30,7 +30,7 @@ class ViewCaseHandler:
                 file_root_path = os.getcwd()
                 file_path = os.path.join(file_root_path,file_path)
                 # windows系统用wps打开似乎需要绝对路径？
-                wps_path = shutil.which('wps')
+                wps_path = None
                 if wps_path == None :
                     # wps_path = r'C:\Program Files (x86)\Kingsoft\WPS Office\12.8.2.20324\office6\et.exe'
                     wps_folder = r'C:\Program Files (x86)\Kingsoft\WPS Office'
