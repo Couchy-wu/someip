@@ -1,8 +1,10 @@
 import os
 import shutil
+import tkinter as tk
 from tkinter import filedialog, messagebox
 import json
 import pandas as pd
+
 
 # 函数：上传测试用例 Excel 文件
 def handle_file_upload():
@@ -13,6 +15,10 @@ def handle_file_upload():
     )
 
     if file_path:
+        # 弹出更改名字提醒的对话框
+        root = tk.Tk()
+        root.withdraw()  # 隐藏主窗口
+        messagebox.showinfo("提示", "请更改名字")
         # 指定目标文件夹路径
         target_folder = os.path.join(os.getcwd(), "TestcaseCollection")
         # 创建目标文件夹（如果不存在）
