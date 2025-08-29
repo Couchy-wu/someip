@@ -2,11 +2,13 @@ import cv2
 import os
 import tkinter as tk
 from tkinter import filedialog, messagebox
-from GuiFunction.progress_bar import ProgressBar  # 导入新模块
+from GuiFunction.progress_bar import ProgressBar
 
-# 模块功能：读取视频，并将视频以每秒5帧截取成图片
+# 模块功能：读取视频，并将视频以每秒FPS_CONSTANT帧截取成图片
 
 class VideoProcessor:
+    FPS_CONSTANT = 30  # 定义帧数常量，表示每秒截取的帧数
+    
     def __init__(self, root):
         self.root = root
         self.progress_bar = ProgressBar(root)  # 初始化进度条
@@ -43,11 +45,21 @@ class VideoProcessor:
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = cap.get(cv2.CAP_PROP_FPS)
 
+        # 检查 fps 是否为零
+        if fps <= 0:
+            messagebox.showerror("错误", "视频的帧率无效，请检查视频文件！")
+            cap.release()
+            return
+
         # 创建进度条
         self.progress_bar.create_progress_bar("视频处理进度", total_frames)
 
-        # 计算每帧间隔（每秒5帧）
-        frame_interval = int(fps / 5)
+        # 计算每帧间隔（每秒FPS_CONSTANT帧）
+        frame_interval = int(fps / VideoProcessor.FPS_CONSTANT)
+
+        # 确保 frame_interval 至少为 1
+        if frame_interval <= 0:
+            frame_interval = 1
 
         frame_count = 0
         image_count = 0
