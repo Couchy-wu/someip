@@ -6,11 +6,11 @@ from tkinter import filedialog, messagebox
 # 函数功能：删除测试用例集中的Excel文件，并同步删除对应的data.json文件
 def delete_test_case():
     # 指定测试用例集文件夹路径
-    target_folder = os.path.join(os.getcwd(), "测试用例集")
+    target_folder = os.path.join(os.getcwd(), "TestcaseCollection")
 
     # 检查文件夹是否存在
     if not os.path.exists(target_folder):
-        messagebox.showerror("错误", "测试用例集文件夹不存在")
+        messagebox.showerror("错误", "TestcaseCollection文件夹不存在")
         return
 
     # 弹出文件选择对话框，仅允许选择Excel文件
@@ -23,7 +23,7 @@ def delete_test_case():
     if file_path:
         # 检查文件是否在测试用例集文件夹中
         if not file_path.startswith(target_folder):
-            messagebox.showerror("错误", "请选择测试用例集文件夹中的文件")
+            messagebox.showerror("错误", "请选择TestcaseCollection文件夹中的文件")
             return
 
         # 获取文件名（带扩展名）

@@ -7,7 +7,7 @@ import shutil
 # 模块功能：以只读的形式打开Excel表格文件
 
 class ViewCaseHandler:
-    def __init__(self, selected_file, test_case_folder="测试用例集"):
+    def __init__(self, selected_file, test_case_folder="TestcaseCollection"):
         self.selected_file = selected_file
         self.test_case_folder = test_case_folder
 

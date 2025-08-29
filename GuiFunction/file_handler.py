@@ -14,7 +14,7 @@ def handle_file_upload():
 
     if file_path:
         # 指定目标文件夹路径
-        target_folder = os.path.join(os.getcwd(), "测试用例集")
+        target_folder = os.path.join(os.getcwd(), "TestcaseCollection")
         # 创建目标文件夹（如果不存在）
         if not os.path.exists(target_folder):
             os.makedirs(target_folder)
@@ -53,7 +53,7 @@ def handle_file_upload():
 
 # 函数：更新 JSON 文件
 def refresh_json_file(uploaded_file=None):
-    target_folder = os.path.join(os.getcwd(), "测试用例集")
+    target_folder = os.path.join(os.getcwd(), "TestcaseCollection")
     json_file = os.path.join(target_folder, "test_cases.json")
     file_list = []
 
