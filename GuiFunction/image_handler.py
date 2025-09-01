@@ -11,7 +11,7 @@ class ImageHandler:
 
     def open_image(self):
         # 弹出提示对话框
-        messagebox.showwarning("提示", "文件名称不要有中文")
+        messagebox.showwarning("提示", "提示：文件名称不要有中文")
         
         # 打开文件选择对话框
         file_path = filedialog.askopenfilename(
