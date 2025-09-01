@@ -12,8 +12,8 @@ from image_preprocessing import preprocess_v_channel
 # 5.结果评估 ：计算匹配率、平均距离和包围框面积占比，评估匹配质量。
 
 # 读取图像（彩色图像）
-template_bgr = cv2.imread('realkmh.png')
-target_bgr = cv2.imread('image3.png')
+template_bgr = cv2.imread('kmh.png')    # 模版图像
+target_bgr = cv2.imread('image2.png')       # 目标图像
 
 # 转换为HSV颜色空间
 template_hsv = cv2.cvtColor(template_bgr, cv2.COLOR_BGR2HSV)
@@ -23,39 +23,35 @@ target_hsv = cv2.cvtColor(target_bgr, cv2.COLOR_BGR2HSV)
 template_h, template_s, template_v = cv2.split(template_hsv)
 target_h, target_s, target_v = cv2.split(target_hsv)
 
-# 应用预处理函数（仅处理V通道）
-template_v_processed = preprocess_v_channel(template_v)
-target_v_processed = preprocess_v_channel(target_v)
-
-# 合并回HSV图像（仅保留V通道处理后的结果）
-template_hsv_processed = cv2.merge([template_h, template_s, template_v_processed])
-target_hsv_processed = cv2.merge([target_h, target_s, target_v_processed])
-
-# 转回BGR用于显示，或直接提取V通道作为灰度图像用于匹配
-template_processed = cv2.cvtColor(template_hsv_processed, cv2.COLOR_HSV2BGR)
-target_processed = cv2.cvtColor(target_hsv_processed, cv2.COLOR_HSV2BGR)
-
-# 转为灰度图像用于特征提取
-template_gray = cv2.cvtColor(template_processed, cv2.COLOR_BGR2GRAY)
-target_gray = cv2.cvtColor(target_processed, cv2.COLOR_BGR2GRAY)
+# 应用预处理函数（仅处理V通道），随后V通道作为灰度图用于特征提取
+# preprocess_v_channel--gamma校正 + 高斯滤波 + 图像锐化
+template_gray = preprocess_v_channel(template_v)
+target_gray = preprocess_v_channel(target_v)
 
 # 初始化SIFT检测器，并调整参数
+# SIFT 是一种对尺度和旋转不变的特征提取方法
 sift = cv2.SIFT_create(nfeatures=0, nOctaveLayers=3, contrastThreshold=0.04, edgeThreshold=10, sigma=1.0)
+# nfeatures         -- 最多检测的关键点数量。0 表示不限制
+# nOctaveLayers     -- 高斯金字塔的层数，增加层数可以检测到更细微的尺度变化，但会增加计算量
+# contrastThreshold -- 过滤掉低对比度的关键点，保留更稳定的特征点。值越大，关键点越少但更稳定。图对比度低（暗光或糊）可以降低，噪声多可以增加
+# edgeThreshold     -- 用于区分边缘与角点的阈值。值越大，越不容易检测到边缘点。如果图像中存在大量边缘，可以适当提高该值
+# sigma             -- 初始高斯滤波器的 sigma 值，控制图像的平滑程度。如果图像模糊可以适当增加，如果边缘特征是关键可以适当降低
 
 # 提取特征点和描述子
-kp1, des1 = sift.detectAndCompute(template_gray, None)
-kp2, des2 = sift.detectAndCompute(target_gray, None)
+kp1, des1 = sift.detectAndCompute(template_gray, None)         # 模版图
+kp2, des2 = sift.detectAndCompute(target_gray, None)           # 目标图
 
 # 使用FLANN匹配器，并调整参数
 FLANN_INDEX_KDTREE = 1
-index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
-search_params = dict(checks=50)
+index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)      # 增加 trees 可提升匹配鲁棒性，但占用更多内存，一般设置为 5 或 10，在速度和精度间取得平衡
+search_params = dict(checks=50)                                 # 增加 checks 可提高匹配准确性，但会降低速度。建议50或100
 flann = cv2.FlannBasedMatcher(index_params, search_params)
 
 # 进行knn匹配
 matches = flann.knnMatch(des1, des2, k=2)
 
 # 筛选优质匹配（Lowe's Ratio Test）
+# 通过比较最近邻与次近邻的距离，保留稳定性高的匹配点
 good_matches = []
 for m, n in matches:
     if m.distance < 0.7 * n.distance:
@@ -80,8 +76,8 @@ if len(good_matches) >= 4:
     src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
     dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
     
-    # 使用RANSAC计算单应性变换，并调整参数
-    H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0, None, 2000, 0.95)
+    # 使用RANSAC计算单应性矩阵，并调整参数
+    H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 7.0, None, 2000, 0.95)
     
     if H is not None:
         # 获取模板图像的尺寸
