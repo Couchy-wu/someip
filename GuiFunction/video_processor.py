@@ -5,15 +5,17 @@ from tkinter import filedialog, messagebox
 from GuiFunction.progress_bar import ProgressBar
 
 # 模块功能：读取视频，并将视频以每秒FPS_CONSTANT帧截取成图片
-
 class VideoProcessor:
-    FPS_CONSTANT = 30  # 定义帧数常量，表示每秒截取的帧数
+    FPS_CONSTANT = 1  # 定义帧数常量，表示每秒截取的帧数
     
     def __init__(self, root):
         self.root = root
         self.progress_bar = ProgressBar(root)  # 初始化进度条
 
     def process_video(self):
+        # 弹出提示对话框
+        messagebox.showwarning("提示", "文件名称不要有中文")
+        
         # 打开文件选择对话框
         file_path = filedialog.askopenfilename(
             title="选择视频文件",

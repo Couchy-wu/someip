@@ -1,6 +1,6 @@
 import cv2
 import tkinter as tk
-from tkinter import filedialog, Toplevel
+from tkinter import filedialog, Toplevel, messagebox
 from PIL import Image, ImageTk
 
 # 模块功能：打开一个图像并显示
@@ -10,6 +10,9 @@ class ImageHandler:
         self.root = root
 
     def open_image(self):
+        # 弹出提示对话框
+        messagebox.showwarning("提示", "文件名称不要有中文")
+        
         # 打开文件选择对话框
         file_path = filedialog.askopenfilename(
             title="选择图片",
