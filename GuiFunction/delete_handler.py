@@ -21,6 +21,8 @@ def delete_test_case():
     )
     
     if file_path:
+        file_path = os.path.normpath(file_path)
+        target_folder = os.path.normpath(target_folder)
         # 检查文件是否在测试用例集文件夹中
         if not file_path.startswith(target_folder):
             messagebox.showerror("错误", "请选择TestcaseCollection文件夹中的文件")
