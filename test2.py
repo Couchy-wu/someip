@@ -2,9 +2,18 @@ import cv2
 import numpy as np
 from image_preprocessing import preprocess_v_channel
 
+# 功能：基于描述符的模板匹配
+# 核心方法：SIFT + RANSAC
+# 步骤：
+# 1.图像预处理 ：将图像从BGR转换为HSV颜色空间，并对V通道进行特定的预处理，以增强图像特征。
+# 2.特征提取 ：使用SIFT算法在模板和目标图像中提取特征点及其描述子。
+# 3.特征匹配 ：通过FLANN匹配器进行特征点匹配，并使用Lowe's比率测试筛选优质匹配点。
+# 4.几何变换 ：利用RANSAC算法计算单应性矩阵，确定模板在目标图像中的位置，并绘制包围框。
+# 5.结果评估 ：计算匹配率、平均距离和包围框面积占比，评估匹配质量。
+
 # 读取图像（彩色图像）
-template_bgr = cv2.imread('kmh.png')
-target_bgr = cv2.imread('image.png')
+template_bgr = cv2.imread('realkmh.png')
+target_bgr = cv2.imread('image3.png')
 
 # 转换为HSV颜色空间
 template_hsv = cv2.cvtColor(template_bgr, cv2.COLOR_BGR2HSV)
@@ -30,16 +39,20 @@ target_processed = cv2.cvtColor(target_hsv_processed, cv2.COLOR_HSV2BGR)
 template_gray = cv2.cvtColor(template_processed, cv2.COLOR_BGR2GRAY)
 target_gray = cv2.cvtColor(target_processed, cv2.COLOR_BGR2GRAY)
 
-# 初始化SIFT检测器
-sift = cv2.SIFT_create()
+# 初始化SIFT检测器，并调整参数
+sift = cv2.SIFT_create(nfeatures=0, nOctaveLayers=3, contrastThreshold=0.04, edgeThreshold=10, sigma=1.0)
+
+# 提取特征点和描述子
 kp1, des1 = sift.detectAndCompute(template_gray, None)
 kp2, des2 = sift.detectAndCompute(target_gray, None)
 
-# FLANN匹配参数
+# 使用FLANN匹配器，并调整参数
 FLANN_INDEX_KDTREE = 1
 index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
 search_params = dict(checks=50)
 flann = cv2.FlannBasedMatcher(index_params, search_params)
+
+# 进行knn匹配
 matches = flann.knnMatch(des1, des2, k=2)
 
 # 筛选优质匹配（Lowe's Ratio Test）
@@ -48,14 +61,28 @@ for m, n in matches:
     if m.distance < 0.7 * n.distance:
         good_matches.append(m)
 
+# 输出匹配结果的基本信息
+print(f"总匹配点数: {len(matches)}")
+print(f"优质匹配点数: {len(good_matches)}")
+if len(matches) > 0:
+    match_rate = (len(good_matches) / len(matches)) * 100
+    print(f"匹配率: {match_rate:.2f}%")
+else:
+    print("无匹配结果")
+
+if len(good_matches) > 0:
+    avg_distance = sum(m.distance for m in good_matches) / len(good_matches)
+    print(f"平均匹配距离: {avg_distance:.2f}")
 
 # 判断是否找到目标
 target_color = cv2.cvtColor(target_gray, cv2.COLOR_GRAY2BGR)
 if len(good_matches) >= 4:
     src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
     dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
-    H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-
+    
+    # 使用RANSAC计算单应性变换，并调整参数
+    H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0, None, 2000, 0.95)
+    
     if H is not None:
         # 获取模板图像的尺寸
         h, w = template_gray.shape
@@ -63,20 +90,21 @@ if len(good_matches) >= 4:
         corners = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
         # 将角点映射到目标图像上
         transformed_corners = cv2.perspectiveTransform(corners, H)
-
         # 将变换后的角点转换为整数坐标
         transformed_corners = np.int32(transformed_corners)
-
         # 计算包围框（轴对齐的矩形）
         x_coords = transformed_corners[:, 0, 0]
         y_coords = transformed_corners[:, 0, 1]
         x_min, x_max = np.min(x_coords), np.max(x_coords)
         y_min, y_max = np.min(y_coords), np.max(y_coords)
-
         # 绘制轴对齐的矩形框
         cv2.rectangle(target_color, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
-
-        # 打印找到信息
+        # 计算包围框的面积占比
+        target_height, target_width = target_gray.shape
+        bbox_area = (x_max - x_min) * (y_max - y_min)
+        total_area = target_width * target_height
+        area_ratio = (bbox_area / total_area) * 100
+        print(f"包围框面积占比: {area_ratio:.2f}%")
         print("找到了")
     else:
         print("没找到")
