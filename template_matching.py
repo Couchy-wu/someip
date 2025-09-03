@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 from image_preprocessing import preprocess_v_channel
+import time
 
 # 功能：基于描述符的模板匹配
 # 核心方法：SIFT + RANSAC
@@ -11,9 +12,14 @@ from image_preprocessing import preprocess_v_channel
 # 4.几何变换 ：利用RANSAC算法计算单应性矩阵，确定模板在目标图像中的位置，并绘制包围框。
 # 5.结果评估 ：计算匹配率、平均距离和包围框面积占比，评估匹配质量。
 
+start_time = time.time()
+
+FLANN_CHECKS = 50        # 降低 FLANN 匹配精度，加快速度
+
 # 读取图像
 template_bgr = cv2.imread('kmh.png')    # 模板图像
-target_bgr = cv2.imread('TemporaryResources/ARHUD/1.png')  # 目标图像
+target_bgr = cv2.imread('TemporaryResources/ARHUD/5.png')  # 目标图像
+
 
 # 检查图像是否读取成功
 if template_bgr is None or target_bgr is None:
@@ -65,7 +71,7 @@ des2 = np.float32(des2)
 # 使用FLANN匹配器，并调整参数
 FLANN_INDEX_KDTREE = 1
 index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)      # 增加 trees 可提升匹配鲁棒性，但占用更多内存，一般设置为 5 或 10，在速度和精度间取得平衡
-search_params = dict(checks=50)                                 # 增加 checks 可提高匹配准确性，但会降低速度。建议50或100
+search_params = dict(checks = FLANN_CHECKS)                                 # 增加 checks 可提高匹配准确性，但会降低速度。
 flann = cv2.FlannBasedMatcher(index_params, search_params)
 
 # 进行knn匹配
@@ -122,12 +128,18 @@ if len(good_matches) >= 4:
         bbox_area = (x_max - x_min) * (y_max - y_min)
         total_area = target_w * target_h
         area_ratio = (bbox_area / total_area) * 100
-        print(f"包围框面积占比: {area_ratio:.2f}%")
+        # print(f"包围框面积占比: {area_ratio:.2f}%")
         print("找到了")
     else:
         print("未找到有效单应性矩阵")
 else:
     print("匹配点不足，无法计算变换")
+
+end_time = time.time()
+
+# 计算运行时间
+execution_time = end_time - start_time
+print(f"代码运行时间: {execution_time:.2f} 秒")
 
 # 显示结果
 cv2.imshow('Matched Result', target_color)
