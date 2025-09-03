@@ -24,7 +24,7 @@ def preprocess_v_channel(v_channel):
 
 def main():
     # 读取并验证图像
-    image = cv2.imread("临时资源/test.png")
+    image = cv2.imread("image3.png")
     if image is None or len(image.shape) != 3 or image.shape[2] != 3:
         print("图像读取失败或格式错误")
         return

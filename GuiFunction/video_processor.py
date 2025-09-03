@@ -7,7 +7,7 @@ import threading
 
 # 模块功能：读取视频，并将视频以每秒FPS_CONSTANT帧截取成图片
 class VideoProcessor:
-    FPS_CONSTANT = 1  # 每秒截取的帧数
+    FPS_CONSTANT = 30  # 每秒截取的帧数
 
     def __init__(self, root):
         self.root = root
@@ -22,6 +22,7 @@ class VideoProcessor:
             filetypes=(("视频文件", "*.mp4"), ("所有文件", "*.*"))
         )
         if not file_path:
+            print("未选择视频")
             return
 
         # 获取视频文件名和路径

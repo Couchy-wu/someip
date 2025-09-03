@@ -6,7 +6,8 @@ from GuiFunction.file_handler import handle_file_upload
 from GuiFunction.delete_handler import delete_test_case
 from GuiFunction.view_case_handler import ViewCaseHandler
 from GuiFunction.image_handler import ImageHandler
-from GuiFunction.video_processor import VideoProcessor 
+from GuiFunction.video_processor import VideoProcessor
+import GuiFunction.image_player  # 导入 image_player 模块
 
 # 创建主窗口
 root = tk.Tk()
@@ -86,6 +87,16 @@ video_button = tk.Button(
     height=2
 )
 video_button.grid(row=2, column=1, padx=20, pady=20)
+
+# 添加“播放图片视频”按钮
+image_video_button = tk.Button(
+    root,
+    text="播放图片视频",
+    command=GuiFunction.image_player.play_image_sequence,
+    width=15,
+    height=2
+)
+image_video_button.grid(row=3, column=0, columnspan=2, padx=20, pady=20)
 
 # 运行主循环
 root.mainloop()
