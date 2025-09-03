@@ -5,10 +5,9 @@ from tkinter import filedialog, messagebox
 from GuiFunction.progress_bar import ProgressBar
 import threading
 
-# 模块功能：读取视频，并将视频以每秒FPS_CONSTANT帧截取成图片
-class VideoProcessor:
-    FPS_CONSTANT = 30  # 每秒截取的帧数
+# 模块功能：读取视频，并将视频中的所有帧截取成图片
 
+class VideoProcessor:
     def __init__(self, root):
         self.root = root
         self.progress_bar = ProgressBar(root)
@@ -48,6 +47,14 @@ class VideoProcessor:
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = cap.get(cv2.CAP_PROP_FPS)
 
+        # 计算总视频时长（秒）
+        total_duration = total_frames / fps if fps > 0 else 0
+
+        # 打印视频信息
+        print(f"视频总帧数: {total_frames}")
+        print(f"视频总时长: {total_duration:.2f} 秒")
+        print(f"平均帧率: {fps:.2f} FPS")
+
         # 检查 fps 是否为零
         if fps <= 0:
             messagebox.showerror("错误", "视频的帧率无效，请检查视频文件！")
@@ -56,16 +63,15 @@ class VideoProcessor:
 
         # 创建进度条
         self.progress_bar.create_progress_bar("视频处理进度", total_frames)
-        frame_interval = max(1, int(fps / self.FPS_CONSTANT))
 
-        # 启动子线程处理视频
+        # 启动子线程处理视频，保存所有帧
         thread = threading.Thread(
             target=self._process_video_in_thread,
-            args=(file_path, save_folder, total_frames, frame_interval, cap)
+            args=(file_path, save_folder, total_frames, cap, total_duration, fps)
         )
         thread.start()
 
-    def _process_video_in_thread(self, file_path, save_folder, total_frames, frame_interval, cap):
+    def _process_video_in_thread(self, file_path, save_folder, total_frames, cap, total_duration, fps):
         frame_count = 0
         image_count = 0
 
@@ -74,15 +80,19 @@ class VideoProcessor:
             if not ret:
                 break
 
-            if frame_count % frame_interval == 0:
-                image_count += 1
-                image_path = os.path.join(save_folder, f"{image_count}.png")
-                cv2.imwrite(image_path, frame)
+            image_count += 1
+            image_path = os.path.join(save_folder, f"{image_count}.png")
+            cv2.imwrite(image_path, frame)
 
-            # 使用 after 方法在主线程更新进度条
+            # 更新进度条
             self.root.after(0, self.progress_bar.update_progress, frame_count + 1)
             frame_count += 1
 
         cap.release()
         self.root.after(0, self.progress_bar.close_progress_bar)
-        self.root.after(0, messagebox.showinfo, "提示", f"视频处理完成，已保存到 {save_folder}")
+        self.root.after(0, messagebox.showinfo, "提示", 
+                       f"视频处理完成，已保存到 {save_folder!r}\n"
+                       f"视频总帧数: {total_frames}\n"
+                       f"视频总时长: {total_duration:.2f} 秒\n"
+                       f"平均帧率: {fps:.2f} FPS")
+
