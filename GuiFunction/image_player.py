@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk   # pip install pillow
 
-FPS = 30  # 帧率
+FPS = 25  # 帧率
 main_root = None    # 用于存储窗口
 
 # 函数功能：执行图像序列播放逻辑
@@ -55,6 +55,9 @@ def play_image_sequence():
     delay = int(1000 / FPS)     # 美珍之间的延迟（毫秒），根据帧率计算
     after_id = None             # Tkinter 的 after 调用的 ID，用于取消定时任务
     paused = False              # 标记是否已暂停
+    # 在创建控制面板后添加倒退按钮
+    back_btn = tk.Button(ctrl, text="倒退5秒", width=12, height=2)
+    back_btn.pack()
 
     # 函数功能：定义重新播放函数
     def replay():
@@ -103,6 +106,35 @@ def play_image_sequence():
                 player.after_cancel(after_id)
                 after_id = None
     pause_btn.config(command=toggle_pause)
+
+    # 函数功能：用于显示当前索引 idx 对应的图片
+    def show_current():
+        nonlocal idx
+        if idx >= len(files):
+            return
+        path = os.path.join(folder, files[idx])
+        try:
+            img = Image.open(path)
+            imgtk = ImageTk.PhotoImage(img)
+            label.config(image=imgtk)
+            label.image = imgtk
+        except Exception as e:
+            print("无法加载图片:", e)
+
+    # 定义倒退函数
+    def rewind_5s():
+        nonlocal idx, after_id, paused
+        frames_to_rewind = 5 * FPS
+        new_idx = max(0, idx - frames_to_rewind)
+        if after_id:
+            player.after_cancel(after_id)
+            after_id = None
+        idx = new_idx
+        show_current()
+        if not paused:
+            show_next()
+    # 绑定倒退按钮
+    back_btn.config(command=rewind_5s)
 
     # 函数功能：关闭窗口
     def stop(win):
