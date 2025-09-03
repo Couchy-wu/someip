@@ -11,17 +11,22 @@ from image_preprocessing import preprocess_v_channel
 # 4.几何变换 ：利用RANSAC算法计算单应性矩阵，确定模板在目标图像中的位置，并绘制包围框。
 # 5.结果评估 ：计算匹配率、平均距离和包围框面积占比，评估匹配质量。
 
-# 读取图像（彩色图像）
-template_bgr = cv2.imread('kmh.png')    # 模版图像
-target_bgr = cv2.imread('image2.png')       # 目标图像
+# 读取图像
+template_bgr = cv2.imread('kmh.png')    # 模板图像
+target_bgr = cv2.imread('TemporaryResources/ARHUD/1.png')  # 目标图像
+
+# 检查图像是否读取成功
+if template_bgr is None or target_bgr is None:
+    print("图像读取失败，请检查路径")
+    exit()
 
 # 转换为HSV颜色空间
 template_hsv = cv2.cvtColor(template_bgr, cv2.COLOR_BGR2HSV)
 target_hsv = cv2.cvtColor(target_bgr, cv2.COLOR_BGR2HSV)
 
-# 分离通道
-template_h, template_s, template_v = cv2.split(template_hsv)
-target_h, target_s, target_v = cv2.split(target_hsv)
+# 分离通道并预处理V通道
+template_v = cv2.split(template_hsv)[2]
+target_v = cv2.split(target_hsv)[2]
 
 # 应用预处理函数（仅处理V通道），随后V通道作为灰度图用于特征提取
 # preprocess_v_channel--gamma校正 + 高斯滤波 + 图像锐化
@@ -38,8 +43,24 @@ sift = cv2.SIFT_create(nfeatures=0, nOctaveLayers=3, contrastThreshold=0.04, edg
 # sigma             -- 初始高斯滤波器的 sigma 值，控制图像的平滑程度。如果图像模糊可以适当增加，如果边缘特征是关键可以适当降低
 
 # 提取特征点和描述子
-kp1, des1 = sift.detectAndCompute(template_gray, None)         # 模版图
-kp2, des2 = sift.detectAndCompute(target_gray, None)           # 目标图
+kp1, des1 = sift.detectAndCompute(template_gray, None)
+kp2, des2 = sift.detectAndCompute(target_gray, None)
+
+# 转换目标图像的灰度图到BGR格式，以便绘制结果
+target_color = cv2.cvtColor(target_gray, cv2.COLOR_GRAY2BGR)
+
+# 检查描述子是否为空
+if des1 is None or des2 is None or des1.size == 0 or des2.size == 0:
+    print("无法提取有效特征描述子，匹配失败")
+    # 仍然显示图像
+    cv2.imshow('Matched Result', target_color)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    exit()
+
+# 确保描述子为float32类型
+des1 = np.float32(des1)
+des2 = np.float32(des2)
 
 # 使用FLANN匹配器，并调整参数
 FLANN_INDEX_KDTREE = 1
@@ -71,8 +92,8 @@ if len(good_matches) > 0:
     print(f"平均匹配距离: {avg_distance:.2f}")
 
 # 判断是否找到目标
-target_color = cv2.cvtColor(target_gray, cv2.COLOR_GRAY2BGR)
 if len(good_matches) >= 4:
+    # 提取匹配点坐标
     src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
     dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
     
@@ -95,17 +116,18 @@ if len(good_matches) >= 4:
         y_min, y_max = np.min(y_coords), np.max(y_coords)
         # 绘制轴对齐的矩形框
         cv2.rectangle(target_color, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
-        # 计算包围框的面积占比
-        target_height, target_width = target_gray.shape
+        
+        # 计算包围框面积占比
+        target_h, target_w = target_gray.shape
         bbox_area = (x_max - x_min) * (y_max - y_min)
-        total_area = target_width * target_height
+        total_area = target_w * target_h
         area_ratio = (bbox_area / total_area) * 100
         print(f"包围框面积占比: {area_ratio:.2f}%")
         print("找到了")
     else:
-        print("没找到")
+        print("未找到有效单应性矩阵")
 else:
-    print("没找到")
+    print("匹配点不足，无法计算变换")
 
 # 显示结果
 cv2.imshow('Matched Result', target_color)
