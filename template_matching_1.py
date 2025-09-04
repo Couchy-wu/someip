@@ -29,6 +29,7 @@ OUTPUT_FOLDER = 'Matched_Results/'
 MAX_CONCURRENT_JOBS = 4  # 并行线程数
 SCALE_RATIO = 1          # 图像缩放比例 (显著影响速度)
 FLANN_CHECKS = 50        # FLANN 匹配精度（越低，精度越低）
+MATCH_THRESHOLD = 30     # 匹配率阈值（百分比）
 
 # =================== 工具函数 ===================
 
@@ -49,7 +50,9 @@ def process_single_image(file_path, template_info):
     _, _, target_v = cv2.split(target_hsv)
     target_gray = preprocess_v_channel(target_v)
     target_gray = resize_image(target_gray, SCALE_RATIO)
-    target_color = cv2.cvtColor(target_gray, cv2.COLOR_GRAY2BGR)
+    
+    # 保留彩色图像
+    target_color = target_bgr.copy()
 
     # SIFT 特征提取
     sift = cv2.SIFT_create()
@@ -63,19 +66,29 @@ def process_single_image(file_path, template_info):
     matches = flann.knnMatch(des1, des2, k=2)
     good = [m for m, n in matches if m.distance < 0.7 * n.distance]
 
-    # 单应性变换
-    if len(good) >= 4:
-        src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
-        dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
-        H, _ = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+    # 计算匹配率
+    total_good = len(good)
+    total_template_kp = len(kp1)
+    match_rate = (total_good / total_template_kp) * 100 if total_template_kp != 0 else 0
 
-        if H is not None:
-            h, w = template_gray.shape
-            corners = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
-            transformed = cv2.perspectiveTransform(corners, H).astype(int)
-            x1, y1 = np.min(transformed[:, 0, :], axis=0)
-            x2, y2 = np.max(transformed[:, 0, :], axis=0)
-            cv2.rectangle(target_color, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    # 判断匹配率是否满足阈值
+    if match_rate > MATCH_THRESHOLD:
+        print(f"匹配率 {match_rate:.2f}% 超过阈值 {MATCH_THRESHOLD}%，进行匹配处理...")
+        
+        if len(good) >= 4:
+            src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
+            dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
+            H, _ = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+
+            if H is not None:
+                h, w = template_gray.shape
+                corners = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
+                transformed = cv2.perspectiveTransform(corners, H).astype(int)
+                x1, y1 = np.min(transformed[:, 0, :], axis=0)
+                x2, y2 = np.max(transformed[:, 0, :], axis=0)
+                cv2.rectangle(target_color, (x1, y1), (x2, y2), (0, 0, 255), 2)
+    else:
+        print(f"匹配率 {match_rate:.2f}% 低于阈值 {MATCH_THRESHOLD}%，不进行匹配处理")
 
     return file_path, target_color
 
