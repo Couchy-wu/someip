@@ -15,6 +15,8 @@ import time
 start_time = time.time()
 
 FLANN_CHECKS = 50        # 降低 FLANN 匹配精度，加快速度
+MATCH_THRESHOLD = 30     # 匹配率阈值（百分比）
+
 
 # 读取图像
 template_bgr = cv2.imread('kmh.png')    # 模板图像
@@ -98,13 +100,14 @@ if len(good_matches) > 0:
     print(f"平均匹配距离: {avg_distance:.2f}")
 
 # 判断是否找到目标
-if len(good_matches) >= 4:
+if len(good_matches) >= 4 and match_rate >= MATCH_THRESHOLD:
     # 提取匹配点坐标
     src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
     dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
     
     # 使用RANSAC计算单应性矩阵，并调整参数
     H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 7.0, None, 2000, 0.95)
+    print("匹配率满足阈值，找到了目标")
     
     if H is not None:
         # 获取模板图像的尺寸
@@ -133,7 +136,10 @@ if len(good_matches) >= 4:
     else:
         print("未找到有效单应性矩阵")
 else:
-    print("匹配点不足，无法计算变换")
+    if len(good_matches) < 4:
+        print("匹配点不足，无法计算变换")
+    else:
+        print(f"匹配率 {match_rate:.2f}% 低于阈值 {MATCH_THRESHOLD}%，放弃匹配")
 
 end_time = time.time()
 
