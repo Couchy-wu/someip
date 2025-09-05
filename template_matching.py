@@ -3,147 +3,167 @@ import numpy as np
 from image_preprocessing import preprocess_v_channel
 import time
 
-# 功能：基于描述符的模板匹配
-# 核心方法：SIFT + RANSAC
-# 步骤：
-# 1.图像预处理 ：将图像从BGR转换为HSV颜色空间，并对V通道进行特定的预处理，以增强图像特征。
-# 2.特征提取 ：使用SIFT算法在模板和目标图像中提取特征点及其描述子。
-# 3.特征匹配 ：通过FLANN匹配器进行特征点匹配，并使用Lowe's比率测试筛选优质匹配点。
-# 4.几何变换 ：利用RANSAC算法计算单应性矩阵，确定模板在目标图像中的位置，并绘制包围框。
-# 5.结果评估 ：计算匹配率、平均距离和包围框面积占比，评估匹配质量。
-
 start_time = time.time()
 
-FLANN_CHECKS = 50        # 降低 FLANN 匹配精度，加快速度
-MATCH_THRESHOLD = 30     # 匹配率阈值（百分比）
+# 参数设置
+FLANN_CHECKS = 50
+MATCH_THRESHOLD = 30      # 匹配率阈值（百分比）
+MIN_MATCH_COUNT = 4       # 单次匹配所需最小内点数
+INLIER_DISTANCE = 5.0     # RANSAC 投影误差
+OVERLAP_THRESHOLD = 0.3   # 去重阈值（IoU）
+
 
 
 # 读取图像
-template_bgr = cv2.imread('kmh.png')    # 模板图像
-target_bgr = cv2.imread('TemporaryResources/ARHUD/5.png')  # 目标图像
+template_bgr = cv2.imread('kmh.png')
+target_bgr = cv2.imread('image3.png')
 
-
-# 检查图像是否读取成功
 if template_bgr is None or target_bgr is None:
     print("图像读取失败，请检查路径")
     exit()
 
-# 转换为HSV颜色空间
+# 转换为HSV并预处理V通道
 template_hsv = cv2.cvtColor(template_bgr, cv2.COLOR_BGR2HSV)
 target_hsv = cv2.cvtColor(target_bgr, cv2.COLOR_BGR2HSV)
 
-# 分离通道并预处理V通道
 template_v = cv2.split(template_hsv)[2]
 target_v = cv2.split(target_hsv)[2]
 
-# 应用预处理函数（仅处理V通道），随后V通道作为灰度图用于特征提取
-# preprocess_v_channel--gamma校正 + 高斯滤波 + 图像锐化
 template_gray = preprocess_v_channel(template_v)
 target_gray = preprocess_v_channel(target_v)
 
-# 初始化SIFT检测器，并调整参数
-# SIFT 是一种对尺度和旋转不变的特征提取方法
+# 初始化SIFT
 sift = cv2.SIFT_create(nfeatures=0, nOctaveLayers=3, contrastThreshold=0.04, edgeThreshold=10, sigma=1.0)
-# nfeatures         -- 最多检测的关键点数量。0 表示不限制
-# nOctaveLayers     -- 高斯金字塔的层数，增加层数可以检测到更细微的尺度变化，但会增加计算量
-# contrastThreshold -- 过滤掉低对比度的关键点，保留更稳定的特征点。值越大，关键点越少但更稳定。图对比度低（暗光或糊）可以降低，噪声多可以增加
-# edgeThreshold     -- 用于区分边缘与角点的阈值。值越大，越不容易检测到边缘点。如果图像中存在大量边缘，可以适当提高该值
-# sigma             -- 初始高斯滤波器的 sigma 值，控制图像的平滑程度。如果图像模糊可以适当增加，如果边缘特征是关键可以适当降低
-
-# 提取特征点和描述子
 kp1, des1 = sift.detectAndCompute(template_gray, None)
 kp2, des2 = sift.detectAndCompute(target_gray, None)
 
-# 转换目标图像的灰度图到BGR格式，以便绘制结果
+# 转换为BGR用于绘制
 target_color = cv2.cvtColor(target_gray, cv2.COLOR_GRAY2BGR)
 
-# 检查描述子是否为空
+# 检查描述子
 if des1 is None or des2 is None or des1.size == 0 or des2.size == 0:
     print("无法提取有效特征描述子，匹配失败")
-    # 仍然显示图像
     cv2.imshow('Matched Result', target_color)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
     exit()
 
-# 确保描述子为float32类型
 des1 = np.float32(des1)
 des2 = np.float32(des2)
 
-# 使用FLANN匹配器，并调整参数
+# FLANN匹配器
 FLANN_INDEX_KDTREE = 1
-index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)      # 增加 trees 可提升匹配鲁棒性，但占用更多内存，一般设置为 5 或 10，在速度和精度间取得平衡
-search_params = dict(checks = FLANN_CHECKS)                                 # 增加 checks 可提高匹配准确性，但会降低速度。
+index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
+search_params = dict(checks=FLANN_CHECKS)
 flann = cv2.FlannBasedMatcher(index_params, search_params)
 
-# 进行knn匹配
-matches = flann.knnMatch(des1, des2, k=2)
+# 所有候选匹配（暂不筛选）
+all_matches = flann.knnMatch(des1, des2, k=2)
+print(f"总knn匹配对数: {len(all_matches)}")
 
-# 筛选优质匹配（Lowe's Ratio Test）
-# 通过比较最近邻与次近邻的距离，保留稳定性高的匹配点
-good_matches = []
-for m, n in matches:
-    if m.distance < 0.7 * n.distance:
-        good_matches.append(m)
+# 存储所有通过阈值检测的有效包围框
+bounding_boxes = []
 
-# 输出匹配结果的基本信息
-print(f"总匹配点数: {len(matches)}")
-print(f"优质匹配点数: {len(good_matches)}")
-if len(matches) > 0:
-    match_rate = (len(good_matches) / len(matches)) * 100
-    print(f"匹配率: {match_rate:.2f}%")
-else:
-    print("无匹配结果")
+# 当前可用的关键点索引（目标图上的 trainIdx），用于避免重复检测
+used_train_indices = set()
 
-if len(good_matches) > 0:
-    avg_distance = sum(m.distance for m in good_matches) / len(good_matches)
-    print(f"平均匹配距离: {avg_distance:.2f}")
+# 获取图像尺寸
+h, w = template_gray.shape
+corners = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
 
-# 判断是否找到目标
-if len(good_matches) >= 4 and match_rate >= MATCH_THRESHOLD:
-    # 提取匹配点坐标
+# 迭代查找多个实例
+while True:
+    # Step 1: 筛选未使用的匹配对，并进行 Lowe's Ratio Test
+    good_matches = []
+    candidate_matches = []
+
+    for m, n in all_matches:
+        if m.trainIdx not in used_train_indices:
+            candidate_matches.append((m, n))
+
+    # 对未使用的匹配重新应用 Lowe's Ratio Test
+    for m, n in candidate_matches:
+        if m.distance < 0.7 * n.distance:
+            good_matches.append(m)
+
+    if len(good_matches) < MIN_MATCH_COUNT:
+        break  # 没有足够的优质匹配
+
+    # 计算当前匹配率
+    match_rate = (len(good_matches) / len(candidate_matches)) * 100 if candidate_matches else 0
+    print(f"本轮优质匹配点数: {len(good_matches)}, 候选总数: {len(candidate_matches)}, 匹配率: {match_rate:.2f}%")
+
+    # 判断是否达到匹配率阈值
+    if match_rate < MATCH_THRESHOLD:
+        print(f"匹配率 {match_rate:.2f}% 低于阈值 {MATCH_THRESHOLD}%，跳过该实例")
+        break  # 不足阈值，停止
+
+    # 提取源点和目标点
     src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
     dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
-    
-    # 使用RANSAC计算单应性矩阵，并调整参数
-    H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 7.0, None, 2000, 0.95)
-    print("匹配率满足阈值，找到了目标")
-    
-    if H is not None:
-        # 获取模板图像的尺寸
-        h, w = template_gray.shape
-        # 定义模板图像的四个角点
-        corners = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
-        # 将角点映射到目标图像上
-        transformed_corners = cv2.perspectiveTransform(corners, H)
-        # 将变换后的角点转换为整数坐标
-        transformed_corners = np.int32(transformed_corners)
-        # 计算包围框（轴对齐的矩形）
-        x_coords = transformed_corners[:, 0, 0]
-        y_coords = transformed_corners[:, 0, 1]
-        x_min, x_max = np.min(x_coords), np.max(x_coords)
-        y_min, y_max = np.min(y_coords), np.max(y_coords)
-        # 绘制轴对齐的矩形框
-        cv2.rectangle(target_color, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
-        
-        # 计算包围框面积占比
-        target_h, target_w = target_gray.shape
-        bbox_area = (x_max - x_min) * (y_max - y_min)
-        total_area = target_w * target_h
-        area_ratio = (bbox_area / total_area) * 100
-        # print(f"包围框面积占比: {area_ratio:.2f}%")
-        print("找到了")
-    else:
-        print("未找到有效单应性矩阵")
-else:
-    if len(good_matches) < 4:
-        print("匹配点不足，无法计算变换")
-    else:
-        print(f"匹配率 {match_rate:.2f}% 低于阈值 {MATCH_THRESHOLD}%，放弃匹配")
 
-end_time = time.time()
+    # 使用 RANSAC 计算单应性矩阵
+    H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, INLIER_DISTANCE, confidence=0.99, maxIters=2000)
+
+    if H is None or mask is None:
+        break
+
+    matches_mask = mask.ravel().tolist()
+    inlier_matches = [good_matches[i] for i in range(len(good_matches)) if matches_mask[i]]
+
+    if len(inlier_matches) < MIN_MATCH_COUNT:
+        break
+
+    # 使用内点重新计算单应性矩阵
+    inlier_src = np.float32([kp1[m.queryIdx].pt for m in inlier_matches]).reshape(-1, 1, 2)
+    inlier_dst = np.float32([kp2[m.trainIdx].pt for m in inlier_matches]).reshape(-1, 1, 2)
+    H_refined, _ = cv2.findHomography(inlier_src, inlier_dst, cv2.RANSAC, INLIER_DISTANCE)
+
+    if H_refined is None:
+        break
+
+    # 投影角点
+    transformed_corners = cv2.perspectiveTransform(corners, H_refined)
+    transformed_corners = np.int32(transformed_corners)
+
+    x_coords = transformed_corners[:, 0, 0]
+    y_coords = transformed_corners[:, 0, 1]
+    x_min, x_max = int(np.min(x_coords)), int(np.max(x_coords))
+    y_min, y_max = int(np.min(y_coords)), int(np.max(y_coords))
+
+    # 重叠检测（去重）
+    is_overlapping = False
+    for (bx_min, bx_max, by_min, by_max) in bounding_boxes:
+        inter_xmin = max(x_min, bx_min)
+        inter_xmax = min(x_max, bx_max)
+        inter_ymin = max(y_min, by_min)
+        inter_ymax = min(y_max, by_max)
+
+        if inter_xmin < inter_xmax and inter_ymin < inter_ymax:
+            inter_area = (inter_xmax - inter_xmin) * (inter_ymax - inter_ymin)
+            curr_area = (x_max - x_min) * (y_max - y_min)
+            prev_area = (bx_max - bx_min) * (by_max - by_min)
+            union_area = curr_area + prev_area - inter_area
+            if union_area > 0 and inter_area / union_area > OVERLAP_THRESHOLD:
+                is_overlapping = True
+                break
+
+    if is_overlapping:
+        print("检测到重叠区域，跳过")
+    else:
+        # 添加新包围框
+        bounding_boxes.append((x_min, x_max, y_min, y_max))
+        cv2.rectangle(target_color, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+        print(f" 成功添加一个匹配实例，位置: ({x_min}, {y_min}) - ({x_max}, {y_max})")
+
+    # 将本次内点对应的 trainIdx 标记为已使用
+    used_train_indices.update(m.trainIdx for m in inlier_matches)
+
+# 输出结果
+print(f"\n 总共找到 {len(bounding_boxes)} 个满足匹配率阈值的匹配实例")
 
 # 计算运行时间
+end_time = time.time()
 execution_time = end_time - start_time
 print(f"代码运行时间: {execution_time:.2f} 秒")
 
