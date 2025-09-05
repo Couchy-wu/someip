@@ -16,7 +16,7 @@ OVERLAP_THRESHOLD = 0.3   # 去重阈值（IoU）
 
 # 读取图像
 template_bgr = cv2.imread('kmh.png')
-target_bgr = cv2.imread('image3.png')
+target_bgr = cv2.imread('TemporaryResources/ARHUD/10.png')
 
 if template_bgr is None or target_bgr is None:
     print("图像读取失败，请检查路径")
@@ -37,13 +37,14 @@ sift = cv2.SIFT_create(nfeatures=0, nOctaveLayers=3, contrastThreshold=0.04, edg
 kp1, des1 = sift.detectAndCompute(template_gray, None)
 kp2, des2 = sift.detectAndCompute(target_gray, None)
 
-# 转换为BGR用于绘制
-target_color = cv2.cvtColor(target_gray, cv2.COLOR_GRAY2BGR)
+# 使用原始彩色图像作为绘制底图（无论是否匹配都显示彩色）
+result_image = target_bgr.copy()  # 直接使用原始彩色图
 
 # 检查描述子
 if des1 is None or des2 is None or des1.size == 0 or des2.size == 0:
     print("无法提取有效特征描述子，匹配失败")
-    cv2.imshow('Matched Result', target_color)
+    # 即使失败，也显示彩色原图
+    cv2.imshow('Matched Result', result_image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
     exit()
@@ -153,7 +154,8 @@ while True:
     else:
         # 添加新包围框
         bounding_boxes.append((x_min, x_max, y_min, y_max))
-        cv2.rectangle(target_color, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+        # 在原始彩色图像上绘制绿色矩形
+        cv2.rectangle(result_image, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
         print(f" 成功添加一个匹配实例，位置: ({x_min}, {y_min}) - ({x_max}, {y_max})")
 
     # 将本次内点对应的 trainIdx 标记为已使用
@@ -168,6 +170,6 @@ execution_time = end_time - start_time
 print(f"代码运行时间: {execution_time:.2f} 秒")
 
 # 显示结果
-cv2.imshow('Matched Result', target_color)
+cv2.imshow('Matched Result', result_image)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
