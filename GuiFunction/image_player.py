@@ -29,6 +29,22 @@ def play_image_sequence():
     if not files:
         messagebox.showwarning("提示", "该文件夹中没有合法图片！")
         return
+    
+    # 预加载所有图像
+    print('图像预加载中...')
+    preloaded_images = []
+    for file in files:
+        path = os.path.join(folder, file)
+        try:
+            img = Image.open(path)
+            imgtk = ImageTk.PhotoImage(img)
+            preloaded_images.append(imgtk)
+        except Exception as e:
+            print(f"无法加载图片 {file}: {e}")
+            # 如果有图片加载失败，提示用户并退出
+            messagebox.showwarning("警告", f"无法加载图片：{file}")
+            return
+    
     # 禁用主窗口，防止用户在播放时操作其他控件。（但是后续可能会改）
     main_root.attributes("-disabled", True)
     # 创建播放窗口
@@ -78,17 +94,10 @@ def play_image_sequence():
     def show_next():
         nonlocal idx, after_id
         # 检查是否已经播放完所有图片
-        if idx >= len(files):
+        if idx >= len(preloaded_images):
             return
-        path = os.path.join(folder, files[idx])
-        # 加载并显示当前图片
-        try:
-            img = Image.open(path)
-            imgtk = ImageTk.PhotoImage(img)
-            label.config(image=imgtk)
-            label.image = imgtk
-        except Exception as e:
-            print("无法加载图片:", e)
+        # 显示当前图片
+        label.config(image=preloaded_images[idx])
         idx += 1
         after_id = player.after(delay, show_next)
 
@@ -110,16 +119,9 @@ def play_image_sequence():
     # 函数功能：用于显示当前索引 idx 对应的图片
     def show_current():
         nonlocal idx
-        if idx >= len(files):
+        if idx >= len(preloaded_images):
             return
-        path = os.path.join(folder, files[idx])
-        try:
-            img = Image.open(path)
-            imgtk = ImageTk.PhotoImage(img)
-            label.config(image=imgtk)
-            label.image = imgtk
-        except Exception as e:
-            print("无法加载图片:", e)
+        label.config(image=preloaded_images[idx])
 
     # 定义倒退函数
     def rewind_5s():
