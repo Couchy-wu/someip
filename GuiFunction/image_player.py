@@ -69,7 +69,7 @@ def play_image_sequence():
             # 追加到共享列表（加锁防止竞争）
             with load_lock:
                 frames.append(photo)
-        print("所有帧已加载完毕止")
+        print("所有帧已加载完成！")
 
     loader_thread = threading.Thread(target=loader, daemon=True)
     loader_thread.start()
