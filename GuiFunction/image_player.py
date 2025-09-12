@@ -1,5 +1,6 @@
 import os
 import threading
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk   # pip install pillow
@@ -8,7 +9,7 @@ from PIL import Image, ImageTk   # pip install pillow
 FPS = 25                     # 播放帧率
 PRELOAD_COUNT = 200          # 启动时同步预加载的帧数
 
-main_root = None   # 用于存储主窗口引用（在多次调用时保持一致）
+main_root = None             # 用于存储主窗口引用（在多次调用时保持一致）
 
 def play_image_sequence():
     """ 主入口：选择文件夹 → 预加载 → 启动后台加载 → 播放 """
@@ -33,18 +34,19 @@ def play_image_sequence():
         messagebox.showwarning("提示", "该文件夹中没有合法图片！")
         return
 
-    total_frames = len(files)
-
-    # ----------  前 PRELOAD_COUNT 帧同步加载 ----------
-    frames = []                     # 保存 ImageTk.PhotoImage 对象
+    total_frames = len(files)                     # 总帧数
+    frame_interval = 1.0 / FPS                    # 每帧应出现的时间间隔（秒）
     preload_num = min(PRELOAD_COUNT, total_frames)
+
+    # 为每一帧预留位置（None 表示尚未加载）
+    frames = [None] * total_frames                # 保存 ImageTk.PhotoImage 对象
 
     print(f"预加载前 {preload_num} 帧中...")
     for i in range(preload_num):
         path = os.path.join(folder, files[i])
         try:
             img = Image.open(path)
-            frames.append(ImageTk.PhotoImage(img))
+            frames[i] = ImageTk.PhotoImage(img)
         except Exception as e:
             print(f"加载失败 {files[i]}: {e}")
             messagebox.showwarning("警告", f"无法加载图片：{files[i]}")
@@ -68,7 +70,7 @@ def play_image_sequence():
                 continue
             # 追加到共享列表（加锁防止竞争）
             with load_lock:
-                frames.append(photo)
+                frames[i] = photo
         print("所有帧已加载完成！")
 
     loader_thread = threading.Thread(target=loader, daemon=True)
@@ -78,15 +80,13 @@ def play_image_sequence():
     main_root.attributes("-disabled", True)   # 禁止主窗口操作
     player = tk.Toplevel()
     player.title("播放窗口")
-    player.protocol("WM_DELETE_WINDOW", lambda: stop(player))
-    # 创建主框架：左边图片，右边控制
-    main_frame = tk.Frame(player)
-    main_frame.pack(fill="both", expand=True)
+    player.protocol("WM_DELETE_WINDOW", lambda: _stop(player))
+
     # 左侧图片标签
-    label = tk.Label(main_frame, bg="black")
+    label = tk.Label(player, bg="black")
     label.pack(side="left", fill="both", expand=True)
     # 右侧控制面板
-    ctrl = tk.Frame(main_frame, padx=10, pady=10)
+    ctrl = tk.Frame(player, padx=10, pady=10)
     ctrl.pack(side="right", fill="y")
     # 暂停/继续按钮
     pause_btn = tk.Button(ctrl, text="暂停播放", width=12, height=2)
@@ -99,10 +99,11 @@ def play_image_sequence():
     back_btn.pack(pady=2)
 
     # ---------- 播放状态变量 ----------
-    idx = 0                         # 当前显示的帧索引
-    delay = int(1000 / FPS)        # 两帧之间的延迟（毫秒）
-    after_id = None                # after 调用的 ID，用于取消
-    paused = False                 # 是否处于暂停状态
+    idx = 0                     # 当前显示的帧索引
+    after_id = None             # after 调用的 ID，用于取消
+    paused = False              # 是否处于暂停状态
+    start_time = None           # 播放开始的绝对时间（秒）
+    pause_elapsed = 0.0         # 已经过去的时间（秒），用于恢复时的偏移
 
     # ----------  辅助函数 ----------
     def get_current_frame():
@@ -117,11 +118,12 @@ def play_image_sequence():
         photo = get_current_frame()
         if photo:
             label.config(image=photo)
+            label.image = photo          # 防止被 GC
 
-    # ---------- 播放循环 ----------
+    # ---------- 播放循环 (基于时间戳调度)----------
     def play_step():
-        """播放单步：显示当前帧 → 索引 +1 → 计划下一步"""
-        nonlocal idx, after_id, paused
+        """播放单步：显示当前帧 → 索引 +1 → 计划下一步（绝对时间）"""
+        nonlocal idx, after_id, start_time, paused
 
         # 如果已经到达末尾，停止并把按钮文字改为 “重新播放”
         if idx >= total_frames:
@@ -129,41 +131,44 @@ def play_image_sequence():
             paused = True
             return
 
-        # 若当前帧尚未被后台加载，则稍后再尝试
-        if idx >= len(frames):
-            # 这里可以显示一个 “加载中...” 的占位图，或保持上一帧不动
-            # 为了不卡死 UI，使用 after 再检查一次
-            after_id = player.after(50, play_step)   # 50ms 后重新检查
-            return
+        # 若当前帧尚未就绪，仅显示占位（保持上一帧不动）并继续调度
+        if idx >= len(frames) or frames[idx] is None:
+            # 这里可以放一张“加载中”占位图，暂时保持不变
+            pass
+        else:
+            show_frame()
 
-        # 正常显示
-        show_frame()
+        # 计算下一帧的目标时间点（绝对时间）
         idx += 1
-        after_id = player.after(delay, play_step)
+        target_time = start_time + idx * frame_interval      # 秒
+        now = time.perf_counter()
+        delay_ms = max(0, int((target_time - now) * 1000))
+
+        # 安排下一次回调
+        after_id = player.after(delay_ms, play_step)
 
     # ---------- 控制按钮 ----------
     def replay():
         """重新从第一帧播放"""
-        nonlocal idx, after_id, paused
-        # 重置索引和暂停状态
-        idx = 0                
+        nonlocal idx, after_id, paused, start_time, pause_elapsed
+        idx = 0
         paused = False
+        pause_elapsed = 0.0
+        start_time = time.perf_counter()
         pause_btn.config(text="暂停播放")
         if after_id:
             player.after_cancel(after_id)
             after_id = None
         play_step()
 
-    replay_btn.config(command=replay)
-
     def toggle_pause():
         """暂停 / 继续"""
-        nonlocal paused, after_id
+        nonlocal paused, after_id, pause_elapsed, start_time
         if paused:                     # 继续
             paused = False
             pause_btn.config(text="暂停播放")
-            # 若当前帧已经就绪，立刻显示一次（防止“跳帧”）
-            show_frame()
+            # 恢复时把 start_time 向前平移已暂停的时间
+            start_time = time.perf_counter() - pause_elapsed
             play_step()
         else:                          # 暂停
             paused = True
@@ -171,16 +176,23 @@ def play_image_sequence():
             if after_id:
                 player.after_cancel(after_id)
                 after_id = None
-
-    pause_btn.config(command=toggle_pause)
+            # 记录已经过去的时间，恢复时使用
+            pause_elapsed = time.perf_counter() - start_time
 
     def rewind_5s():
         """倒退 5 秒（即 5*FPS 帧）"""
-        nonlocal idx, after_id, paused
+        nonlocal idx, after_id, paused, start_time, pause_elapsed
         frames_back = 5 * FPS
         new_idx = max(0, idx - frames_back)
         idx = new_idx
-        # 取消已经排队的 after
+
+        if not paused:
+            # 播放中：重新计算 start_time 让时间戳保持一致
+            start_time = time.perf_counter() - idx * frame_interval
+        else:
+            # 暂停状态：只更新 pause_elapsed
+            pause_elapsed = idx * frame_interval
+
         if after_id:
             player.after_cancel(after_id)
             after_id = None
@@ -188,10 +200,8 @@ def play_image_sequence():
         if not paused:
             play_step()
 
-    back_btn.config(command=rewind_5s)
-
     # 函数功能：关闭窗口
-    def stop(win):
+    def _stop(win):
         """关闭播放窗口时的清理工作"""
         nonlocal after_id, paused
         # 停止播放计时器
@@ -207,7 +217,14 @@ def play_image_sequence():
         paused = False
         win.destroy()
 
+
+    #  绑定按钮
+    replay_btn.config(command=replay)
+    pause_btn.config(command=toggle_pause)
+    back_btn.config(command=rewind_5s)
+
     # ----------  开始播放 ----------
+    start_time = time.perf_counter()          # 记录第 0 帧出现的基准时间
     play_step()
 
 
