@@ -37,8 +37,7 @@ def play_image_sequence():
         path = os.path.join(folder, file)
         try:
             img = Image.open(path)
-            imgtk = ImageTk.PhotoImage(img)
-            preloaded_images.append(imgtk)
+            preloaded_images.append(ImageTk.PhotoImage(img))
         except Exception as e:
             print(f"无法加载图片 {file}: {e}")
             # 如果有图片加载失败，提示用户并退出
@@ -62,20 +61,23 @@ def play_image_sequence():
     ctrl.pack(side="right", fill="y")
     # 暂停/继续按钮
     pause_btn = tk.Button(ctrl, text="暂停播放", width=12, height=2)
-    pause_btn.pack()
+    pause_btn.pack(pady=2)
     # 重新播放按钮
     replay_btn = tk.Button(ctrl, text="重新播放", width=12, height=2)
-    replay_btn.pack()
-    # 播放控制变量
-    idx = 0                     # 当前播放的图片索引
-    delay = int(1000 / FPS)     # 美珍之间的延迟（毫秒），根据帧率计算
-    after_id = None             # Tkinter 的 after 调用的 ID，用于取消定时任务
-    paused = False              # 标记是否已暂停
-    # 在创建控制面板后添加倒退按钮
+    replay_btn.pack(pady=2)
+    # 倒退按钮
     back_btn = tk.Button(ctrl, text="倒退5秒", width=12, height=2)
-    back_btn.pack()
+    back_btn.pack(pady=2)
 
-    # 函数功能：定义重新播放函数
+    # ---------- 播放状态变量 ----------
+    idx = 0                         # 当前显示的帧索引
+    delay = int(1000 / FPS)        # 两帧之间的延迟（毫秒）
+    after_id = None                # after 调用的 ID，用于取消
+    paused = False                 # 是否处于暂停状态
+
+    # ----------------------------------------------------------
+    # 1️⃣ 重新播放（Replay）
+    # ----------------------------------------------------------
     def replay():
         nonlocal idx, after_id, paused
         # 重置索引和暂停状态
@@ -85,45 +87,57 @@ def play_image_sequence():
         if after_id:
             player.after_cancel(after_id)
             after_id = None
-        # 调用 show_next() 开始播放
-        show_next()
-    # 绑定重新播放按钮
+        # 恢复按钮文字为 “暂停播放”
+        pause_btn.config(text="暂停播放")
+        show_next()                # 从第一帧重新开始播放
+
     replay_btn.config(command=replay)
 
-    # 函数功能：显示下一帧图片
+    # ----------------------------------------------------------
+    # 2️⃣ 显示当前帧（用于倒退后立即刷新画面）
+    # ----------------------------------------------------------
+    def show_current():
+        nonlocal idx
+        if 0 <= idx < len(preloaded_images):
+            label.config(image=preloaded_images[idx])
+
+    # ----------------------------------------------------------
+    # 3️⃣ 播放下一帧
+    # ----------------------------------------------------------
     def show_next():
-        nonlocal idx, after_id
-        # 检查是否已经播放完所有图片
+        nonlocal idx, after_id, paused
         if idx >= len(preloaded_images):
+            # 播放结束：把按钮恢复为 “暂停播放”，并标记为已暂停
+            pause_btn.config(text="重新播放")
+            paused = True
             return
-        # 显示当前图片
         label.config(image=preloaded_images[idx])
         idx += 1
         after_id = player.after(delay, show_next)
 
-    # 函数功能：暂停/继续播放
+    # ----------------------------------------------------------
+    # 4️⃣ 暂停 / 继续
+    # ----------------------------------------------------------
     def toggle_pause():
         nonlocal paused, after_id
-        if paused:
+        if paused:                      # 当前是暂停状态 → 继续播放
             paused = False
             pause_btn.config(text="暂停播放")
+            # 继续播放时先显示当前帧，防止“跳帧”
+            show_current()
             show_next()
-        else:
+        else:                           # 正在播放 → 暂停
             paused = True
             pause_btn.config(text="继续播放")
             if after_id:
                 player.after_cancel(after_id)
                 after_id = None
+
     pause_btn.config(command=toggle_pause)
 
-    # 函数功能：用于显示当前索引 idx 对应的图片
-    def show_current():
-        nonlocal idx
-        if idx >= len(preloaded_images):
-            return
-        label.config(image=preloaded_images[idx])
-
-    # 定义倒退函数
+    # ----------------------------------------------------------
+    # 5️⃣ 倒退 5 秒
+    # ----------------------------------------------------------
     def rewind_5s():
         nonlocal idx, after_id, paused
         frames_to_rewind = 5 * FPS
@@ -135,18 +149,22 @@ def play_image_sequence():
         show_current()
         if not paused:
             show_next()
-    # 绑定倒退按钮
+
     back_btn.config(command=rewind_5s)
 
     # 函数功能：关闭窗口
     def stop(win):
-        nonlocal after_id
+        nonlocal after_id, paused
         if after_id:
             win.after_cancel(after_id)
             after_id = None
+        # 恢复主窗口交互
         main_root.attributes("-disabled", False)
         main_root.lift()
-        win.destroy()  # 关闭并销毁播放窗口
+        # 重置按钮文字（防止下次打开时残留）
+        pause_btn.config(text="暂停播放")
+        paused = False
+        win.destroy()
 
     # 开始播放
     show_next()
