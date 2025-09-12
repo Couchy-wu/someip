@@ -1,14 +1,17 @@
 import os
+import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk   # pip install pillow
 
-FPS = 25  # 帧率
-main_root = None    # 用于存储窗口
+# 配置项
+FPS = 25                     # 播放帧率
+PRELOAD_COUNT = 200          # 启动时同步预加载的帧数
 
-# 函数功能：执行图像序列播放逻辑
+main_root = None   # 用于存储主窗口引用（在多次调用时保持一致）
+
 def play_image_sequence():
-    # 获取窗口
+    """ 主入口：选择文件夹 → 预加载 → 启动后台加载 → 播放 """
     global main_root
     if main_root is None:
         main_root = tk._default_root
@@ -17,7 +20,7 @@ def play_image_sequence():
     if not folder:
         return
     # 筛选有效图片文件
-    valid_ext = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff"}
+    valid_ext = {".jpg", ".jpeg", ".png", ".bmp", ".tiff"}
     files = [f for f in os.listdir(folder)
              if os.path.splitext(f.lower())[1] in valid_ext]
     # 按文件名排序
@@ -29,24 +32,50 @@ def play_image_sequence():
     if not files:
         messagebox.showwarning("提示", "该文件夹中没有合法图片！")
         return
-    
-    # 预加载所有图像
-    print('图像预加载中...')
-    preloaded_images = []
-    for file in files:
-        path = os.path.join(folder, file)
+
+    total_frames = len(files)
+
+    # ----------  前 PRELOAD_COUNT 帧同步加载 ----------
+    frames = []                     # 保存 ImageTk.PhotoImage 对象
+    preload_num = min(PRELOAD_COUNT, total_frames)
+
+    print(f"预加载前 {preload_num} 帧中...")
+    for i in range(preload_num):
+        path = os.path.join(folder, files[i])
         try:
             img = Image.open(path)
-            preloaded_images.append(ImageTk.PhotoImage(img))
+            frames.append(ImageTk.PhotoImage(img))
         except Exception as e:
-            print(f"无法加载图片 {file}: {e}")
-            # 如果有图片加载失败，提示用户并退出
-            messagebox.showwarning("警告", f"无法加载图片：{file}")
+            print(f"加载失败 {files[i]}: {e}")
+            messagebox.showwarning("警告", f"无法加载图片：{files[i]}")
             return
-    
-    # 禁用主窗口，防止用户在播放时操作其他控件。（但是后续可能会改）
-    main_root.attributes("-disabled", True)
-    # 创建播放窗口
+
+    # ----------  启动后台加载线程 ----------
+    stop_loader = threading.Event()   # 用来通知线程退出
+    load_lock = threading.Lock()      # 保护 frames 列表的写入
+
+    def loader():
+        """后台线程函数：把剩余帧逐帧读取并追加到 frames 列表。"""
+        for i in range(preload_num, total_frames):
+            if stop_loader.is_set():
+                break
+            path = os.path.join(folder, files[i])
+            try:
+                img = Image.open(path)
+                photo = ImageTk.PhotoImage(img)
+            except Exception as e:
+                print(f"[loader] 加载失败 {files[i]}: {e}")
+                continue
+            # 追加到共享列表（加锁防止竞争）
+            with load_lock:
+                frames.append(photo)
+        print("所有帧已加载完毕止")
+
+    loader_thread = threading.Thread(target=loader, daemon=True)
+    loader_thread.start()
+
+    # ----------  UI 布局 ----------
+    main_root.attributes("-disabled", True)   # 禁止主窗口操作
     player = tk.Toplevel()
     player.title("播放窗口")
     player.protocol("WM_DELETE_WINDOW", lambda: stop(player))
@@ -75,58 +104,68 @@ def play_image_sequence():
     after_id = None                # after 调用的 ID，用于取消
     paused = False                 # 是否处于暂停状态
 
-    # ----------------------------------------------------------
-    # 1️⃣ 重新播放（Replay）
-    # ----------------------------------------------------------
+    # ----------  辅助函数 ----------
+    def get_current_frame():
+        """安全获取当前帧的 PhotoImage（若未加载完成返回 None）"""
+        with load_lock:
+            if idx < len(frames):
+                return frames[idx]
+        return None
+
+    def show_frame():
+        """把当前帧（若已就绪）显示到 label 上"""
+        photo = get_current_frame()
+        if photo:
+            label.config(image=photo)
+
+    # ---------- 播放循环 ----------
+    def play_step():
+        """播放单步：显示当前帧 → 索引 +1 → 计划下一步"""
+        nonlocal idx, after_id, paused
+
+        # 如果已经到达末尾，停止并把按钮文字改为 “重新播放”
+        if idx >= total_frames:
+            pause_btn.config(text="重新播放")
+            paused = True
+            return
+
+        # 若当前帧尚未被后台加载，则稍后再尝试
+        if idx >= len(frames):
+            # 这里可以显示一个 “加载中...” 的占位图，或保持上一帧不动
+            # 为了不卡死 UI，使用 after 再检查一次
+            after_id = player.after(50, play_step)   # 50ms 后重新检查
+            return
+
+        # 正常显示
+        show_frame()
+        idx += 1
+        after_id = player.after(delay, play_step)
+
+    # ---------- 控制按钮 ----------
     def replay():
+        """重新从第一帧播放"""
         nonlocal idx, after_id, paused
         # 重置索引和暂停状态
         idx = 0                
         paused = False
-        # 如果有正在运行的播放任务，取消它
+        pause_btn.config(text="暂停播放")
         if after_id:
             player.after_cancel(after_id)
             after_id = None
-        # 恢复按钮文字为 “暂停播放”
-        pause_btn.config(text="暂停播放")
-        show_next()                # 从第一帧重新开始播放
+        play_step()
 
     replay_btn.config(command=replay)
 
-    # ----------------------------------------------------------
-    # 2️⃣ 显示当前帧（用于倒退后立即刷新画面）
-    # ----------------------------------------------------------
-    def show_current():
-        nonlocal idx
-        if 0 <= idx < len(preloaded_images):
-            label.config(image=preloaded_images[idx])
-
-    # ----------------------------------------------------------
-    # 3️⃣ 播放下一帧
-    # ----------------------------------------------------------
-    def show_next():
-        nonlocal idx, after_id, paused
-        if idx >= len(preloaded_images):
-            # 播放结束：把按钮恢复为 “暂停播放”，并标记为已暂停
-            pause_btn.config(text="重新播放")
-            paused = True
-            return
-        label.config(image=preloaded_images[idx])
-        idx += 1
-        after_id = player.after(delay, show_next)
-
-    # ----------------------------------------------------------
-    # 4️⃣ 暂停 / 继续
-    # ----------------------------------------------------------
     def toggle_pause():
+        """暂停 / 继续"""
         nonlocal paused, after_id
-        if paused:                      # 当前是暂停状态 → 继续播放
+        if paused:                     # 继续
             paused = False
             pause_btn.config(text="暂停播放")
-            # 继续播放时先显示当前帧，防止“跳帧”
-            show_current()
-            show_next()
-        else:                           # 正在播放 → 暂停
+            # 若当前帧已经就绪，立刻显示一次（防止“跳帧”）
+            show_frame()
+            play_step()
+        else:                          # 暂停
             paused = True
             pause_btn.config(text="继续播放")
             if after_id:
@@ -135,36 +174,50 @@ def play_image_sequence():
 
     pause_btn.config(command=toggle_pause)
 
-    # ----------------------------------------------------------
-    # 5️⃣ 倒退 5 秒
-    # ----------------------------------------------------------
     def rewind_5s():
+        """倒退 5 秒（即 5*FPS 帧）"""
         nonlocal idx, after_id, paused
-        frames_to_rewind = 5 * FPS
-        new_idx = max(0, idx - frames_to_rewind)
+        frames_back = 5 * FPS
+        new_idx = max(0, idx - frames_back)
+        idx = new_idx
+        # 取消已经排队的 after
         if after_id:
             player.after_cancel(after_id)
             after_id = None
-        idx = new_idx
-        show_current()
+        show_frame()
         if not paused:
-            show_next()
+            play_step()
 
     back_btn.config(command=rewind_5s)
 
     # 函数功能：关闭窗口
     def stop(win):
+        """关闭播放窗口时的清理工作"""
         nonlocal after_id, paused
+        # 停止播放计时器
         if after_id:
             win.after_cancel(after_id)
             after_id = None
+        # 停止后台加载线程
+        stop_loader.set()
+        loader_thread.join(timeout=1.0)   # 最多等 1 秒
         # 恢复主窗口交互
         main_root.attributes("-disabled", False)
         main_root.lift()
-        # 重置按钮文字（防止下次打开时残留）
-        pause_btn.config(text="暂停播放")
         paused = False
         win.destroy()
 
-    # 开始播放
-    show_next()
+    # ----------  开始播放 ----------
+    play_step()
+
+
+# --------------------------------------------------------------
+# 若把本文件直接作为脚本运行，这里创建一个最小的主窗口
+# --------------------------------------------------------------
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.title("图片序列播放器（Demo）")
+    root.geometry("300x120")
+    ttk_btn = tk.Button(root, text="打开文件夹播放", command=play_image_sequence)
+    ttk_btn.pack(expand=True, fill="both", padx=20, pady=20)
+    root.mainloop()
