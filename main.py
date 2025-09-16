@@ -8,6 +8,7 @@ from GuiFunction.view_case_handler import ViewCaseHandler
 from GuiFunction.image_handler import ImageHandler
 from GuiFunction.video_processor import VideoProcessor
 import GuiFunction.image_player  # 导入 image_player 模块
+import GuiFunction.matrix_to_csv
 
 # 创建主窗口
 root = tk.Tk()
@@ -97,6 +98,25 @@ image_video_button = tk.Button(
     height=2
 )
 image_video_button.grid(row=3, column=0, columnspan=2, padx=20, pady=20)
+
+# 添加“转换信号矩阵”按钮
+convert_matrix_button = tk.Button(
+    root,
+    text="转换信号矩阵",
+    command=lambda: open_matrix_converter(),
+    width=15,
+    height=2
+)
+convert_matrix_button.grid(row=0, column=2, columnspan=2, padx=20, pady=20)
+
+def open_matrix_converter():
+    converter_window = tk.Toplevel(root)
+    converter_window.title("信号矩阵 转 CSV 工具")
+    converter_window.geometry("500x200")
+    converter_window.transient(root)  # 设置为临时窗口
+    converter_window.grab_set()       # 模态锁定
+    converter_window.focus_force()
+    GuiFunction.matrix_to_csv.XlsmToCsvConverter(converter_window)
 
 # 运行主循环
 root.mainloop()
