@@ -9,11 +9,12 @@ from GuiFunction.image_handler import ImageHandler
 from GuiFunction.video_processor import VideoProcessor
 import GuiFunction.image_player  # 导入 image_player 模块
 import GuiFunction.matrix_to_csv
+import GuiFunction.binhex_gui
 
 # 创建主窗口
 root = tk.Tk()
 root.title("主窗口")
-root.geometry("600x400")
+root.geometry("800x600")
 
 # 初始化文件更新器
 file_updater = FileUpdater()
@@ -117,6 +118,17 @@ def open_matrix_converter():
     converter_window.grab_set()       # 模态锁定
     converter_window.focus_force()
     GuiFunction.matrix_to_csv.XlsmToCsvConverter(converter_window)
+
+# 添加“生成16进制数据”按钮
+hex_button = tk.Button(
+    root,
+    text="标准帧can数据生成器",
+    command=lambda: GuiFunction.binhex_gui.open_binhex_converter(root),
+    width=20,
+    height=2
+)
+hex_button.grid(row=1, column=2, padx=20, pady=20)  
+
 
 # 运行主循环
 root.mainloop()
