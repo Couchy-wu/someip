@@ -4,7 +4,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 import json
 import pandas as pd
-
+import numpy as np   # 用于识别 NaN
 
 # 函数：上传测试用例 Excel 文件
 def handle_file_upload():
@@ -57,37 +57,71 @@ def handle_file_upload():
                 return None
     return None
 
-# 函数：更新 JSON 文件
+
+
+def _replace_nan(obj):
+    """
+    递归遍历任意嵌套的容器（list / dict），把 np.nan 替换为 None。
+    json.dump 会把 None 序列化为 null。
+    """
+    if isinstance(obj, dict):
+        return {k: _replace_nan(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_replace_nan(v) for v in obj]
+    # 直接比较 np.nan（因为 float('nan') != float('nan')）
+    if isinstance(obj, float) and np.isnan(obj):
+        return None
+    return obj
+
+
 def refresh_json_file(uploaded_file=None):
+    """
+    - 生成/更新 `test_cases.json`（仅保存目录下所有 Excel 文件名）。
+    - 若提供 `uploaded_file`，读取该 Excel，按每 4 行分组并写入
+      `<excel_name>_data.json`，其中所有 NaN 均被写成 JSON 的 null。
+    """
     target_folder = os.path.join(os.getcwd(), "TestcaseCollection")
     json_file = os.path.join(target_folder, "test_cases.json")
     file_list = []
 
-    # 遍历整个文件夹，更新所有 Excel 文件名
+    # -------------------------------------------------
+    # 1️⃣ 读取目录下的所有 Excel 文件名并写入 test_cases.json
+    # -------------------------------------------------
     for file in os.listdir(target_folder):
-        if file.endswith(('.xls', '.xlsx')):
+        if file.lower().endswith(('.xls', '.xlsx')):
             file_list.append(file)
 
-    # 更新文件列表 JSON
     with open(json_file, 'w', encoding='utf-8') as f:
         json.dump(file_list, f, indent=4, ensure_ascii=False)
 
-    # 仅在有上传文件时，处理并生成对应的 data.json
+    # -------------------------------------------------
+    # 2️⃣ 若有上传文件，则生成对应的 *_data.json
+    # -------------------------------------------------
     if uploaded_file:
         excel_path = os.path.join(target_folder, uploaded_file)
+
         try:
+            # 读取 Excel
             df = pd.read_excel(excel_path, header=0)
 
             # 确保索引连续
             df = df.reset_index(drop=True)
 
-            # 将 DataFrame 按每4行分组
+            # 将所有 NaN 替换为 None（即后面的 null）
+            df = df.replace({np.nan: None})
+
+            # 按每 4 行分组
             grouped_data = []
             num_rows = len(df)
+
             for i in range(0, num_rows, 4):
-                group = df.iloc[i:i+4].to_dict(orient='records')
+                # 取当前 4 行（不足 4 行的最后一组也会被保留）
+                group = df.iloc[i:i + 4].to_dict(orient='records')
+                # 递归确保深层的 NaN 已经是 None
+                group = _replace_nan(group)
+
                 grouped_data.append({
-                    "test_case_id": f"TC_{(i//4)+1}",
+                    "test_case_id": f"TC_{(i // 4) + 1}",
                     "rows": group
                 })
 
@@ -97,7 +131,7 @@ def refresh_json_file(uploaded_file=None):
                 os.path.splitext(uploaded_file)[0] + '_data.json'
             )
 
-            # 写入 JSON 文件
+            # 写入 JSON（此时所有 None 会自动转成 null）
             with open(json_output_path, 'w', encoding='utf-8') as f:
                 json.dump(grouped_data, f, indent=4, ensure_ascii=False)
 
