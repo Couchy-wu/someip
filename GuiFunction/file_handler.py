@@ -77,16 +77,31 @@ def refresh_json_file(uploaded_file=None):
         excel_path = os.path.join(target_folder, uploaded_file)
         try:
             df = pd.read_excel(excel_path, header=0)
+
+            # 确保索引连续
+            df = df.reset_index(drop=True)
+
+            # 将 DataFrame 按每4行分组
+            grouped_data = []
+            num_rows = len(df)
+            for i in range(0, num_rows, 4):
+                group = df.iloc[i:i+4].to_dict(orient='records')
+                grouped_data.append({
+                    "test_case_id": f"TC_{(i//4)+1}",
+                    "rows": group
+                })
+
+            # 输出路径
             json_output_path = os.path.join(
                 target_folder,
                 os.path.splitext(uploaded_file)[0] + '_data.json'
             )
-            df.to_json(
-                json_output_path,
-                orient='records',
-                force_ascii=False,
-                indent=4
-            )
-            print(f"生成 JSON 文件: {json_output_path}")
+
+            # 写入 JSON 文件
+            with open(json_output_path, 'w', encoding='utf-8') as f:
+                json.dump(grouped_data, f, indent=4, ensure_ascii=False)
+
+            print(f"生成分组 JSON 文件: {json_output_path}")
+
         except Exception as e:
             print(f"处理文件 {uploaded_file} 时出错: {str(e)}")
