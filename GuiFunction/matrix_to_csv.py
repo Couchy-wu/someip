@@ -7,15 +7,27 @@ import threading
 # 模块功能：提取信号矩阵，转化为csv。方便后续进行信号查找
 
 class XlsmToCsvConverter:
-    def __init__(self, root):
+    def __init__(self, root, skip_first_row: bool = False):
+        """
+        :param root: Tk 主窗口
+        :param skip_first_row: 是否在读取 Excel 时跳过第一行
+                               True  → 跳过（等价于原来的 skiprows=1）
+                               False → 不跳过（等价于原来的 skiprows=0）
+        """
         self.root = root
         self.root.title("信号矩阵 转 CSV 工具")
         self.root.geometry("500x200")
 
-        self.label = tk.Label(root, text="请上传修改后的信号矩阵\n 仅保留报文ID，子ID，报文长度，bit位，信号名称英文和中文这几列", font=("Arial", 12))
+        # ---------- 这里是新增的布尔开关 ----------
+        self.skip_first_row = skip_first_row
+        # -----------------------------------------
+
+        self.label = tk.Label(root, text="请上传修改后的信号矩阵", font=("Arial", 12))
         self.label.pack(pady=20)
 
-        self.upload_button = tk.Button(root, text="上传 XLSM 文件", command=self.start_conversion, font=("Arial", 12))
+        self.upload_button = tk.Button(
+            root, text="上传 XLSM 文件", command=self.start_conversion, font=("Arial", 12)
+        )
         self.upload_button.pack(pady=10)
 
         # 进度条
@@ -25,7 +37,9 @@ class XlsmToCsvConverter:
         self.progress_label = tk.Label(self.progress_frame, text="进度: 0%", font=("Arial", 10))
         self.progress_label.pack()
 
-        self.progress_bar = ttk.Progressbar(self.progress_frame, orient="horizontal", length=400, mode="determinate")
+        self.progress_bar = ttk.Progressbar(
+            self.progress_frame, orient="horizontal", length=400, mode="determinate"
+        )
         self.progress_bar.pack()
 
     def start_conversion(self):
@@ -48,8 +62,21 @@ class XlsmToCsvConverter:
             return
 
         try:
-            # 读取数据（跳过第一行）
-            df = pd.read_excel(file_path, engine='openpyxl', header=None, skiprows=1)
+            # -------------------------------------------------
+            # 根据布尔开关决定是否跳过第一行
+            # skiprows = 1 → 跳过第一行
+            # skiprows = 0 → 不跳过第一行（读取全部行）
+            # -------------------------------------------------
+            skiprows = 1 if self.skip_first_row else 0
+
+            df = pd.read_excel(
+                file_path,
+                engine='openpyxl',
+                header=None,
+                skiprows=skiprows   # ← 这里使用了上面的变量
+            )
+            # -------------------------------------------------
+
             if df.empty:
                 self.root.after(0, lambda: messagebox.showwarning("警告", "表格为空！"))
                 self.root.after(0, self.reset_ui)
@@ -119,5 +146,11 @@ class XlsmToCsvConverter:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = XlsmToCsvConverter(root)
+
+    # ------------------- 这里决定是否跳过第一行 -------------------
+    # 设为 True → 跳过第一行
+    # 设为 False → 不跳过第一行（读取完整表格）
+    converter = XlsmToCsvConverter(root, skip_first_row=False)
+    # ------------------------------------------------------------
+
     root.mainloop()

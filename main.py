@@ -117,9 +117,9 @@ def open_matrix_converter():
     converter_window.transient(root)  # 设置为临时窗口
     converter_window.grab_set()       # 模态锁定
     converter_window.focus_force()
-    GuiFunction.matrix_to_csv.XlsmToCsvConverter(converter_window)
+    GuiFunction.matrix_to_csv.XlsmToCsvConverter(converter_window, skip_first_row=False)  #  True → 跳过第一行
 
-# 添加“生成16进制数据”按钮
+# 添加“标准帧can数据生成器”按钮
 hex_button = tk.Button(
     root,
     text="标准帧can数据生成器",
