@@ -89,7 +89,12 @@ def get_signal_info_by_id_and_name(message_id, signal_name_en, csv_file='Testcas
     }
 
     # 打印结果
-    print("找到信号")
+    sub_id = record['子ID']
+    if pd.notna(sub_id) and str(sub_id).strip().upper() == 'NO':
+        print(f"找到信号：0x{message_id_clean} {signal_name_en}")
+    else:
+       print(f"找到信号：0x{message_id_clean} 子ID: {sub_id} {signal_name_en}")
+
     # print("找到信号：")
     # for key, value in result_can.items():
     #     print(f"  {key}: {value}")
