@@ -105,24 +105,25 @@ def _parse_bit_range(bit_range: str) -> Tuple[int, int, int, int]:
     """解析 "row_start.col_start-row_end.col_end" → 四个整数坐标。"""
     try:
         start, end = bit_range.split("-")
-        rs, cs = map(int, start.split("."))
-        re, ce = map(int, end.split("."))
+        start_row, start_col = map(int, start.split("."))
+        end_row, end_col = map(int, end.split("."))
     except Exception as exc:
         raise ValueError(f'位范围格式错误') from exc
 
     if not (1 <= rs <= 8 and 1 <= re <= 8):
         raise ValueError("行号必须在 1~8 之间")
-    if not (0 <= cs <= 7 and 0 <= ce <= 7):
+    if not (0 <= start_col <= 7 and 0 <= end_col <= 7):
         raise ValueError("列号必须在 0~7 之间")
-    if (re, ce) < (rs, cs):
+    if (end_row, end_col) < (start_row, start_col):
         raise ValueError("结束位置必须在起始位置的右下方")
-    return rs, cs, re, ce
+    return start_row, start_col, end_row, end_col
 
-def _calc_signal_length(rs: int, cs: int, re: int, ce: int) -> int:
+
+def _calc_signal_length(start_row: int, start_col: int, end_row: int, end_col: int) -> int:
     """计算信号所占的总位数。"""
     length = 0
-    r, c = rs, cs
-    while (r, c) <= (re, ce):
+    r, c = start_row, start_col
+    while (r, c) <= (end_row, end_col):
         length += 1
         if c < 7:
             c += 1
@@ -136,9 +137,9 @@ def generate_can_data(bit_range: str, enum_value: int) -> List[int]:
     """
     根据位范围和枚举值生成 8 字节 CAN 数据（返回整数列表）。
     """
-    rs, cs, re, ce = _parse_bit_range(bit_range)
-    signal_len = _calc_signal_length(rs, cs, re, ce)
-
+    start_row, start_col, end_row, end_col = _parse_bit_range(bit_range)
+    signal_len = _calc_signal_length(start_row, start_col, end_row, end_col)
+    
     if enum_value < 0:
         raise ValueError("enum_value 不能为负数")
     if enum_value >= (1 << signal_len):
@@ -153,9 +154,9 @@ def generate_can_data(bit_range: str, enum_value: int) -> List[int]:
     rows = [[0] * 8 for _ in range(8)]
 
     # 按行优先顺序写入位
-    r, c = rs, cs
+    r, c = start_row, start_col
     i = 0
-    while (r, c) <= (re, ce) and i < signal_len:
+    while (r, c) <= (end_row, end_col) and i < signal_len:
         rows[r - 1][c] = bits[i]
         i += 1
         if c < 7:
