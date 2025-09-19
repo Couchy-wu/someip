@@ -1,5 +1,5 @@
 import pandas as pd
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 # 模块功能：根据 CAN ID、 信号名称 和 枚举值 生成信号数据
 # 比如：create_can_data_by_signal('12D', 'BCMPower_Gear_12D_S', 3)
@@ -109,8 +109,7 @@ def _parse_bit_range(bit_range: str) -> Tuple[int, int, int, int]:
         end_row, end_col = map(int, end.split("."))
     except Exception as exc:
         raise ValueError(f'位范围格式错误') from exc
-
-    if not (1 <= rs <= 8 and 1 <= re <= 8):
+    if not (1 <= start_row <= 8 and 1 <= end_row <= 8):
         raise ValueError("行号必须在 1~8 之间")
     if not (0 <= start_col <= 7 and 0 <= end_col <= 7):
         raise ValueError("列号必须在 0~7 之间")
@@ -132,10 +131,17 @@ def _calc_signal_length(start_row: int, start_col: int, end_row: int, end_col: i
             c = 0
     return length
 
-# 根据信号 位 和 枚举值 生成数据（十进制整数）（普通帧）
-def generate_can_data(bit_range: str, enum_value: int) -> List[int]:
+
+#  sub_id 参数
+def generate_can_data(bit_range: str, enum_value: int, sub_id: Optional[str] = None) -> List[int]:
     """
     根据位范围和枚举值生成 8 字节 CAN 数据（返回整数列表）。
+    参数:
+        bit_range (str): 位范围，如 "5.4-5.7"
+        enum_value (int): 枚举值
+        sub_id (str, optional): 子ID，如 "0x02"，若提供则替换第一个字节
+    返回:
+        List[int]: 8字节数据列表
     """
     start_row, start_col, end_row, end_col = _parse_bit_range(bit_range)
     signal_len = _calc_signal_length(start_row, start_col, end_row, end_col)
@@ -171,6 +177,21 @@ def generate_can_data(bit_range: str, enum_value: int) -> List[int]:
         value = sum(bit << idx for idx, bit in enumerate(row))
         data_bytes.append(value)
 
+    # 如果 sub_id 存在且是十六进制字符串，替换第一个字节
+    if sub_id is not None and isinstance(sub_id, str):
+        try:
+            # 提取十六进制数（支持 0x02, 0X02, 等）
+            sub_id_clean = sub_id.strip().upper()
+            if '0X' in sub_id_clean:
+                sub_id_decimal = int(sub_id_clean.replace('0X', ''), 16)
+            else:
+                # 尝试直接作为十六进制解析
+                sub_id_decimal = int(sub_id_clean, 16)
+            # 替换第一个字节
+            data_bytes[0] = sub_id_decimal
+        except ValueError:
+            print(f"警告：无法解析子ID为十六进制数: {sub_id}，跳过替换。")
+
     return data_bytes
 
 # 将整数列表格式化为 [0x00, 0x60, ...] 形式的字符串
@@ -181,7 +202,7 @@ def format_can_data(data: List[int]) -> str:
     return "[" + ", ".join(f"0x{byte:02X}" for byte in data) + "]"
 
 # 根据 CAN ID、 信号名称 和 枚举值 生成信号数据
-def create_can_data_by_signal(message_id: str, signal_name_en: str, enum_value: int, csv_file: str = 'TestcaseCollection/outputMatrix.csv') -> List[int]:
+def create_can_data_by_signal(message_id: str, signal_name_en: str, enum_value: int, csv_file: str = 'TestcaseCollection/outputMatrix.csv') -> str:
     """
     根据报文ID和信号英文名获取位定义，并生成对应的CAN数据。
 
@@ -190,24 +211,45 @@ def create_can_data_by_signal(message_id: str, signal_name_en: str, enum_value: 
         signal_name_en (str): 信号英文名，如 'BCMPower_Gear_12D_S'
         enum_value (int): 枚举值，用于生成数据
         csv_file (str): CSV文件路径，默认为 'outputMatrix.csv'
-
     返回:
-        List[int]: 生成的CAN数据字节列表
+        str: 格式化后的CAN数据字符串，如 [0x00, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00]
     """
     # 获取信号信息
     signal_info = get_signal_info_by_id_and_name(message_id, signal_name_en, csv_file)
-    
-    # 提取“位”字段
-    bit_range = signal_info['位']
-    
-    # 调用生成函数
-    data = generate_can_data(bit_range, enum_value)      # 举例输出：[0, 0, 0, 0, 12, 0, 0, 0]
-    data = format_can_data(data)                         # 举例输出：[0x00, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00]
+    if signal_info is None:
+        return "[]"
 
+    bit_range = signal_info['位']
+
+    # 提取子ID
+    sub_id_raw = signal_info.get('子ID')
+    sub_id_hex = None
+    if pd.notna(sub_id_raw):
+        sub_id_str = str(sub_id_raw).strip()
+        if sub_id_str.upper() != 'NO':
+            # 保留类似 0x02 的格式
+            # 尝试规范化
+            clean = sub_id_str.strip().upper()
+            if '0X' in clean:
+                hex_part = '0x' + clean.split('0X')[1].split()[0]  # 取第一部分
+            elif all(c in '0123456789ABCDEF' for c in clean):
+                hex_part = '0x' + clean
+            else:
+                hex_part = None
+            if hex_part:
+                try:
+                    int(hex_part, 16)  # 验证是否合法
+                    sub_id_hex = hex_part
+                except ValueError:
+                    print(f"警告：子ID '{sub_id_raw}' 不是有效的十六进制数，跳过。")
+
+    # 调用生成函数，并传入 sub_id（可能为 None）
+    data = generate_can_data(bit_range, enum_value, sub_id=sub_id_hex)  # [0, 0, 0, 0, 12, 0, 0, 0]
+    data = format_can_data(data)  # [0x00, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00]
     return data
 
 
 # 示例调用
 if __name__ == "__main__":
     data = create_can_data_by_signal('12D', 'BCMPower_Gear_12D_S', 3)
-    print(data)  
+    print(data)
