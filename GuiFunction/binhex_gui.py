@@ -1,7 +1,6 @@
 # GuiFunction/binhex_gui.py
 import tkinter as tk
-from tkinter import ttk
-
+from tkinter import ttk, messagebox   # ← 新增 messagebox
 
 class BinHexRow(ttk.Frame):
     """
@@ -18,8 +17,8 @@ class BinHexRow(ttk.Frame):
         # ------------------------------------------------------------------
         self.row_label = ttk.Label(
             self,
-            text=str(display_index),   # 已改为正向递增的行号
-            width=2,
+            text=str(display_index),   # 正向递增的行号
+            width=3,
             anchor="center",
         )
         self.row_label.grid(row=0, column=0, padx=2)
@@ -29,8 +28,8 @@ class BinHexRow(ttk.Frame):
         # ------------------------------------------------------------------
         self.bit_vars = []   # 保存 IntVar，顺序为 [bit7, bit6, …, bit0]
         self.bit_btns = []   # 对应的按钮列表（顺序同上）
-
-        # 这里使用从 7 到 0 的倒序循环，使列的顺序为 7 6 5 4 3 2 1 0
+        
+        # 列号从 1 开始，这样第 1 列对应 bit7，第 8 列对应 bit0
         for bit in range(7, -1, -1):
             var = tk.IntVar(value=0)
             btn = ttk.Button(
@@ -39,8 +38,7 @@ class BinHexRow(ttk.Frame):
                 command=lambda idx=len(self.bit_vars): self.toggle_bit(idx),
                 width=3,
             )
-            # 列号 = 8 - bit（bit7 → col1，bit0 → col8）
-            btn.grid(row=0, column=8 - bit, padx=1)
+            btn.grid(row=0, column=1 + (7 - bit), padx=1)   # 1‑8 列
             self.bit_vars.append(var)
             self.bit_btns.append(btn)
 
@@ -145,7 +143,7 @@ class BinHexConverter:
         self.row_combo.bind("<<ComboboxSelected>>", self.on_row_count_changed)
 
         # ------------------------------------------------------------------
-        # 表头：左侧空白 + 8 列位号（7~0） + Hex
+        # 表头：行号占位 + 8 列位号（7~0） + Hex
         # ------------------------------------------------------------------
         self.header = None
         self.create_header(container)
@@ -175,8 +173,8 @@ class BinHexConverter:
 
         # 4) 鼠标滚轮绑定（Windows / macOS / Linux 通用）
         self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)   # Windows/macOS
-        self.canvas.bind_all("<Button-4>", self._on_mousewheel)    # Linux scroll up
-        self.canvas.bind_all("<Button-5>", self._on_mousewheel)    # Linux scroll down
+        self.canvas.bind_all("<Button-4>", self._on_mousewheel)    # Linux up
+        self.canvas.bind_all("<Button-5>", self._on_mousewheel)    # Linux down
 
         # 存放所有行对象
         self.rows = []
@@ -184,7 +182,7 @@ class BinHexConverter:
         self.create_rows()
 
         # ------------------------------------------------------------------
-        # 底部：整体 data 显示 + “清空” 按钮
+        # 底部：整体 data 显示 + “复制” & “清空” 按钮
         # ------------------------------------------------------------------
         bottom_frame = ttk.Frame(self.window, padding=10)
         bottom_frame.grid(row=1, column=0, sticky="ew")
@@ -199,10 +197,24 @@ class BinHexConverter:
             state="readonly",
         )
         data_entry.grid(row=0, column=1, padx=(5, 0), sticky="w")
-        clear_btn = ttk.Button(
-            bottom_frame, text="清空", command=self.clear_all, width=8
+
+        # “复制” 按钮（位于 “清空” 左侧）
+        copy_btn = ttk.Button(
+            bottom_frame,
+            text="复制",
+            command=self.copy_data,
+            width=8,
         )
-        clear_btn.grid(row=0, column=2, padx=(10, 0))
+        copy_btn.grid(row=0, column=2, padx=(10, 0))
+
+        # “清空” 按钮
+        clear_btn = ttk.Button(
+            bottom_frame,
+            text="清空",
+            command=self.clear_all,
+            width=8,
+        )
+        clear_btn.grid(row=0, column=3, padx=(10, 0))
 
         # 初始化一次 data 显示
         self.refresh_data_display()
@@ -243,18 +255,44 @@ class BinHexConverter:
     # 创建表头（列标签：bit7~bit0 和 Hex）
     # ----------------------------------------------------------------------
     def create_header(self, parent):
+        """列号 7‑0 与 Hex 与按钮一一对应，左侧保留行号列"""
         if self.header is not None:
             self.header.destroy()
         self.header = ttk.Frame(parent)
         self.header.grid(row=1, column=0, columnspan=2, pady=(0, 4), sticky="w")
-        ttk.Label(self.header, text=" ").grid(row=0, column=0)
-        for col in range(7, -1, -1):                     # 7→0
+
+        # --------------------------------------------------------------
+        #  行号占位（与 BinHexRow.row_label 使用相同的宽度、对齐方式）
+        # --------------------------------------------------------------
+        ttk.Label(
+            self.header,
+            text=" ",          # 空白占位
+            width=3,           # 与行号标签保持同宽
+            anchor="center"
+        ).grid(row=0, column=0, padx=2)          # 与 row_label 的 padx=2 对齐
+
+        # --------------------------------------------------------------
+        #  位号 7 → 0（列号的 grid 列号与二进制按钮对应）
+        #    - bit7 → column 1
+        #    - bit6 → column 2
+        #    - …
+        #    - bit0 → column 8
+        # --------------------------------------------------------------
+        for col in range(7, -1, -1):                     # 7 → 0
             ttk.Label(
                 self.header,
                 text=str(col),
                 width=4,
                 anchor="center"
-            ).grid(row=0, column=8 - col, padx=1)      # 对齐列号
+            ).grid(
+                row=0,
+                column=1 + (7 - col),   # 计算得到 1~8
+                padx=1                  # 与按钮的 padx=1 完全一致
+            )
+
+        # --------------------------------------------------------------
+        #  Hex 标题（放在第 9 列，正好对应十六进制显示框）
+        # --------------------------------------------------------------
         ttk.Label(
             self.header,
             text="Hex",
@@ -316,6 +354,23 @@ class BinHexConverter:
             row.reset_bits()
         self.refresh_data_display()
 
+    # ----------------------------------------------------------------------
+    # 复制 data 内容到剪贴板并弹出提示框
+    # ----------------------------------------------------------------------
+    def copy_data(self):
+        """将 data 的内容复制到剪贴板并弹出 “已复制” 提示"""
+        data_content = self.data_var.get()
+        # 复制到系统剪贴板
+        self.window.clipboard_clear()
+        self.window.clipboard_append(data_content)
+        self.window.update()   # 确保剪贴板立即生效
+
+        # 弹出提示框（模态对话框）
+        messagebox.showinfo(
+            title="复制成功",
+            message="已复制data",
+            parent=self.window
+        )
 
 def open_binhex_converter(parent):
     """供主程序调用的公共接口"""
