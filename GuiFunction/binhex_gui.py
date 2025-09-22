@@ -93,8 +93,8 @@ class BinHexRow(ttk.Frame):
 
 
 class BinHexConverter:
-    """整个对话框窗口（8 行、每行 8 位）"""
-    TOTAL_ROWS = 8
+    """整个对话框窗口（支持动态行数：8,12,16,20,24,32,48,64）"""
+    VALID_ROWS = [8, 12, 16, 20, 24, 32, 48, 64]  # 支持的行数选项
 
     def __init__(self, parent):
         self.window = tk.Toplevel(parent)
@@ -121,44 +121,67 @@ class BinHexConverter:
         # 主容器
         # ------------------------------------------------------------------
         container = ttk.Frame(self.window, padding=10)
-        container.grid(row=0, column=0)
+        container.grid(row=0, column=0, sticky="nsew")
+        # 窗口大小自适应
+        self.window.grid_columnconfigure(0, weight=1)
+        self.window.grid_rowconfigure(0, weight=1)
+        container.grid_columnconfigure(1, weight=1)
+
+        # ------------------------------------------------------------------
+        # 行数选择下拉菜单
+        # ------------------------------------------------------------------
+        row_frame = ttk.Frame(container)
+        row_frame.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
+        ttk.Label(row_frame, text="数据长度:").pack(side="left")
+        self.row_var = tk.StringVar(value="8")
+        self.row_combo = ttk.Combobox(
+            row_frame,
+            textvariable=self.row_var,
+            values=self.VALID_ROWS,
+            state="readonly",      # 禁止手动输入
+            width=6,
+        )
+        self.row_combo.pack(side="left", padx=(5, 0))
+        self.row_combo.bind("<<ComboboxSelected>>", self.on_row_count_changed)
 
         # ------------------------------------------------------------------
         # 表头：左侧空白 + 8 列位号（7~0） + Hex
         # ------------------------------------------------------------------
-        header = ttk.Frame(container)
-        header.grid(row=0, column=0, pady=(0, 4))
-        ttk.Label(header, text=" ").grid(row=0, column=0)
-
-        for col in range(7, -1, -1):                     # 7→0
-            ttk.Label(
-                header,
-                text=str(col),
-                width=4,
-                anchor="center"
-            ).grid(row=0, column=8 - col, padx=1)      # 对齐列号
-
-        ttk.Label(
-            header,
-            text="Hex",
-            width=4,
-            anchor="center"
-        ).grid(row=0, column=9, padx=5)
+        self.header = None
+        self.create_header(container)
 
         # ------------------------------------------------------------------
-        # 创建行（行号从 1 开始递增）
+        # 行容器（放在 Canvas + Scrollbar 中，实现滚动）
         # ------------------------------------------------------------------
+        # 1) 外层 canvas
+        self.canvas = tk.Canvas(container, borderwidth=0, highlightthickness=0)
+        self.canvas.grid(row=2, column=0, columnspan=2, sticky="nsew")
+
+        # 2) 垂直滚动条
+        self.v_scroll = ttk.Scrollbar(
+            container,
+            orient="vertical",
+            command=self.canvas.yview,
+        )
+        self.v_scroll.grid(row=2, column=2, sticky="ns")
+        self.canvas.configure(yscrollcommand=self.v_scroll.set)
+
+        # 3) 实际放行的 frame（放在 canvas 的窗口中）
+        self.rows_frame = ttk.Frame(self.canvas)
+        self.canvas.create_window((0, 0), window=self.rows_frame, anchor="nw")
+
+        # 让 canvas 随 rows_frame 高度变化而更新滚动区域
+        self.rows_frame.bind("<Configure>", self._on_frame_configure)
+
+        # 4) 鼠标滚轮绑定（Windows / macOS / Linux 通用）
+        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)   # Windows/macOS
+        self.canvas.bind_all("<Button-4>", self._on_mousewheel)    # Linux scroll up
+        self.canvas.bind_all("<Button-5>", self._on_mousewheel)    # Linux scroll down
+
+        # 存放所有行对象
         self.rows = []
-        for r in range(self.TOTAL_ROWS):
-            display_idx = r + 1                     # 正向递增的行号
-            row = BinHexRow(
-                container,
-                row_index=r,
-                display_index=display_idx,
-                on_change=self.refresh_data_display,
-            )
-            row.grid(row=r + 1, column=0, pady=2, sticky="w")
-            self.rows.append(row)
+        # 初始化行（根据默认值创建）
+        self.create_rows()
 
         # ------------------------------------------------------------------
         # 底部：整体 data 显示 + “清空” 按钮
@@ -182,6 +205,98 @@ class BinHexConverter:
         clear_btn.grid(row=0, column=2, padx=(10, 0))
 
         # 初始化一次 data 显示
+        self.refresh_data_display()
+
+    # ----------------------------------------------------------------------
+    # canvas 高度随 rows_frame 变化的回调
+    # ----------------------------------------------------------------------
+    def _on_frame_configure(self, event):
+        """当 rows_frame 大小变化时，更新 canvas 的滚动范围"""
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        # 若行数 <= 8，则隐藏滚动条并让 canvas 自动适配高度
+        if len(self.rows) <= 8:
+            self.v_scroll.grid_remove()
+            # 让 canvas 高度恰好等于 rows_frame 的高度（不出现空白）
+            self.canvas.configure(height=self.rows_frame.winfo_reqheight())
+        else:
+            # 显示滚动条并固定 canvas 高度为 8 行的高度
+            self.v_scroll.grid()
+            # 计算 8 行的大致高度（每行约 30 像素，取决于系统主题）
+            row_h = self.rows[0].winfo_reqheight() if self.rows else 30
+            self.canvas.configure(height=row_h * 8 + 4)   # +4 为微调间距
+
+    # ----------------------------------------------------------------------
+    # 鼠标滚轮事件统一处理
+    # ----------------------------------------------------------------------
+    def _on_mousewheel(self, event):
+        """跨平台的滚轮滚动实现"""
+        if event.num == 4:          # Linux scroll up
+            delta = -120
+        elif event.num == 5:        # Linux scroll down
+            delta = 120
+        else:                       # Windows / macOS
+            delta = -1 * (event.delta)
+        self.canvas.yview_scroll(int(delta / 120), "units")
+        return "break"
+
+    # ----------------------------------------------------------------------
+    # 创建表头（列标签：bit7~bit0 和 Hex）
+    # ----------------------------------------------------------------------
+    def create_header(self, parent):
+        if self.header is not None:
+            self.header.destroy()
+        self.header = ttk.Frame(parent)
+        self.header.grid(row=1, column=0, columnspan=2, pady=(0, 4), sticky="w")
+        ttk.Label(self.header, text=" ").grid(row=0, column=0)
+        for col in range(7, -1, -1):                     # 7→0
+            ttk.Label(
+                self.header,
+                text=str(col),
+                width=4,
+                anchor="center"
+            ).grid(row=0, column=8 - col, padx=1)      # 对齐列号
+        ttk.Label(
+            self.header,
+            text="Hex",
+            width=4,
+            anchor="center"
+        ).grid(row=0, column=9, padx=5)
+
+    # ----------------------------------------------------------------------
+    # 根据当前选择的行数创建所有行
+    # ----------------------------------------------------------------------
+    def create_rows(self):
+        """把行全部放进 rows_frame（已经是 canvas 的子窗口）"""
+        selected_count = int(self.row_var.get())
+        self.rows = []
+        for r in range(selected_count):
+            display_idx = r + 1                     # 正向递增的行号
+            row = BinHexRow(
+                self.rows_frame,
+                row_index=r,
+                display_index=display_idx,
+                on_change=self.refresh_data_display,
+            )
+            row.grid(row=r, column=0, pady=2, sticky="w")
+            self.rows.append(row)
+
+        # 触发一次配置回调，让滚动条状态立即更新
+        self._on_frame_configure(None)
+
+    # ----------------------------------------------------------------------
+    # 销毁当前所有行（用于重建）
+    # ----------------------------------------------------------------------
+    def destroy_rows(self):
+        for row in self.rows:
+            row.destroy()
+        self.rows.clear()
+
+    # ----------------------------------------------------------------------
+    # 下拉菜单选择变化时，重建行
+    # ----------------------------------------------------------------------
+    def on_row_count_changed(self, event=None):
+        self.destroy_rows()
+        self.create_rows()
         self.refresh_data_display()
 
     # ----------------------------------------------------------------------
