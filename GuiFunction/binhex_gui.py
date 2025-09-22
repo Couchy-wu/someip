@@ -1,6 +1,7 @@
 # GuiFunction/binhex_gui.py
 import tkinter as tk
-from tkinter import ttk, messagebox   # ← 新增 messagebox
+from tkinter import ttk, messagebox  
+import pyperclip
 
 class BinHexRow(ttk.Frame):
     """
@@ -354,23 +355,24 @@ class BinHexConverter:
             row.reset_bits()
         self.refresh_data_display()
 
-    # ----------------------------------------------------------------------
     # 复制 data 内容到剪贴板并弹出提示框
-    # ----------------------------------------------------------------------
     def copy_data(self):
-        """将 data 的内容复制到剪贴板并弹出 “已复制” 提示"""
+        """将 data 的内容复制到系统剪贴板（持久化），并弹出提示"""
         data_content = self.data_var.get()
-        # 复制到系统剪贴板
-        self.window.clipboard_clear()
-        self.window.clipboard_append(data_content)
-        self.window.update()   # 确保剪贴板立即生效
+        try:
+            pyperclip.copy(data_content)
+            messagebox.showinfo(
+                title="复制成功",
+                message="已复制到剪贴板",
+                parent=self.window
+            )
+        except Exception as e:
+            messagebox.showerror(
+                title="复制失败",
+                message=f"无法访问剪贴板，请确保系统剪贴板可用。\n错误：{str(e)}",
+                parent=self.window
+            )
 
-        # 弹出提示框（模态对话框）
-        messagebox.showinfo(
-            title="复制成功",
-            message="已复制data",
-            parent=self.window
-        )
 
 def open_binhex_converter(parent):
     """供主程序调用的公共接口"""
