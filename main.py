@@ -11,6 +11,26 @@ import GuiFunction.image_player  # 导入 image_player 模块
 import GuiFunction.matrix_to_csv
 import GuiFunction.binhex_gui
 
+def can_child_window():
+    # 创建子窗口——can_child_window
+    child_window = tk.Toplevel(root)
+    child_window.title("CAN信号自动收发程序")
+    child_window.geometry("600x400")
+    
+    # 添加一些内容到子窗口
+    label = tk.Label(child_window, text="子窗口内容", padx=20, pady=20)
+    label.pack(padx=10, pady=10)
+    
+    # 添加关闭按钮
+    close_button = tk.Button(
+        child_window,
+        text="关闭",
+        command=child_window.destroy,
+        width=10,
+        height=2
+    )
+    close_button.pack(pady=20)
+
 # 创建主窗口
 root = tk.Tk()
 root.title("主窗口")
@@ -119,16 +139,25 @@ def open_matrix_converter():
     converter_window.focus_force()
     GuiFunction.matrix_to_csv.XlsmToCsvConverter(converter_window, skip_first_row=False)  #  True → 跳过第一行
 
-# 添加“标准帧can数据生成器”按钮
+# 添加“can数据生成器”按钮
 hex_button = tk.Button(
     root,
-    text="标准帧can数据生成器",
+    text="can数据生成器",
     command=lambda: GuiFunction.binhex_gui.open_binhex_converter(root),
-    width=20,
+    width=15,
     height=2
 )
 hex_button.grid(row=1, column=2, padx=20, pady=20)  
 
+# 添加“打开can信号自动收发程序”按钮
+video_button = tk.Button(
+    root,
+    text="打开can信号自动收发程序",
+    command=can_child_window,
+    width=20,
+    height=2
+)
+video_button.grid(row=2, column=2, padx=20, pady=20)
 
 # 运行主循环
 root.mainloop()
