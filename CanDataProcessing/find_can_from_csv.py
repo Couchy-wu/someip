@@ -93,7 +93,7 @@ def get_signal_info_by_id_and_name(message_id, signal_name_en, csv_file='Testcas
     if pd.notna(sub_id) and str(sub_id).strip().upper() == 'NO':
         print(f"找到信号：0x{message_id_clean} {signal_name_en}")
     else:
-       print(f"找到信号：0x{message_id_clean} 子ID: {sub_id} {signal_name_en}")
+       print(f"找到信号：0x{message_id_clean} {sub_id} {signal_name_en}")
 
     # print("找到信号：")
     # for key, value in result_can.items():
@@ -163,7 +163,7 @@ def generate_can_data(bit_range: str, enum_value: int, sub_id: Optional[str] = N
     
     # 计算信号长度（位数）
     signal_len = _calc_signal_length(start_row, start_col, end_row, end_col)
-    
+    # 检查枚举值合法性
     if enum_value < 0:
         raise ValueError("enum_value 不能为负数")
     if enum_value >= (1 << signal_len):
@@ -178,19 +178,18 @@ def generate_can_data(bit_range: str, enum_value: int, sub_id: Optional[str] = N
     rows = [[0] * 8 for _ in range(frame_length)]
     
     # 按行优先顺序写入位
-    r, c = start_row, start_col
     i = 0
-    while (r, c) <= (end_row, end_col) and i < len(bits):
+    while (start_row, start_col) <= (end_row, end_col) and i < len(bits):
         # 确保不超出帧范围
-        if r <= frame_length and c < 8:
-            rows[r-1][c] = bits[i]
+        if start_row <= frame_length and start_col < 8:
+            rows[start_row-1][start_col] = bits[i]
             i += 1
-        if c < 7:
-            c += 1
+        if start_col < 7:
+            start_col += 1
         else:
-            r += 1
-            c = 0
-        if r > frame_length:
+            start_row += 1
+            start_col = 0
+        if start_row > frame_length:
             break
     
     # 转换为字节值（整数列表）
@@ -279,5 +278,7 @@ def create_can_data_by_signal(message_id: str, signal_name_en: str, enum_value: 
 if __name__ == "__main__":
     data1 = create_can_data_by_signal('1EF', 'RF_Window_Action_Request_S', 1)
     data2 = create_can_data_by_signal('12D', 'BCMPower_Gear_12D_S', 3)
+    data3 = create_can_data_by_signal('496', 'Emitting_Function_S', 1)
     print(data1)
     print(data2)
+    print(data3)
