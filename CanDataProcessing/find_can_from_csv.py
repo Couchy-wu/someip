@@ -101,20 +101,35 @@ def get_signal_info_by_id_and_name(message_id, signal_name_en, csv_file='Testcas
 
     return result_can
 
-def _parse_bit_range(bit_range: str) -> Tuple[int, int, int, int]:
-    """解析 "row_start.col_start-row_end.col_end" → 四个整数坐标。"""
+def _parse_bit_range(bit_range: str, frame_length: int = 8) -> Tuple[int, int, int, int]:
+    """解析 "row_start.col_start-row_end.col_end" → 四个整数坐标。
+    
+    参数:
+        bit_range: 字符串形式的位范围，格式为 "row_start.col_start-row_end.col_end"
+        frame_length: 帧长度（字节数，默认为8）
+    """
     try:
         start, end = bit_range.split("-")
         start_row, start_col = map(int, start.split("."))
         end_row, end_col = map(int, end.split("."))
     except Exception as exc:
         raise ValueError(f'位范围格式错误') from exc
-    if not (1 <= start_row <= 8 and 1 <= end_row <= 8):
-        raise ValueError("行号必须在 1~8 之间")
-    if not (0 <= start_col <= 7 and 0 <= end_col <= 7):
-        raise ValueError("列号必须在 0~7 之间")
+    
+    # 计算最大列号（基于帧长度）
+    max_col = frame_length * 8 - 1
+    
+    # 验证行号范围（字节序号）
+    if not (1 <= start_row <= frame_length and 1 <= end_row <= frame_length):
+        raise ValueError(f"行号必须在 1~{frame_length} 之间")
+    
+    # 验证列号范围
+    if not (0 <= start_col <= max_col and 0 <= end_col <= max_col):
+        raise ValueError(f"列号必须在 0~{max_col} 之间")
+    
+    # 验证结束位置是否在起始位置的右下方
     if (end_row, end_col) < (start_row, start_col):
         raise ValueError("结束位置必须在起始位置的右下方")
+    
     return start_row, start_col, end_row, end_col
 
 
@@ -131,19 +146,22 @@ def _calc_signal_length(start_row: int, start_col: int, end_row: int, end_col: i
             c = 0
     return length
 
-
-#  sub_id 参数
-def generate_can_data(bit_range: str, enum_value: int, sub_id: Optional[str] = None) -> List[int]:
+def generate_can_data(bit_range: str, enum_value: int, sub_id: Optional[str] = None, frame_length: int = 8) -> List[int]:
     """
-    根据位范围和枚举值生成 8 字节 CAN 数据（返回整数列表）。
+    根据位范围和枚举值生成 frame_length 字节 CAN 数据（返回整数列表）。
     参数:
         bit_range (str): 位范围，如 "5.4-5.7"
         enum_value (int): 枚举值
         sub_id (str, optional): 子ID，如 "0x02"，若提供则替换第一个字节
+        frame_length (int, optional): 帧长度（字节数，默认为8）
+    
     返回:
-        List[int]: 8字节数据列表
+        List[int]: CAN数据字节列表，长度为 frame_length
     """
-    start_row, start_col, end_row, end_col = _parse_bit_range(bit_range)
+    # 解析位范围，同时考虑帧长度
+    start_row, start_col, end_row, end_col = _parse_bit_range(bit_range, frame_length)
+    
+    # 计算信号长度（位数）
     signal_len = _calc_signal_length(start_row, start_col, end_row, end_col)
     
     if enum_value < 0:
@@ -155,27 +173,32 @@ def generate_can_data(bit_range: str, enum_value: int, sub_id: Optional[str] = N
 
     # LSB → MSB 的位序列
     bits = [int(b) for b in reversed(bin(enum_value)[2:].zfill(signal_len))]
-
-    # 8×8 位矩阵，初始化为 0
-    rows = [[0] * 8 for _ in range(8)]
-
+  
+  # 创建帧长度×8 位矩阵，初始化为 0
+    rows = [[0] * 8 for _ in range(frame_length)]
+    
     # 按行优先顺序写入位
     r, c = start_row, start_col
     i = 0
-    while (r, c) <= (end_row, end_col) and i < signal_len:
-        rows[r - 1][c] = bits[i]
-        i += 1
+    while (r, c) <= (end_row, end_col) and i < len(bits):
+        # 确保不超出帧范围
+        if r <= frame_length and c < 8:
+            rows[r-1][c] = bits[i]
+            i += 1
         if c < 7:
             c += 1
         else:
             r += 1
             c = 0
-
+        if r > frame_length:
+            break
+    
     # 转换为字节值（整数列表）
     data_bytes = []
-    for row in rows:
-        value = sum(bit << idx for idx, bit in enumerate(row))
-        data_bytes.append(value)
+    for row_index, row in enumerate(rows):
+        if row_index < frame_length:  # 确保不超出帧长度
+            value = sum(bit << idx for idx, bit in enumerate(row))
+            data_bytes.append(value)
 
     # 如果 sub_id 存在且是十六进制字符串，替换第一个字节
     if sub_id is not None and isinstance(sub_id, str):
@@ -187,8 +210,9 @@ def generate_can_data(bit_range: str, enum_value: int, sub_id: Optional[str] = N
             else:
                 # 尝试直接作为十六进制解析
                 sub_id_decimal = int(sub_id_clean, 16)
-            # 替换第一个字节
-            data_bytes[0] = sub_id_decimal
+            # 替换第一个字节（如果帧长度至少为1）
+            if frame_length > 0:
+                data_bytes[0] = sub_id_decimal
         except ValueError:
             print(f"警告：无法解析子ID为十六进制数: {sub_id}，跳过替换。")
 
@@ -201,7 +225,7 @@ def format_can_data(data: List[int]) -> str:
     """
     return "[" + ", ".join(f"0x{byte:02X}" for byte in data) + "]"
 
-# 根据 CAN ID、 信号名称 和 枚举值 生成信号数据
+# 根据 CAN ID、信号名称和枚举值生成信号数据
 def create_can_data_by_signal(message_id: str, signal_name_en: str, enum_value: int, csv_file: str = 'TestcaseCollection/outputMatrix.csv') -> str:
     """
     根据报文ID和信号英文名获取位定义，并生成对应的CAN数据。
@@ -219,6 +243,8 @@ def create_can_data_by_signal(message_id: str, signal_name_en: str, enum_value: 
     if signal_info is None:
         return "[]"
 
+    # 使用信号信息中的报文长度作为帧长度
+    frame_length = int(signal_info['报文长度'])
     bit_range = signal_info['位']
 
     # 提取子ID
@@ -243,13 +269,15 @@ def create_can_data_by_signal(message_id: str, signal_name_en: str, enum_value: 
                 except ValueError:
                     print(f"警告：子ID '{sub_id_raw}' 不是有效的十六进制数，跳过。")
 
-    # 调用生成函数，并传入 sub_id（可能为 None）
-    data = generate_can_data(bit_range, enum_value, sub_id=sub_id_hex)  # [0, 0, 0, 0, 12, 0, 0, 0]
+    # 调用生成函数，并传入 sub_id（可能为 None）和帧长度
+    data = generate_can_data(bit_range, enum_value, sub_id=sub_id_hex, frame_length=frame_length)  # [0, 0, 0, 0, 12, 0, 0, 0]
     data = format_can_data(data)  # [0x00, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00]
     return data
 
 
 # 示例调用
 if __name__ == "__main__":
-    data = create_can_data_by_signal('12D', 'BCMPower_Gear_12D_S', 3)
-    print(data)
+    data1 = create_can_data_by_signal('1EF', 'RF_Window_Action_Request_S', 1)
+    data2 = create_can_data_by_signal('12D', 'BCMPower_Gear_12D_S', 3)
+    print(data1)
+    print(data2)
