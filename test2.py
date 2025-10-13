@@ -249,27 +249,41 @@ def Transmit_Test_Canfd(chn_handle, stdorext, id, data, round):
     ret = zcanlib.TransmitFD(chn_handle, canfd_msgs, transmit_canfd_num)
     with print_lock: print("成功发送 %d 条CANFD报文" % ret)
 
+# 清除已有的定时发送设置
+def Clear_Auto_Can_Send(device_handle, chn):
+    """清除指定通道的定时发送列表"""
+    ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/clear_auto_send", "0".encode("utf-8"))
+    if ret != ZCAN_STATUS_OK:
+        print("Clear CH%d USBCANFD AutoSend failed!" % chn)
+        return False
+    return True
+
+# 使能所有定时发送报文
+def Enable_Auto_Can_Send(device_handle, chn):
+    """使能指定通道的所有定时发送任务"""
+    ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/apply_auto_send", "0".encode("utf-8"))
+    if ret != ZCAN_STATUS_OK:
+        print("Apply CH%d USBCANFD AutoSend failed!" % chn)
+        return False
+    return True
+
 # 定时发送 CAN 设置 
-def Auto_Send_Test_Can(device_handle, chn, stdorext, id, data, signal_cycle):
+def Auto_Send_Test_Can(device_handle, chn, stdorext, id, data, signal_cycle, index=0):
     """定时发送 CAN 报文
     # 每通道最多100条   老卡无法在使能队列发送 的情况下，启动定时发送！！
     
     Args:
-        chn_handle:     CAN 通道的句柄，表示已打开的 CAN 通道，用于标识发送数据的通道。
+        device_handle:  设备句柄
         chn:            通道号（如0, 1），表示操作的是设备上的第几个 CAN 通道
-        stdorext:       布尔值（0 或 1），表示使用标准帧=0,还是扩展=1
+        stdorext:       标准帧=0,扩展帧=1
         id:             CAN ID。
         data:           要发送的数据，应为一个可迭代对象（如列表或字节数组），包含最多 8 个字节。
         signal_cycle:   发送周期，单位为 毫秒（ms），表示每隔多少毫秒发送一次 CAN 帧
+        index:          定时发送序列号(默认0)
 
     Returns:
         函数成功执行后不返回任何值（即 return 隐式为 None），但会通过 ZCAN_SetValue 实际下发配置到硬件
     """
-    # 清除已有的定时发送设置
-    ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/clear_auto_send", "0".encode("utf-8"))
-    if ret != ZCAN_STATUS_OK:
-        print("Clear CH%d USBCANFD AutoSend failed!" % (chn))
-        exit(0)
     # 构造定时发送对象和发送参数
     auto_can = ZCAN_AUTO_TRANSMIT_OBJ()
     length = len(data)          # 自动计算数据长度
@@ -279,7 +293,7 @@ def Auto_Send_Test_Can(device_handle, chn, stdorext, id, data, signal_cycle):
             print("警告：CAN数据长度为 %d，超过最大限制8字节，跳过发送。" % length)
         return None
     memset(addressof(auto_can), 0, sizeof(auto_can))
-    auto_can.index = 0                      # 定时发送序列号 用于标记这条报文
+    auto_can.index = index                  # 定时发送序列号 用于标记这条报文
     auto_can.enable = 1                     # 使能该条报文发送 0-关闭 1-使能
     auto_can.interval = signal_cycle        # 定时周期，单位ms
     # auto_can.obj 同 ZCAN_Transmit_Data结构体
@@ -298,33 +312,24 @@ def Auto_Send_Test_Can(device_handle, chn, stdorext, id, data, signal_cycle):
         print("设置定时发送 CAN%d 失败!" % chn)
         return None
 
-    # 使能所有定时发送报文
-    ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/apply_auto_send", "0".encode("utf-8"))
-    if ret != ZCAN_STATUS_OK:
-        print("Apply CH%d USBCANFD AutoSend failed!" % (chn))
-        return None
 
 # 定时发送 CANFD 设置 
-def Auto_Send_Test_Canfd(device_handle, chn, stdorext, id, data, signal_cycle):
+def Auto_Send_Test_Canfd(device_handle, chn, stdorext, id, data, signal_cycle, index=0):
     """定时发送 CANFD 报文
     # 每通道最多100条   老卡无法在使能队列发送 的情况下，启动定时发送！！
     
     Args:
-        chn_handle:     CAN 通道的句柄，表示已打开的 CAN 通道，用于标识发送数据的通道。
+        device_handle:  设备句柄
         chn:            通道号（如0, 1），表示操作的是设备上的第几个 CAN 通道
-        stdorext:       布尔值（0 或 1），表示使用标准帧=0,还是扩展=1
+        stdorext:       标准帧=0,扩展帧=1
         id:             CANFD ID。
         data:           要发送的数据，应为一个可迭代对象（如列表或字节数组)
         signal_cycle:   发送周期，单位为 毫秒（ms），表示每隔多少毫秒发送一次 CANFD 帧
+        index:          定时发送序列号(默认0)
 
     Returns:
         函数成功执行后不返回任何值（即 return 隐式为 None），但会通过 ZCAN_SetValue 实际下发配置到硬件
     """
-    # 清除已有的定时发送设置    
-    ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/clear_auto_send", "0".encode("utf-8"))
-    if ret != ZCAN_STATUS_OK:
-        print("Clear CH%d USBCANFD AutoSend failed!" % (chn))
-        exit(0)
     # 构造定时发送对象和发送参数
     auto_canfd = ZCANFD_AUTO_TRANSMIT_OBJ()
     length = len(data)          
@@ -335,7 +340,7 @@ def Auto_Send_Test_Canfd(device_handle, chn, stdorext, id, data, signal_cycle):
         return None
 
     memset(addressof(auto_canfd), 0, sizeof(auto_canfd))
-    auto_canfd.index = 0                    # 定时发送序列号 用于标记这条报文
+    auto_canfd.index = index                # 定时发送序列号 用于标记这条报文
     auto_canfd.enable = 1                   # 使能该条报文发送 0-关闭 1-使能
     auto_canfd.interval = signal_cycle      # 定时周期，单位ms
     auto_canfd.obj.transmit_type = 2        # 0-正常发送，1-单次发发送，2-自发自收，3-单次自发自收
@@ -353,12 +358,6 @@ def Auto_Send_Test_Canfd(device_handle, chn, stdorext, id, data, signal_cycle):
         print("设置定时发送 CANFD%d 失败!" % chn)
         return None
 
-    # 使能所有定时发送报文
-    ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/apply_auto_send", "0".encode("utf-8"))
-    if ret != ZCAN_STATUS_OK:
-        print("Apply CH%d USBCANFD AutoSend failed!" % (chn))
-        return None
-
 # 关闭发送任务 即关闭 队列发送 和 定时发送
 def Clear_Send_Task(device_handle,chn):
     "关闭发送任务 即关闭 队列发送 和 定时发送"
@@ -374,7 +373,7 @@ def Clear_Send_Task(device_handle,chn):
 
 
 # CAN设备初始化函数
-def initialize_canfd_device(device_type=ZCAN_USBCANFD_200U, merge_receive=0):
+def Initialize_Canfd_Device(device_type=ZCAN_USBCANFD_200U, merge_receive=0):
     """初始化CAN FD设备
     
     Args:
@@ -428,7 +427,7 @@ def initialize_canfd_device(device_type=ZCAN_USBCANFD_200U, merge_receive=0):
     return handle, chn_handles, threads
 
 # 关闭CAN设备函数
-def close_canfd_device(handle, chn_handles, threads):
+def Close_Canfd_Device(handle, chn_handles, threads):
     """关闭CAN FD设备
     
     Args:
@@ -467,25 +466,29 @@ def close_canfd_device(handle, chn_handles, threads):
 if __name__ == "__main__":
 
     # 初始化CAN FD设备
-    device_handle, channel_handles, receive_threads = initialize_canfd_device(
+    device_handle, channel_handles, receive_threads = Initialize_Canfd_Device(
         device_type = ZCAN_USBCANFD_200U,
         merge_receive = 0
     )
 
     # 发送报文示例
-    data = [0x00, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00]
-    # Transmit_Test_Can(channel_handles[0], 0, 0x12D, data, 1)
+    data1 = [0x01, 0x00, 0x00, 0x00]
+    data2 = [0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+    data3 = [0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
 
-    #Transmit_Test_Canfd(channel_handles[0], 0, 0x12D, data, 3)
+    # Transmit_Test_Can(channel_handles[0], 0, 0x12D, data1, 1)
+    # Transmit_Test_Canfd(channel_handles[0], 0, 0x12D, data1, 3)
 
-
+    # 清除已有的定时发送设置
+    Clear_Auto_Can_Send(device_handle, 0)
     # 定时发送示例
-    Auto_Send_Test_Canfd(handle, 0, 0, 0x12D, data, 500)
-
-    # Auto_Send_Test_Can(handle, 0, 0, 0x12D, data, 500)
-
+    Auto_Send_Test_Can(device_handle, 0, 0, 0x12D, data1, 200, index=0)
+    Auto_Send_Test_Can(device_handle, 0, 0, 0x234, data2, 500, index=1)
+    Auto_Send_Test_Canfd(device_handle, 0, 0, 0x3A0, data3, 1000, index=2)
+    # 能所有定时发送报文
+    Enable_Auto_Can_Send(device_handle, 0)
 
     # 回车退出
     input()
 
-    close_canfd_device(device_handle, channel_handles, receive_threads)
+    Close_Canfd_Device(device_handle, channel_handles, receive_threads)
