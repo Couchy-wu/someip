@@ -5,14 +5,26 @@
 from zlgcan import *
 import threading
 import time
+import os
+import xml.etree.ElementTree as ET
 
 
-thread_flag = True
+thread_flag = True              # 全局变量，控制接收线程是否继续运行
 print_lock = threading.Lock()   # 线程锁，只是为了打印不冲突
-enable_merge_receive = 0        # 合并接收标识
+enable_merge_receive = 0        # 合并接收标识，（默认不使能）
+transmit_type = 0               # 发送设置，(默认正常发送)
 
 # 初始化ZCAN库
 zcanlib = ZCAN()                # 全局初始化，供所有函数使用
+
+# 定义设备类型映射表
+DEVICE_TYPE_MAP = {
+    "ZCAN_USBCANFD_100U": 42,
+    "ZCAN_USBCANFD_200U": 41,
+    "ZCAN_USBCANFD_400U": 76,
+    "ZCAN_USBCANFD_800U": 59,
+    "ZCAN_USBCANFD_MINI": 43,
+}
 
 #读取设备信息
 def Read_Device_Info(device_handle):
@@ -182,6 +194,7 @@ def Send_Can(chn_handle, stdorext, id, data, round):
     Returns:
         返回实际发送成功的 CAN 报文
     """
+    global transmit_type
     transmit_num = round     # 设置can信号发送帧数
     length = len(data)       # 自动计算数据长度
 
@@ -194,13 +207,13 @@ def Send_Can(chn_handle, stdorext, id, data, round):
     # 创建ZCAN_Transmit_Data数组
     msgs = (ZCAN_Transmit_Data * transmit_num)()
     for i in range(transmit_num):
-        msgs[i].transmit_type = 2           # 0-正常发送，1-单次发发送，2-自发自收，3-单次自发自收
-        msgs[i].frame.eff     = stdorext    # 0-标准帧，1-扩展帧，根据输入变量stdorext值决定
-        msgs[i].frame.rtr     = 0           # 0-数据帧，1-远程帧
-        msgs[i].frame.can_id  = id          # CAN ID
-        msgs[i].frame.can_dlc = length      # 数据长度，实际发送的数据字节数（0~8）
-        msgs[i].frame._pad |= 0x20          # 发送回显
-        msgs[i].frame._res0 = 10            # res0，res1共同表示队列发送间隔(可以理解为一个short 2Byte分开传入)
+        msgs[i].transmit_type = transmit_type   # 0-正常发送，1-单次发发送，2-自发自收，3-单次自发自收
+        msgs[i].frame.eff     = stdorext        # 0-标准帧，1-扩展帧，根据输入变量stdorext值决定
+        msgs[i].frame.rtr     = 0               # 0-数据帧，1-远程帧
+        msgs[i].frame.can_id  = id              # CAN ID
+        msgs[i].frame.can_dlc = length          # 数据长度，实际发送的数据字节数（0~8）
+        msgs[i].frame._pad |= 0x20              # 发送回显
+        msgs[i].frame._res0 = 10                # res0，res1共同表示队列发送间隔(可以理解为一个short 2Byte分开传入)
         msgs[i].frame._res1 = 0         
         # 填充数据
         for j in range(msgs[i].frame.can_dlc):
@@ -224,6 +237,7 @@ def Send_Canfd(chn_handle, stdorext, id, data, round):
     Returns:
         返回实际发送成功的 CANFD 报文
     """
+    global transmit_type 
     transmit_canfd_num = round
     length = len(data)     
 
@@ -236,13 +250,13 @@ def Send_Canfd(chn_handle, stdorext, id, data, round):
     # 创建ZCAN_Transmit_Data数组
     canfd_msgs = (ZCAN_TransmitFD_Data * transmit_canfd_num)()
     for i in range(transmit_canfd_num):
-        canfd_msgs[i].transmit_type = 2         # 0-正常发送，2-自发自收
-        canfd_msgs[i].frame.eff     = stdorext  # 0-标准帧，1-扩展帧，根据输入变量stdorext值决定
-        canfd_msgs[i].frame.rtr     = 0         # 0-数据帧，1-远程帧
-        canfd_msgs[i].frame.can_id = id         # ID
-        canfd_msgs[i].frame.len = length        # 长度
-        canfd_msgs[i].frame.flags |= 0x20       # 发送回显
-        canfd_msgs[i].frame.flags |= 0x0        # BRS 加速标志位：0不加速，1加速
+        canfd_msgs[i].transmit_type = transmit_type     # 0-正常发送，2-自发自收
+        canfd_msgs[i].frame.eff     = stdorext          # 0-标准帧，1-扩展帧，根据输入变量stdorext值决定
+        canfd_msgs[i].frame.rtr     = 0                 # 0-数据帧，1-远程帧
+        canfd_msgs[i].frame.can_id = id                 # ID
+        canfd_msgs[i].frame.len = length                # 长度
+        canfd_msgs[i].frame.flags |= 0x20               # 发送回显
+        canfd_msgs[i].frame.flags |= 0x0                # BRS 加速标志位：0不加速，1加速
         canfd_msgs[i].frame._res0 = 10
         for j in range(canfd_msgs[i].frame.len):
             canfd_msgs[i].frame.data[j] = data[j]
@@ -285,6 +299,7 @@ def Auto_Send_Can(device_handle, chn, stdorext, id, data, signal_cycle, index=0)
         函数成功执行后不返回任何值（即 return 隐式为 None），但会通过 ZCAN_SetValue 实际下发配置到硬件
     """
     # 构造定时发送对象和发送参数
+    global transmit_type
     auto_can = ZCAN_AUTO_TRANSMIT_OBJ()
     length = len(data)          # 自动计算数据长度
     # 确保数据长度不超过8字节（CAN帧限制）
@@ -293,15 +308,15 @@ def Auto_Send_Can(device_handle, chn, stdorext, id, data, signal_cycle, index=0)
             print("警告：CAN数据长度为 %d，超过最大限制8字节，跳过发送。" % length)
         return None
     memset(addressof(auto_can), 0, sizeof(auto_can))
-    auto_can.index = index                  # 定时发送序列号 用于标记这条报文
-    auto_can.enable = 1                     # 使能该条报文发送 0-关闭 1-使能
-    auto_can.interval = signal_cycle        # 定时周期，单位ms
+    auto_can.index = index                          # 定时发送序列号 用于标记这条报文
+    auto_can.enable = 1                             # 使能该条报文发送 0-关闭 1-使能
+    auto_can.interval = signal_cycle                # 定时周期，单位ms
     # auto_can.obj 同 ZCAN_Transmit_Data结构体
-    auto_can.obj.transmit_type = 2          # 0-正常发送，1-单次发发送，2-自发自收，3-单次自发自收
-    auto_can.obj.frame.can_id  = id         # CAN ID
-    auto_can.obj.frame.can_dlc = length     # 数据长度
-    auto_can.obj.frame.eff     = stdorext   # 0-标准帧，1-扩展帧，根据输入变量stdorext值决定
-    auto_can.obj.frame._pad |= 0x20         # 发送回显
+    auto_can.obj.transmit_type = transmit_type      # 0-正常发送，1-单次发发送，2-自发自收，3-单次自发自收
+    auto_can.obj.frame.can_id  = id                 # CAN ID
+    auto_can.obj.frame.can_dlc = length             # 数据长度
+    auto_can.obj.frame.eff     = stdorext           # 0-标准帧，1-扩展帧，根据输入变量stdorext值决定
+    auto_can.obj.frame._pad |= 0x20                 # 发送回显
     # 填充数据
     for j in range(auto_can.obj.frame.can_dlc):
         auto_can.obj.frame.data[j] = data[j]
@@ -330,6 +345,7 @@ def Auto_Send_Canfd(device_handle, chn, stdorext, id, data, signal_cycle, index=
         函数成功执行后不返回任何值（即 return 隐式为 None），但会通过 ZCAN_SetValue 实际下发配置到硬件
     """
     # 构造定时发送对象和发送参数
+    global transmit_type
     auto_canfd = ZCANFD_AUTO_TRANSMIT_OBJ()
     length = len(data)          
     # 确保数据长度不超过8字节（CANFD帧限制）
@@ -339,14 +355,14 @@ def Auto_Send_Canfd(device_handle, chn, stdorext, id, data, signal_cycle, index=
         return None
 
     memset(addressof(auto_canfd), 0, sizeof(auto_canfd))
-    auto_canfd.index = index                # 定时发送序列号 用于标记这条报文
-    auto_canfd.enable = 1                   # 使能该条报文发送 0-关闭 1-使能
-    auto_canfd.interval = signal_cycle      # 定时周期，单位ms
-    auto_canfd.obj.transmit_type = 2        # 0-正常发送，1-单次发发送，2-自发自收，3-单次自发自收
-    auto_canfd.obj.frame.can_id  = id       # CANFD ID
-    auto_canfd.obj.frame.len     = length   # 数据长度
-    auto_canfd.obj.frame.eff     = stdorext # 0-标准帧，1-扩展帧，根据输入变量stdorext值决定
-    auto_canfd.obj.frame.flags |= 0x20      # 发送回显
+    auto_canfd.index = index                           # 定时发送序列号 用于标记这条报文
+    auto_canfd.enable = 1                              # 使能该条报文发送 0-关闭 1-使能
+    auto_canfd.interval = signal_cycle                 # 定时周期，单位ms
+    auto_canfd.obj.transmit_type = transmit_type       # 0-正常发送，1-单次发发送，2-自发自收，3-单次自发自收
+    auto_canfd.obj.frame.can_id  = id                  # CANFD ID
+    auto_canfd.obj.frame.len     = length              # 数据长度
+    auto_canfd.obj.frame.eff     = stdorext            # 0-标准帧，1-扩展帧，根据输入变量stdorext值决定
+    auto_canfd.obj.frame.flags |= 0x20                 # 发送回显
     # 填充数据
     for j in range(auto_canfd.obj.frame.len):
         auto_canfd.obj.frame.data[j] = data[j]
@@ -510,13 +526,37 @@ def Auto_Send_Can_Or_Canfd(device_handle, chn, stdorext, id, msg_type, data, sig
         with print_lock:
             print("错误：不支持的 type 类型 '%s'，请使用 'can' 或 'canfd'" % msg_type)
 
+# 解析XML配置文件
+def load_config(config_file):
+    """
+    读取XML配置文件，返回配置参数字典
+    简洁版本：不捕获具体异常，由上层处理
+    """
+    tree = ET.parse(config_file)
+    root = tree.getroot()
+
+    return {
+        "device_type": root.find("device_type").text.strip(),
+        "merge_receive": int(root.find("merge_receive").text.strip()),
+        "transmit_type": int(root.find("transmit_type").text.strip())
+    }
+
+
 
 if __name__ == "__main__":
 
+    # 从XML加载配置
+    config = load_config("CanDataProcessing/can_device_config.xml")
+
+    device_type_str = config["device_type"]
+    device_type = DEVICE_TYPE_MAP.get(device_type_str)  # 将字符串转为整型
+    merge_receive = config["merge_receive"]    
+    transmit_type = config["transmit_type"]
+
     # 初始化CAN FD设备
     device_handle, channel_handles, receive_threads = Initialize_Canfd_Device(
-        device_type = ZCAN_USBCANFD_200U,
-        merge_receive = 0
+        device_type = device_type,
+        merge_receive = merge_receive
     )
 
     data1 = [0x01, 0x00, 0x00, 0x00]
