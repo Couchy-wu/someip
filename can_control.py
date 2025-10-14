@@ -481,7 +481,7 @@ def Send_Can_Or_Canfd(chn_handle, stdorext, id, msg_type, data, round):
         return Send_Canfd(chn_handle, stdorext, id, data, round)
     else:
         with print_lock:
-            print("错误：不支持的报文类型 '%s'，请使用 'can' 或 'canfd'" % type)
+            print("错误：不支持的报文类型 '%s'，请使用 'can' 或 'canfd'" % msg_type)
         return None
 
 # 定时发送 CAN 或 CANFD 报文的通用接口
@@ -508,7 +508,7 @@ def Auto_Send_Can_Or_Canfd(device_handle, chn, stdorext, id, msg_type, data, sig
         Auto_Send_Canfd(device_handle, chn, stdorext, id, data, signal_cycle, index)
     else:
         with print_lock:
-            print("错误：不支持的 type 类型 '%s'，请使用 'can' 或 'canfd'" % type)
+            print("错误：不支持的 type 类型 '%s'，请使用 'can' 或 'canfd'" % msg_type)
 
 
 if __name__ == "__main__":
