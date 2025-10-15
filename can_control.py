@@ -7,7 +7,10 @@ import threading
 import time
 import os
 import xml.etree.ElementTree as ET
+import mylog
 
+LOG_PATH = "./logs/can"
+mylog.setup_logger(log_dir=LOG_PATH, level=mylog.logging.INFO)
 
 thread_flag = True              # 全局变量，控制接收线程是否继续运行
 print_lock = threading.Lock()   # 线程锁，只是为了打印不冲突
@@ -30,7 +33,7 @@ DEVICE_TYPE_MAP = {
 def Read_Device_Info(device_handle):
     " 读取设备信息 "
     info = zcanlib.GetDeviceInf(device_handle)
-    print("设备信息: \n%s" % info)
+    # print("设备信息: \n%s" % info)
     can_number = info.can_num
     return can_number
 
@@ -77,7 +80,7 @@ def receive_thread(device_handle,chn_handle):
                         dlc = frame.can_dlc
                         data = " ".join([f"{num:02X}" for num in frame.data[:dlc]])
                     # 打印输出
-                    print(f"[{msg.timestamp}] CAN{chn_handle & 0xFF} {can_type:<{CANType_width}}\t{direction} ID: {can_id:<{id_width}}\t{frame_type} {frame_format}"
+                    mylog.info(f"[{msg.timestamp}] CAN{chn_handle & 0xFF} {can_type:<{CANType_width}}\t{direction} ID: {can_id:<{id_width}}\t{frame_type} {frame_format}"
                           f" DLC: {dlc}\tDATA(hex): {data}")
 
         # 接收 CANDU 帧
@@ -98,7 +101,7 @@ def receive_thread(device_handle,chn_handle):
                     can_id = hex(frame.can_id & 0x1FFFFFFF)
                     data = " ".join([f"{num:02X}" for num in frame.data[:frame.len]])
 
-                    print(f"[{msg.timestamp}] CAN{chn_handle & 0xFF} {can_type:<{CANType_width}}\t{direction} ID: {can_id:<{id_width}}\t{frame_type} {frame_format}"
+                    mylog.info(f"[{msg.timestamp}] CAN{chn_handle & 0xFF} {can_type:<{CANType_width}}\t{direction} ID: {can_id:<{id_width}}\t{frame_type} {frame_format}"
                           f" DLC: {frame.len}\tDATA(hex): {data}")
 
         # 接收 合并模式 帧
@@ -122,9 +125,8 @@ def receive_thread(device_handle,chn_handle):
                         can_id = frame.can_id & 0x1FFFFFFF
                         data = " ".join([f"{num:02X}" for num in frame.data[:frame.len]])
 
-                        print(f"[{msg.zcanfddata.timestamp}] CAN{msg.chnl} {can_type:<{CANType_width}}\t{direction} ID: {hex(can_id):<{id_width}}\t{frame_type} {frame_format}"
+                        mylog.info(f"[{msg.zcanfddata.timestamp}] CAN{msg.chnl} {can_type:<{CANType_width}}\t{direction} ID: {hex(can_id):<{id_width}}\t{frame_type} {frame_format}"
                         f" DLC: {frame.len}\tDATA(hex): {data}")
-    print("=====")
 
 # 启动通道
 def USBCANFD_Start(zcanlib, device_handle, chn):
@@ -134,7 +136,7 @@ def USBCANFD_Start(zcanlib, device_handle, chn):
     ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/canfd_abit_baud_rate", "500000".encode("utf-8"))
     ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/canfd_dbit_baud_rate", "2000000".encode("utf-8"))
     if ret != ZCAN_STATUS_OK:
-        print("Set CH%d baud failed!" % chn)
+        mylog.error("Set CH%d baud failed!" % chn)
         return None
 
     # 自定义波特率    当产品波特率对采样点有要求，或者需要设置非常规波特率时使用   ---默认不管
@@ -146,7 +148,7 @@ def USBCANFD_Start(zcanlib, device_handle, chn):
     # 打开终端电阻
     ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/initenal_resistance", "1".encode("utf-8"))
     if ret != ZCAN_STATUS_OK:
-        print("Open CH%d resistance failed!" % chn)
+        mylog.warning("Open CH%d resistance failed!" % chn)
         return None
 
     # 初始化通道
@@ -155,7 +157,7 @@ def USBCANFD_Start(zcanlib, device_handle, chn):
     chn_init_cfg.config.canfd.mode = 0  # 0-正常模式 1-只听模式
     chn_handle = zcanlib.InitCAN(device_handle, chn, chn_init_cfg)
     if chn_handle is None:
-        print("initCAN failed!" % chn)
+        mylog.error("initCAN failed!" % chn)
         return None
 
 
@@ -163,19 +165,19 @@ def USBCANFD_Start(zcanlib, device_handle, chn):
     # 禁用回显，避免收到自己发的消息（除非需要监控）
     ret = zcanlib.ZCAN_SetValue(device_handle,str(chn)+"/set_device_tx_echo","0".encode("utf-8"))   #发送回显设置，0-禁用，1-开启
     if ret != ZCAN_STATUS_OK:
-        print("Set CH%d  set_device_tx_echo failed!" %(chn))
+        mylog.warning("Set CH%d  set_device_tx_echo failed!" %(chn))
         return None
 
     # 使能/关闭合并接收(startCAN 之前)    0-关闭 1-使能
     ret = zcanlib.ZCAN_SetValue(device_handle, str(0) + "/set_device_recv_merge", repr(enable_merge_receive))
     if ret != ZCAN_STATUS_OK:
-        print("Open CH%d recv merge failed!" % chn)
+        mylog.error("Open CH%d recv merge failed!" % chn)
         return None
 
     # 启动通道
     ret = zcanlib.StartCAN(chn_handle)
     if ret != ZCAN_STATUS_OK:
-        print("startCAN failed!" % chn)
+        mylog.error("startCAN failed!" % chn)
         return None
 
     return chn_handle
@@ -201,7 +203,7 @@ def Send_Can(chn_handle, stdorext, id, data, round):
     # 确保数据长度不超过8字节（CAN帧限制）
     if length > 8:
         with print_lock:
-            print("警告：CAN数据长度为 %d，超过最大限制8字节，跳过发送。" % length)
+            mylog.warning("警告：CAN数据长度为 %d，超过最大限制8字节，跳过发送。" % length)
         return None  
     
     # 创建ZCAN_Transmit_Data数组
@@ -220,7 +222,7 @@ def Send_Can(chn_handle, stdorext, id, data, round):
             msgs[i].frame.data[j] = data[j]
 
     ret = zcanlib.Transmit(chn_handle, msgs, transmit_num)
-    with print_lock: print("成功发送 %d 条CAN报文" % ret)
+    with print_lock: mylog.info("成功发送 %d 条CAN报文" % ret)
     return ret 
 
 # 发送 CANFD 报文
@@ -244,7 +246,7 @@ def Send_Canfd(chn_handle, stdorext, id, data, round):
     # 确保数据长度不超过64字节（CANFD帧限制）
     if length > 64:
         with print_lock:
-            print("警告：CAN数据长度为 %d，超过最大限制8字节，跳过发送。" % length)
+            mylog.warning("警告：CAN数据长度为 %d，超过最大限制8字节，跳过发送。" % length)
         return None 
     
     # 创建ZCAN_Transmit_Data数组
@@ -261,14 +263,14 @@ def Send_Canfd(chn_handle, stdorext, id, data, round):
         for j in range(canfd_msgs[i].frame.len):
             canfd_msgs[i].frame.data[j] = data[j]
     ret = zcanlib.TransmitFD(chn_handle, canfd_msgs, transmit_canfd_num)
-    with print_lock: print("成功发送 %d 条CANFD报文" % ret)
+    with print_lock: mylog.info("成功发送 %d 条CANFD报文" % ret)
 
 # 清除已有的定时发送设置
 def Clear_Auto_Can_Send(device_handle, chn):
     """清除指定通道的定时发送列表"""
     ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/clear_auto_send", "0".encode("utf-8"))
     if ret != ZCAN_STATUS_OK:
-        print("Clear CH%d USBCANFD AutoSend failed!" % chn)
+        mylog.warning("Clear CH%d USBCANFD AutoSend failed!" % chn)
         return False
     return True
 
@@ -277,7 +279,7 @@ def Enable_Auto_Can_Send(device_handle, chn):
     """使能指定通道的所有定时发送任务"""
     ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/apply_auto_send", "0".encode("utf-8"))
     if ret != ZCAN_STATUS_OK:
-        print("Apply CH%d USBCANFD AutoSend failed!" % chn)
+        mylog.error("Apply CH%d USBCANFD AutoSend failed!" % chn)
         return False
     return True
 
@@ -305,7 +307,7 @@ def Auto_Send_Can(device_handle, chn, stdorext, id, data, signal_cycle, index=0)
     # 确保数据长度不超过8字节（CAN帧限制）
     if length > 8:
         with print_lock:
-            print("警告：CAN数据长度为 %d，超过最大限制8字节，跳过发送。" % length)
+            mylog.warning("警告：CAN数据长度为 %d，超过最大限制8字节，跳过发送。" % length)
         return None
     memset(addressof(auto_can), 0, sizeof(auto_can))
     auto_can.index = index                          # 定时发送序列号 用于标记这条报文
@@ -324,7 +326,7 @@ def Auto_Send_Can(device_handle, chn, stdorext, id, data, signal_cycle, index=0)
     # 将发送任务配置写入到导通的定时发送列表中
     ret = zcanlib.ZCAN_SetValue(device_handle,str(chn)+"/auto_send",byref(auto_can))
     if ret != ZCAN_STATUS_OK:
-        print("设置定时发送 CAN%d 失败!" % chn)
+        mylog.error("设置定时发送 CAN%d 失败!" % chn)
         return None
 
 # 定时发送 CANFD 设置 
@@ -351,7 +353,7 @@ def Auto_Send_Canfd(device_handle, chn, stdorext, id, data, signal_cycle, index=
     # 确保数据长度不超过8字节（CANFD帧限制）
     if length > 64:
         with print_lock:
-            print("警告：CAN数据长度为 %d，超过最大限制64字节，跳过发送。" % length)
+            mylog.warning("警告：CAN数据长度为 %d，超过最大限制64字节，跳过发送。" % length)
         return None
 
     memset(addressof(auto_canfd), 0, sizeof(auto_canfd))
@@ -370,7 +372,7 @@ def Auto_Send_Canfd(device_handle, chn, stdorext, id, data, signal_cycle, index=
     # 将发送任务配置写入到导通的定时发送列表中
     ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/auto_send_canfd", byref(auto_canfd))
     if ret != ZCAN_STATUS_OK:
-        print("设置定时发送 CANFD%d 失败!" % chn)
+        mylog.error("设置定时发送 CANFD%d 失败!" % chn)
         return None
 
 # 关闭发送任务 即关闭 队列发送 和 定时发送
@@ -378,7 +380,7 @@ def Clear_Send_Task(device_handle,chn):
     "关闭发送任务 即关闭 队列发送 和 定时发送"
     ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/clear_auto_send", "0".encode("utf-8"))
     if ret != ZCAN_STATUS_OK:
-        print("Clear CH%d AutoSend failed!" % (chn))
+        mylog.error("Clear CH%d AutoSend failed!" % (chn))
         exit(0)
 
     # ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/clear_delay_send_queue", "0".encode("utf-8"))
@@ -400,13 +402,14 @@ def Initialize_Canfd_Device(device_type=ZCAN_USBCANFD_200U, merge_receive=0):
     """
     global handle, thread_flag
     
-    
+    print("开始运行can设备")
+
     # 打开设备
     handle = zcanlib.OpenDevice(device_type, 0, 0)
     if handle == INVALID_DEVICE_HANDLE:
-        print("打开设备失败！")
+        mylog.error("打开设备失败！")
         return None, None, None
-    print("打开设备成功，设备句柄为: %d." % handle)
+    mylog.info("打开设备成功，设备句柄为: %d." % handle)
     
     # 获取设备信息
     can_number = Read_Device_Info(handle)
@@ -422,10 +425,10 @@ def Initialize_Canfd_Device(device_type=ZCAN_USBCANFD_200U, merge_receive=0):
     for i in range(can_number):  
         chn_handle = USBCANFD_Start(zcanlib, handle, i)
         if chn_handle is None:
-            print("启动通道%d失败！" % i)
+            mylog.error("启动通道%d失败！" % i)
             return None, None, None
         chn_handles.append(chn_handle)  # 将通道句柄添加到列表中
-        print(f"打开通道{i}成功，通道句柄为: %d." % chn_handle)
+        mylog.info(f"打开通道{i}成功，通道句柄为: %d." % chn_handle)
     
     # 接收线程创建策略
     if merge_receive == 1:   #   若开启合并接收，所有通道都由一个接收线程处理
@@ -451,6 +454,8 @@ def Close_Canfd_Device(handle, chn_handles, threads):
     """
     global thread_flag
     
+    print("结束运行can设备")
+
     # 停止接收线程
     thread_flag = False
     
@@ -465,16 +470,16 @@ def Close_Canfd_Device(handle, chn_handles, threads):
     for i in range(len(chn_handles)):
         ret = zcanlib.ResetCAN(chn_handles[i])
         if ret == 1:
-            print(f"关闭通道{i}成功")
+            mylog.info(f"关闭通道{i}成功")
         else:
-            print(f"关闭通道{i}失败")
+            mylog.error(f"关闭通道{i}失败")
 
     # 关闭设备
     ret = zcanlib.CloseDevice(handle)
     if ret == 1:
-        print("关闭设备成功")
+        mylog.info("关闭设备成功")
     else:
-        print("关闭设备失败")
+        mylog.error("关闭设备失败")
 
 # 发送 CAN 或 CANFD 报文的通用接口
 def Send_Can_Or_Canfd(chn_handle, stdorext, id, msg_type, data, round):
@@ -497,7 +502,7 @@ def Send_Can_Or_Canfd(chn_handle, stdorext, id, msg_type, data, round):
         return Send_Canfd(chn_handle, stdorext, id, data, round)
     else:
         with print_lock:
-            print("错误：不支持的报文类型 '%s'，请使用 'can' 或 'canfd'" % msg_type)
+            mylog.error("错误：不支持的报文类型 '%s'，请使用 'can' 或 'canfd'" % msg_type)
         return None
 
 # 定时发送 CAN 或 CANFD 报文的通用接口
@@ -524,7 +529,7 @@ def Auto_Send_Can_Or_Canfd(device_handle, chn, stdorext, id, msg_type, data, sig
         Auto_Send_Canfd(device_handle, chn, stdorext, id, data, signal_cycle, index)
     else:
         with print_lock:
-            print("错误：不支持的 type 类型 '%s'，请使用 'can' 或 'canfd'" % msg_type)
+            mylog.error("错误：不支持的 type 类型 '%s'，请使用 'can' 或 'canfd'" % msg_type)
 
 # 解析XML配置文件
 def load_config(config_file):
