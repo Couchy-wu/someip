@@ -218,7 +218,7 @@ def Send_Can(chn_handle, stdorext, id, data, round):
         msgs[i].frame._res0 = 10                # res0，res1共同表示队列发送间隔(可以理解为一个short 2Byte分开传入)
         msgs[i].frame._res1 = 0         
         # 填充数据
-        for j in range(msgs[i].frame.can_dlc):
+        for j in range(length):
             msgs[i].frame.data[j] = data[j]
 
     ret = zcanlib.Transmit(chn_handle, msgs, transmit_num)
@@ -260,7 +260,7 @@ def Send_Canfd(chn_handle, stdorext, id, data, round):
         canfd_msgs[i].frame.flags |= 0x20               # 发送回显
         canfd_msgs[i].frame.flags |= 0x0                # BRS 加速标志位：0不加速，1加速
         canfd_msgs[i].frame._res0 = 10
-        for j in range(canfd_msgs[i].frame.len):
+        for j in range(length):
             canfd_msgs[i].frame.data[j] = data[j]
     ret = zcanlib.TransmitFD(chn_handle, canfd_msgs, transmit_canfd_num)
     with print_lock: mylog.info("成功发送 %d 条CANFD报文" % ret)
@@ -320,7 +320,7 @@ def Auto_Send_Can(device_handle, chn, stdorext, id, data, signal_cycle, index=0)
     auto_can.obj.frame.eff     = stdorext           # 0-标准帧，1-扩展帧，根据输入变量stdorext值决定
     auto_can.obj.frame._pad |= 0x20                 # 发送回显
     # 填充数据
-    for j in range(auto_can.obj.frame.can_dlc):
+    for j in range(length):
         auto_can.obj.frame.data[j] = data[j]
 
     # 将发送任务配置写入到导通的定时发送列表中
@@ -366,7 +366,7 @@ def Auto_Send_Canfd(device_handle, chn, stdorext, id, data, signal_cycle, index=
     auto_canfd.obj.frame.eff     = stdorext            # 0-标准帧，1-扩展帧，根据输入变量stdorext值决定
     auto_canfd.obj.frame.flags |= 0x20                 # 发送回显
     # 填充数据
-    for j in range(auto_canfd.obj.frame.len):
+    for j in range(length):
         auto_canfd.obj.frame.data[j] = data[j]
 
     # 将发送任务配置写入到导通的定时发送列表中
@@ -564,6 +564,8 @@ if __name__ == "__main__":
         merge_receive = merge_receive
     )
 
+    print("正在运行can设备")
+
     data1 = [0x01, 0x00, 0x00, 0x00]
     data2 = [0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
     data3 = [0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
@@ -586,6 +588,7 @@ if __name__ == "__main__":
     # 使能所有定时发送报文
     Enable_Auto_Can_Send(device_handle, 0)
 
+    print("在终端按下回车键可退出")
     # 回车退出
     input()
 
