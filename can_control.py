@@ -506,7 +506,7 @@ def Send_Can_Or_Canfd(chn_handle, stdorext, id, msg_type, data, round):
         return None
 
 # 定时发送 CAN 或 CANFD 报文的通用接口
-def Auto_Send_Can_Or_Canfd(device_handle, chn, stdorext, id, msg_type, data, signal_cycle, index=0):
+def Auto_Send_Can_Or_Canfd(device_handle, chn, stdorext, id, msg_type, data, signal_cycle, index=0, send_count=-1):
     """
     定时发送 CAN 或 CANFD 报文的通用接口
     
@@ -519,10 +519,14 @@ def Auto_Send_Can_Or_Canfd(device_handle, chn, stdorext, id, msg_type, data, sig
         data:           要发送的数据，可迭代对象（如列表或字节数组）
         signal_cycle:   发送周期，单位为毫秒（ms）
         index:          定时发送序列号，默认为0
+        send_count:     发送的帧数，负数表示无限发送
 
     Returns:
         无返回值。调用对应的发送函数完成配置下发。
     """
+    # 先尝试移除同 index 的旧任务
+    Remove_Auto_Send_By_Index(device_handle, chn, msg_type, index)
+
     if msg_type == "can":
         Auto_Send_Can(device_handle, chn, stdorext, id, data, signal_cycle, index)
     elif msg_type == "canfd":
@@ -530,6 +534,22 @@ def Auto_Send_Can_Or_Canfd(device_handle, chn, stdorext, id, msg_type, data, sig
     else:
         with print_lock:
             mylog.error("错误：不支持的 type 类型 '%s'，请使用 'can' 或 'canfd'" % msg_type)
+        return
+
+    if send_count < 0:
+        return
+    elif send_count ==0:
+        raise ValueError("send_count 不能为 0")
+    else:
+        # 计算总延迟时间（单位：秒），并增加余量确保最后一帧已发出
+        total_delay = (signal_cycle / 1000.0) * (send_count - 1) + (signal_cycle / 1000.0 * 0.15)
+        # 启动后台线程延时关闭
+        def shutdown():
+            time.sleep(total_delay) 
+            Remove_Auto_Send_By_Index(device_handle, chn, msg_type, index)
+            with print_lock:
+                mylog.info(f"已停止发送 {msg_type.upper()} 信号：通道={chn}, ID=0x{id:X}, index={index}")
+        threading.Thread(target=shutdown, daemon=True).start()
 
 # 解析XML配置文件
 def load_config(config_file):
@@ -546,6 +566,110 @@ def load_config(config_file):
         "transmit_type": int(root.find("transmit_type").text.strip())
     }
 
+# 关闭指定 index 的定时发送
+def Remove_Auto_Send_By_Index(device_handle, chn, msg_type, index):
+    """
+    禁用指定通道、指定类型、指定 index 的定时发送条目
+    备注：只能禁用index，没法彻底删除，设备固件限制
+
+    Args:
+        device_handle: 设备句柄
+        chn:           通道号 (0, 1, ...)
+        msg_type:      "can" 或 "canfd"
+        index:         定时发送序列号（之前设置时用的 index）
+    Returns:
+        bool: 成功返回 True，失败返回 False
+    """
+    if msg_type == "can":
+        # 构造一个仅禁用指定 index 的 CAN 定时发送对象
+        auto_can = ZCAN_AUTO_TRANSMIT_OBJ()
+        memset(addressof(auto_can), 0, sizeof(auto_can))
+        auto_can.index = index
+        auto_can.enable = 0  # 关闭该条目
+
+        ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/auto_send", byref(auto_can))
+        if ret != ZCAN_STATUS_OK:
+            mylog.error("禁用定时发送 CAN[%d][%d] 失败!" % (chn, index))
+            return False
+        return True
+
+    elif msg_type == "canfd":
+        # 构造一个仅禁用指定 index 的 CANFD 定时发送对象
+        auto_canfd = ZCANFD_AUTO_TRANSMIT_OBJ()
+        memset(addressof(auto_canfd), 0, sizeof(auto_canfd))
+        auto_canfd.index = index
+        auto_canfd.enable = 0  # 关闭该条目
+
+        ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/auto_send_canfd", byref(auto_canfd))
+        if ret != ZCAN_STATUS_OK:
+            mylog.error("禁用定时发送 CANFD[%d][%d] 失败!" % (chn, index))
+            return False
+        return True
+
+    else:
+        mylog.error("不支持的消息类型: %s" % msg_type)
+        return False
+
+
+    """使能指定通道中指定 index 的定时发送任务
+    
+    Args:
+        device_handle:  设备句柄
+        chn:            通道号（如0, 1）
+        index:          定时发送序列号（0~99）
+
+    Returns:
+        bool: 成功返回 True，失败返回 False
+    """
+    path = f"{chn}/auto_send/{index}/enable"
+    value = "1".encode("utf-8")
+    ret = zcanlib.ZCAN_SetValue(device_handle, path, value)
+    if ret != ZCAN_STATUS_OK:
+        mylog.error("Enable AutoSend on CH%d index %d failed!" % (chn, index))
+        return False
+    return True
+
+# 接口实现：以a频率连发b帧，然后以c频率持续发送
+def Send_Can_With_Dynamic_Interval(
+    device_handle,
+    chn,
+    stdorext,
+    id,
+    data,
+    msg_type,
+    manual_cycle=100,
+    manual_number=3,
+    automatic_cycle=1000,
+    index=0
+):
+    """
+    以manual_cycle频率连发manu_number帧，然后以automatic_cycle频率持续发送
+
+    :param device_handle:   设备句柄
+    :param chn:             通道号
+    :param stdorext:        帧格式：标准帧=0, 扩展帧=1
+    :param id:              CAN帧ID
+    :param data:            发送的数据
+    :param msg_type:        报文类型，'can' 表示 CAN，'canfd' 表示 CANFD
+    :param manual_cycle:    每帧之间的手动发送间隔（单位：ms）
+    :param manual_number:   手动发送的帧数
+    :param automatic_cycle: 自动发送的周期（单位：ms）
+    :param index: 自动发送任务索引
+    """
+
+    # 导入将要定时持续发送的信息
+    Auto_Send_Can_Or_Canfd(device_handle, chn, stdorext, id, msg_type, data, automatic_cycle, index, send_count=-1)
+    # 打印开始日志
+    mylog.info(f"开始以 {manual_cycle}ms 频率连续发送 {manual_number}帧 0x{id:X}")
+    # 手动连发帧
+    manual_cycle_ms = manual_cycle/1000
+    for i in range(manual_number):
+        Send_Can_Or_Canfd(channel_handles[chn], stdorext, id, msg_type, data, 1)
+        time.sleep(manual_cycle_ms)     # 缺点：时间间隔会略大于预设值，延迟比预设要平均多1ms
+    a = 1-manual_cycle_ms
+    time.sleep(a)
+    mylog.info(f"连续发送{manual_number}帧已完成, 现在开始以{automatic_cycle}ms频率持续发送0x{id:X}")
+    Enable_Auto_Can_Send(device_handle, chn)
 
 
 if __name__ == "__main__":
@@ -571,24 +695,34 @@ if __name__ == "__main__":
     data3 = [0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
 
     # ------------发送报文示例-------------------------------
-    Send_Can_Or_Canfd(channel_handles[0], 0, 0x12D, "can", data1, 1)
-    time.sleep(0.02)    # 20ms
-    Send_Can_Or_Canfd(channel_handles[0], 0, 0x12D, "canfd", data3, 3)
-    time.sleep(0.02)
+    # Clear_Auto_Can_Send(device_handle, 0)
+    # Auto_Send_Can_Or_Canfd(device_handle, 0, 0, 0x12D, "can", data1, 100, index=0, send_count=3)
+    # Enable_Auto_Can_Send(device_handle, 0)
 
-    #--------------定时发送示意-------------------------------
-    # 清除已有的定时发送设置
-    Clear_Auto_Can_Send(device_handle, 0)
+    # ------------以100ms频率连发3帧，然后以1s频率持续发送---------------
+    # Auto_Send_Can_Or_Canfd(device_handle, 0, 0, 0x12D, "can", data1, 1000, index=0, send_count=-1)
+    # mylog.info("开始以100ms频率连续发送3帧 CAN 数据，帧ID: 0x12D")
+    # for i in range(3):
+    #     Send_Can_Or_Canfd(channel_handles[0], 0, 0x12D, "can", data1, 1)
+    #     time.sleep(0.1)     # 缺点：时间间隔会略大于预设值，延迟比预设要平均多1ms
+    # a = 1-0.1
+    # time.sleep(a)
+    # mylog.info("帧ID: 0x12D 连续发送3帧已完成，现在开始以1s频率持续发送")
+    # Enable_Auto_Can_Send(device_handle, 0)
 
-    # 定时发送示例
-    Auto_Send_Can_Or_Canfd(device_handle, 0, 0, 0x12D, "can", data1, 200, index=0)
-    Auto_Send_Can_Or_Canfd(device_handle, 0, 0, 0x234, "can", data2, 500, index=1)
-    Auto_Send_Can_Or_Canfd(device_handle, 0, 0, 0x3A0, "canfd", data3, 1000, index=2)
+    Send_Can_With_Dynamic_Interval(
+        device_handle = device_handle,
+        chn =               0,
+        stdorext =          0,
+        id =                0x12D,
+        msg_type =          "can",
+        data =              data1,
+        manual_cycle =      100,
+        manual_number =     3,
+        automatic_cycle =   1000,
+        index =             0
+    )
 
-    # 使能所有定时发送报文
-    Enable_Auto_Can_Send(device_handle, 0)
-
-    print("在终端按下回车键可退出")
     # 回车退出
     input()
 
