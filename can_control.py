@@ -563,7 +563,8 @@ def load_config(config_file):
     return {
         "device_type": root.find("device_type").text.strip(),
         "merge_receive": int(root.find("merge_receive").text.strip()),
-        "transmit_type": int(root.find("transmit_type").text.strip())
+        "transmit_type": int(root.find("transmit_type").text.strip()),
+        "chn": int(root.find("chn").text.strip()),
     }
 
 # 关闭指定 index 的定时发送

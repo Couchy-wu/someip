@@ -4,6 +4,7 @@ import threading
 import can_control
 import os
 import re
+import time
 import xml.etree.ElementTree as ET
 
 class CANFDGUI:
@@ -132,10 +133,11 @@ class CANFDGUI:
         config_file = "CanDataProcessing/can_device_config.xml"
         config = can_control.load_config(config_file)  # 调用 load_config
 
-        # 设置默认值（若未读取到）
+        # # 设置默认值（若未读取到）
         device_default = config["device_type"] if config else "ZCAN_USBCANFD_200U"
         merge_default = config["merge_receive"] if config else 0
         transmit_type_value = config["transmit_type"] if config else 2
+        chn_default = int(config["chn"]) if config and "chn" in config else 0
 
         # 映射数值 → 中文描述
         transmit_map = {0: "正常发送", 1: "单次发送", 2: "自发自收", 3: "单次自发自收"}
@@ -199,6 +201,19 @@ class CANFDGUI:
         )
         transmit_combobox.grid(row=2, column=1, padx=10, pady=10)
 
+        # --- 4. 选择通道 ---
+        tk.Label(frame, text="选择通道:", font=("微软雅黑", 10)).grid(row=3, column=0, sticky='w', pady=10)
+        self.chn_var = tk.StringVar(value=str(chn_default))  # 显示用 str，内部用 int
+        chn_combobox = ttk.Combobox(
+            frame,
+            textvariable=self.chn_var,
+            values=["0", "1"],
+            state="readonly",
+            width=30,
+            font=("微软雅黑", 10)
+        )
+        chn_combobox.grid(row=3, column=1, padx=10, pady=10)
+
         # --- 保存按钮 ---
         save_btn = tk.Button(
             self.sub_window,
@@ -209,7 +224,8 @@ class CANFDGUI:
             command=lambda: self.save_config_to_xml(
                 self.device_var.get(),
                 self.merge_display_to_value[self.merge_display_var.get()], 
-                self.transmit_type_var.get()
+                self.transmit_type_var.get(),
+                self.chn_var.get()  
             )
         )
         save_btn.pack(pady=20)
@@ -226,7 +242,7 @@ class CANFDGUI:
         self.sub_btn.config(state=tk.NORMAL)
 
     # 将用户选择保存到 XML 配置文件
-    def save_config_to_xml(self, device_type, merge_receive, transmit_type_str):
+    def save_config_to_xml(self, device_type, merge_receive, transmit_type_str, chn_str):
         """保存配置到 XML，保留格式和注释（安全 + 无正则反向引用问题）"""
         config_file = "CanDataProcessing/can_device_config.xml"
         os.makedirs(os.path.dirname(config_file), exist_ok=True)
@@ -239,6 +255,7 @@ class CANFDGUI:
             "单次自发自收": 3
         }
         transmit_type_value = transmit_map[transmit_type_str]
+        chn_value = int(chn_str)
 
         # 默认模板
         default_content = '''<?xml version="1.0" encoding="UTF-8"?>
@@ -259,6 +276,9 @@ class CANFDGUI:
              2 - 自发自收（仅本地接收，不输出到总线）
              3 - 单次自发自收 -->
         <transmit_type>2</transmit_type>
+
+        <!-- 通道号：0 或 1 -->
+        <chn>0</chn>
 
     </canfd_config>
     '''
@@ -281,6 +301,7 @@ class CANFDGUI:
         current_content = replace_tag(current_content, 'device_type', device_type)
         current_content = replace_tag(current_content, 'merge_receive', merge_receive)
         current_content = replace_tag(current_content, 'transmit_type', transmit_type_value)
+        current_content = replace_tag(current_content, 'chn', chn_value)
 
         # 保存文件
         try:
@@ -295,6 +316,9 @@ class CANFDGUI:
             self.sub_btn.config(state=tk.NORMAL)
         except Exception as e:
             messagebox.showerror("错误", f"保存配置失败: {e}")
+
+        # 保存完后，加一个简单 sleep 确保写入完成
+        time.sleep(0.01)
 
 
 if __name__ == "__main__":
