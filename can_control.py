@@ -8,15 +8,22 @@ import time
 import os
 import xml.etree.ElementTree as ET
 import mylog
+from collections import deque
+
 
 LOG_PATH = "./logs/can"
 mylog.setup_logger(log_dir=LOG_PATH, level=mylog.logging.INFO)
 
-thread_flag = True              # 全局变量，控制接收线程是否继续运行
+# 全局变量
+thread_flag = True              # 控制接收线程是否继续运行
 print_lock = threading.Lock()   # 线程锁，只是为了打印不冲突
 enable_merge_receive = 0        # 合并接收标识，（默认不使能）
 transmit_type = 0               # 发送设置，(默认正常发送)
 chn = 0                         # 通道号,(默认为0)
+
+# 全局缓存接收到的消息（用于后续检查）
+received_messages = deque(maxlen=1000)  # 最多保存1000条消息
+received_messages_lock = threading.Lock()
 
 # 初始化ZCAN库
 zcanlib = ZCAN()                # 全局初始化，供所有函数使用
@@ -80,6 +87,18 @@ def receive_thread(device_handle,chn_handle):
                     else:
                         dlc = frame.can_dlc
                         data = " ".join([f"{num:02X}" for num in frame.data[:dlc]])
+                    # 在 CAN 帧接收部分，找到原始 data 的字节列表
+                    raw_data = list(frame.data[:dlc])  # 转为 [0x01, 0x00, 0x00, 0x00] 形式
+                    # 存储消息（包含原始列表）
+                    with received_messages_lock:
+                        received_messages.append({
+                            'can_id': can_id,           # str: '0x12d'
+                            'data_list': raw_data,      # list: [1, 0, 0, 0]
+                            'dlc': dlc,
+                            'timestamp': msg.timestamp,
+                            'type': 'CAN',
+                            'channel': chn_handle & 0xFF   # 提取通道号，如 CAN0 -> 0
+                        })
                     # 打印输出
                     mylog.info(f"[{msg.timestamp}] CAN{chn_handle & 0xFF} {can_type:<{CANType_width}}\t{direction} ID: {can_id:<{id_width}}\t{frame_type} {frame_format}"
                           f" DLC: {dlc}\tDATA(hex): {data}")
@@ -101,7 +120,16 @@ def receive_thread(device_handle,chn_handle):
                     frame_format = "远程帧" if frame.can_id & (1 << 30) else "数据帧"     # CANFD没有远程帧
                     can_id = hex(frame.can_id & 0x1FFFFFFF)
                     data = " ".join([f"{num:02X}" for num in frame.data[:frame.len]])
-
+                    raw_data = list(frame.data[:frame.len])
+                    with received_messages_lock:
+                        received_messages.append({
+                            'can_id': can_id,
+                            'data_list': raw_data,
+                            'dlc': frame.len,
+                            'timestamp': msg.timestamp,
+                            'type': 'CANFD',
+                            'channel': chn_handle & 0xFF
+                        })
                     mylog.info(f"[{msg.timestamp}] CAN{chn_handle & 0xFF} {can_type:<{CANType_width}}\t{direction} ID: {can_id:<{id_width}}\t{frame_type} {frame_format}"
                           f" DLC: {frame.len}\tDATA(hex): {data}")
 
@@ -125,9 +153,68 @@ def receive_thread(device_handle,chn_handle):
                         frame_format = "远程帧" if frame.can_id & (1 << 30) else "数据帧"
                         can_id = frame.can_id & 0x1FFFFFFF
                         data = " ".join([f"{num:02X}" for num in frame.data[:frame.len]])
-
+                        raw_data = list(frame.data[:frame.len])
+                        with received_messages_lock:
+                            received_messages.append({
+                                'can_id': hex(can_id),
+                                'data_list': raw_data,
+                                'dlc': frame.len,
+                                'timestamp': msg.zcanfddata.timestamp,
+                                'type': type,
+                                'channel': msg.chnl
+                            })
                         mylog.info(f"[{msg.zcanfddata.timestamp}] CAN{msg.chnl} {can_type:<{CANType_width}}\t{direction} ID: {hex(can_id):<{id_width}}\t{frame_type} {frame_format}"
                         f" DLC: {frame.len}\tDATA(hex): {data}")
+
+# 检查是否接收到指定 ID 和 data 的信号 的接口
+def check_signal_received(signal_id, expected_data_list, channel):
+    """
+    检查是否接收到指定 ID 和 data 的信号（data 为字节列表）
+
+    :param signal_id: int 或 str，例如 0x123 或 "0x123"
+    :param expected_data_list: list，例如 [0x01, 0x00, 0x00, 0x00]
+    :param channel: int, 可选，指定通道号（如 0 表示 CAN0）
+    :return: 返回bool，是否找到完全匹配的消息
+    """
+    def format_hex_bytes(data):
+        """将字节列表格式化为 0x01, 0x02 形式的列表字符串"""
+        return "[" + ", ".join(f"0x{x:02X}" for x in data) + "]"
+
+    # 标准化 signal_id 为小写 hex 字符串
+    if isinstance(signal_id, int):
+        signal_id_str = hex(signal_id).lower()
+    else:
+        signal_id_str = str(signal_id).strip().lower()
+
+    # 确保 expected_data_list 是 list 或 tuple
+    if not isinstance(expected_data_list, (list, tuple)):
+        raise ValueError("expected_data_list must be a list or tuple of bytes, e.g. [0x01, 0x00]")
+
+    # 转为整数 list（避免传入 str 等类型）
+    expected_data_list = [int(x) for x in expected_data_list]
+
+    hex_expected_data = format_hex_bytes(expected_data_list)
+    mylog.info(f"正在检查通道{channel}是否接收到信号: ID=0x{signal_id:X}, 数据={expected_data_list}")
+
+    with received_messages_lock:
+        for msg in received_messages:
+            # 先匹配 ID
+            if msg['can_id'].lower() != signal_id_str:
+                continue
+
+            # 匹配 data
+            if msg['data_list'] != expected_data_list:
+                continue
+
+            # 如果指定了 channel，还需匹配通道
+            if channel is not None:
+                # 注意：msg 中的 channel 需要你在缓存时保存
+                if msg.get('channel') != channel:
+                    continue
+            mylog.info(f"成功检测到信号 0x{signal_id:X} 接收！")
+            return True
+            mylog.warning(f"未检测到信号 0x{signal_id:X} 接收！")
+    return False
 
 # 启动通道
 def USBCANFD_Start(zcanlib, device_handle, chn):
@@ -703,6 +790,15 @@ if __name__ == "__main__":
 
     # ------------发送报文示例-------------------------------
 
+    Send_Can_Or_Canfd(
+        chn_handle =    channel_handles[chn], 
+        stdorext =      0, 
+        id =            0x234, 
+        msg_type =      "can", 
+        data=           data2, 
+        round =         1
+        )
+
 
     #-------------定时发送示例-------------------------------
     # Clear_Auto_Can_Send(device_handle)
@@ -711,7 +807,7 @@ if __name__ == "__main__":
 
     # ------------以100ms频率连发3帧，然后以1s频率持续发送---------------
     Send_Can_With_Dynamic_Interval(
-        device_handle = device_handle,
+        device_handle =     device_handle,
         stdorext =          0,
         id =                0x12D,
         msg_type =          "can",
@@ -721,6 +817,10 @@ if __name__ == "__main__":
         automatic_cycle =   1000,
         index =             0
     )
+
+    # 检查是否收到 ID 为 0x12d，数据为 [0x01, 0x00, 0x00, 0x00] 的帧
+    time.sleep(2)
+    check_signal_received(0x234, data2, chn)
 
     # 回车退出
     input()
