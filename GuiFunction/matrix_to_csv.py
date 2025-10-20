@@ -83,8 +83,9 @@ class XlsmToCsvConverter:
                 return
 
             # 输出路径：保存到 CanDataProcessing 文件夹中
-            base_dir = os.path.dirname(file_path)
-            testcase_folder = os.path.join(base_dir, "CanDataProcessing")
+            current_file_dir = os.path.dirname(os.path.abspath(__file__))
+            parent_dir = os.path.dirname(current_file_dir)
+            testcase_folder = os.path.join(parent_dir, "CanDataProcessing")
             csv_path = os.path.join(testcase_folder, "outputMatrix.csv")
 
             # 确保 CanDataProcessing 文件夹存在（若不存在则创建）
