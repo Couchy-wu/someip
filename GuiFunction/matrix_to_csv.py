@@ -1,8 +1,9 @@
 import os
 import pandas as pd
 import tkinter as tk
-from tkinter import filedialog, ttk, messagebox
+from tkinter import filedialog, ttk, messagebox, Toplevel
 import threading
+from PIL import Image, ImageTk 
 
 # 模块功能：提取信号矩阵，转化为csv。方便后续进行信号查找
 
@@ -22,25 +23,64 @@ class XlsmToCsvConverter:
         self.skip_first_row = skip_first_row
         # -----------------------------------------
 
-        self.label = tk.Label(root, text="请上传修改后的信号矩阵", font=("Arial", 12))
+        self.label = tk.Label(root, text="请上传修改后的信号矩阵", font=("微软雅黑", 12))
         self.label.pack(pady=20)
 
         self.upload_button = tk.Button(
-            root, text="上传 XLSM 文件", command=self.start_conversion, font=("Arial", 12)
+            root, 
+            text="上传 XLSM 文件", 
+            command=self.start_conversion, 
+            font=("微软雅黑", 12),
+            bg="#1D8022",
+            fg="white"
         )
         self.upload_button.pack(pady=10)
+
+        # 右上角“注意事项”按钮
+        self.info_button = tk.Button(
+            root, 
+            text="注意事项", 
+            command=self.show_instructions,
+            font=("微软雅黑", 10),
+            bg="#E01C1C",
+            fg="white"
+        )
+        self.info_button.place(relx=0.8, rely=0.03)  # 右上角位置
 
         # 进度条
         self.progress_frame = tk.Frame(root)
         self.progress_frame.pack(pady=10, fill=tk.X, padx=20)
-
-        self.progress_label = tk.Label(self.progress_frame, text="进度: 0%", font=("Arial", 10))
+        self.progress_label = tk.Label(self.progress_frame, text="进度: 0%", font=("微软雅黑", 10))
         self.progress_label.pack()
-
         self.progress_bar = ttk.Progressbar(
             self.progress_frame, orient="horizontal", length=400, mode="determinate"
         )
         self.progress_bar.pack()
+
+    # 新增方法：显示注意事项对话框
+    def show_instructions(self):
+        dialog = Toplevel(self.root)
+        dialog.title("注意事项")
+        dialog.geometry("1200x800")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        tk.Label(
+            dialog,
+            text="请将信号矩阵修改成如下图所示：",
+            font=("Arial", 12, "bold"),
+            anchor="w",
+            justify="left",
+            wraplength=1150
+        ).pack(pady=(30, 15), padx=30, anchor="w")
+
+        image_path = "Resources/FrontEndImage/信号矩阵表处理说明.png"
+        img = Image.open(image_path)
+        img.thumbnail((1150, 700)) 
+        photo = ImageTk.PhotoImage(img)
+        tk.Label(dialog, image=photo).pack(pady=10)
+        dialog.image = photo
 
     def start_conversion(self):
         # 禁用所有控件，防止重复操作
@@ -51,6 +91,7 @@ class XlsmToCsvConverter:
     def set_widgets_state(self, state):
         """设置界面控件的状态（正常或禁用）"""
         self.upload_button.config(state=state)
+        self.info_button.config(state=state)
 
     def convert_xlsm_to_csv(self):
         file_path = filedialog.askopenfilename(
