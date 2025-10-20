@@ -6,7 +6,7 @@ from typing import List, Tuple, Optional
 # →  [0x00, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00]
 
 # 根据CAN ID 和 信号名称 从csv中找到更多信号信息
-def get_signal_info_by_id_and_name(message_id, signal_name_en, csv_file='TestcaseCollection/outputMatrix.csv'):
+def get_signal_info_by_id_and_name(message_id, signal_name_en, csv_file='CanDataProcessing/outputMatrix.csv'):
     """
     根据报文ID和信号名称(英文)提取信号信息。
     如果找到多个信号：
@@ -225,7 +225,7 @@ def format_can_data(data: List[int]) -> str:
     return "[" + ", ".join(f"0x{byte:02X}" for byte in data) + "]"
 
 # 根据 CAN ID、信号名称和枚举值生成信号数据
-def create_can_data_by_signal(message_id: str, signal_name_en: str, enum_value: int, csv_file: str = 'TestcaseCollection/outputMatrix.csv') -> str:
+def create_can_data_by_signal(message_id: str, signal_name_en: str, enum_value: int, csv_file: str = 'CanDataProcessing/outputMatrix.csv') -> str:
     """
     根据报文ID和信号英文名获取位定义，并生成对应的CAN数据。
 

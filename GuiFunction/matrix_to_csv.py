@@ -82,12 +82,12 @@ class XlsmToCsvConverter:
                 self.root.after(0, self.reset_ui)
                 return
 
-            # 输出路径：保存到 TestcaseCollection 文件夹中
+            # 输出路径：保存到 CanDataProcessing 文件夹中
             base_dir = os.path.dirname(file_path)
-            testcase_folder = os.path.join(base_dir, "TestcaseCollection")
+            testcase_folder = os.path.join(base_dir, "CanDataProcessing")
             csv_path = os.path.join(testcase_folder, "outputMatrix.csv")
 
-            # 确保 TestcaseCollection 文件夹存在（若不存在则创建）
+            # 确保 CanDataProcessing 文件夹存在（若不存在则创建）
             os.makedirs(testcase_folder, exist_ok=True)
 
             # 确保 DataFrame 是标准索引
