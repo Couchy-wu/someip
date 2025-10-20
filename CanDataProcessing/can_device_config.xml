@@ -17,4 +17,7 @@
          3 - 单次自发自收 -->
     <transmit_type>2</transmit_type>
 
+    <!-- 通道号：0 或 1 -->
+    <chn>0</chn>
+
 </canfd_config>
