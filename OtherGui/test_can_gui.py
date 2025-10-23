@@ -1,8 +1,10 @@
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 import tkinter as tk
 from tkinter import messagebox, ttk
 import threading
 import can_control
-import os
 import re
 import time
 import xml.etree.ElementTree as ET

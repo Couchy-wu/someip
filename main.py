@@ -11,7 +11,7 @@ from GuiFunction.video_processor import VideoProcessor
 import GuiFunction.image_player  # 导入 image_player 模块
 import GuiFunction.matrix_to_csv
 import GuiFunction.binhex_gui
-from test_can_gui import CANFDGUI
+from OtherGui.test_can_gui import CANFDGUI
 
 # 创建主窗口
 root = tk.Tk()
