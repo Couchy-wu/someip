@@ -6,9 +6,14 @@ from datetime import datetime
 # 使用字典管理多个 logger 实例，key: logger_name
 loggers = {}
 
+# 缓存 logger 的配置，用于延迟初始化
+logger_configs = {}
+
+
 def setup_logger(logger_name, log_dir="./logs", log_prefix=None, level=logging.INFO, clear_old=False):
     """
     创建或获取一个独立的 logger，生成独立的日志文件
+    但：日志文件和处理器延迟到第一条日志写入时才创建
     :param logger_name: logger 的唯一标识（程序内部使用）
     :param log_dir: 日志保存目录
     :param log_prefix: 用户自定义日志文件名前缀，如 "name1"
@@ -16,35 +21,20 @@ def setup_logger(logger_name, log_dir="./logs", log_prefix=None, level=logging.I
     :param clear_old: 是否删除日志目录下同前缀的旧日志文件
     :return: 配置好的 logger 实例
     """
-    global loggers
+    global loggers, logger_configs
 
     if logger_name in loggers:
         return loggers[logger_name]
 
-    # 确保日志目录存在
-    os.makedirs(log_dir, exist_ok=True)
+    # 先缓存配置，不立即创建文件
+    logger_configs[logger_name] = {
+        "log_dir": log_dir,
+        "log_prefix": log_prefix,
+        "level": level,
+        "clear_old": clear_old,
+    }
 
-    # 如果开启清除旧日志功能
-    if clear_old and log_prefix:
-        try:
-            for filename in os.listdir(log_dir):
-                # 匹配以 "prefix_" 开头的 .log 文件
-                if filename.startswith(f"{log_prefix}_") and filename.endswith(".log"):
-                    file_path = os.path.join(log_dir, filename)
-                    if os.path.isfile(file_path):
-                        os.remove(file_path)
-                        print(f"[清理日志] 已删除旧日志文件: {file_path}")
-        except Exception as e:
-            print(f"[警告] 清除旧日志时发生错误: {e}")
-
-    # 生成时间戳
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    # 构造日志文件名：prefix_时间戳.log
-    prefix = f"{log_prefix}_" if log_prefix else ""
-    log_filename = f"{prefix}{timestamp}.log"
-    log_file = os.path.join(log_dir, log_filename)
-
-    # 创建唯一的 logger
+    # 创建 logger 实例
     logger = logging.getLogger(f"MyLogger_{logger_name}")
     logger.setLevel(level)
 
@@ -52,24 +42,95 @@ def setup_logger(logger_name, log_dir="./logs", log_prefix=None, level=logging.I
     if logger.handlers:
         logger.handlers.clear()
 
-    # 文件处理器
-    file_handler = logging.FileHandler(log_file, encoding='utf-8', mode='a')
-    file_handler.setLevel(level)
-
-    # 设置格式
+    # 添加延迟处理器
+    handler = DelayedFileHandler(logger_name)
     formatter = logging.Formatter(
         '%(asctime)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
-    file_handler.setFormatter(formatter)
+    handler.setFormatter(formatter)
+    handler.setLevel(level)
 
-    # 添加处理器
-    logger.addHandler(file_handler)
-
-    # 缓存 logger
+    logger.addHandler(handler)
     loggers[logger_name] = logger
 
     return logger
+
+
+class DelayedFileHandler(logging.Handler):
+    """
+    延迟创建日志文件的 Handler
+    只有在 emit 第一条日志时，才：
+    - 确保目录存在
+    - 清理旧日志（如果需要）
+    - 生成时间戳和文件名
+    - 创建真正的 FileHandler
+    """
+
+    def __init__(self, logger_name):
+        super().__init__()
+        self.logger_name = logger_name
+        self._initialized = False
+        self._real_handler = None  # 真正的 FileHandler
+
+    def emit(self, record):
+        if not self._initialized:
+            self._setup()
+        if self._real_handler:
+            self._real_handler.emit(record)
+
+    def _setup(self):
+        """在第一次 emit 时执行初始化"""
+        config = logger_configs.get(self.logger_name)
+        if not config:
+            raise ValueError(f"Logger '{self.logger_name}' 配置丢失")
+
+        log_dir = config["log_dir"]
+        log_prefix = config["log_prefix"]
+        level = config["level"]
+        clear_old = config["clear_old"]
+
+        # =============== 第一步：确保日志目录存在 ===============
+        try:
+            os.makedirs(log_dir, exist_ok=True)
+        except Exception as e:
+            print(f"[错误] 无法创建日志目录 {log_dir}: {e}")
+            self._initialized = True
+            return
+
+        # =============== 第二步：清除旧日志（如果需要） ===============
+        if clear_old and log_prefix:
+            try:
+                for filename in os.listdir(log_dir):
+                    if filename.startswith(f"{log_prefix}_") and filename.endswith(".log"):
+                        file_path = os.path.join(log_dir, filename)
+                        if os.path.isfile(file_path):
+                            os.remove(file_path)
+                            print(f"[清理日志] 已删除旧日志文件: {file_path}")
+            except Exception as e:
+                print(f"[警告] 清除旧日志时发生错误: {e}")
+
+        # =============== 第三步：生成文件名（使用第一条日志的时间） ===============
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        prefix = f"{log_prefix}_" if log_prefix else ""
+        log_filename = f"{prefix}{timestamp}.log"
+        log_file = os.path.join(log_dir, log_filename)
+
+        # =============== 第四步：创建真正的 FileHandler ===============
+        try:
+            self._real_handler = logging.FileHandler(log_file, encoding='utf-8', mode='a')
+            self._real_handler.setFormatter(self.formatter)
+            self._real_handler.setLevel(self.level)
+        except Exception as e:
+            print(f"[错误] 无法创建日志文件 {log_file}: {e}")
+
+        self._initialized = True
+
+    def close(self):
+        """关闭资源"""
+        if self._real_handler:
+            self._real_handler.close()
+        super().close()
 
 
 def get_logger(logger_name):
@@ -111,28 +172,34 @@ def close_logger(logger_name):
     关闭并移除某个 logger（可选：释放资源）
     """
     if logger_name in loggers:
-        for handler in loggers[logger_name].handlers:
+        logger = loggers[logger_name]
+        for handler in logger.handlers:
             handler.close()
-        del loggers[logger_name]
+        # 注意：不移除 logger 本身，避免重复创建
+        # del loggers[logger_name]
 
 
-
+# ==================== 使用示例 ====================
 if __name__ == "__main__":
-    # 创建第一个日志：保存在 logs1/，前缀为 "app"
-    setup_logger(logger_name="app", log_dir="./logs1", log_prefix="app", level=logging.INFO)
+    # 设置 logger，此时不会创建文件或目录
+    setup_logger(
+        logger_name="app",
+        log_dir="./logs/testcase",
+        log_prefix="testcase",
+        level=logging.INFO,
+        clear_old=True  # 会清理旧的 testcase_*.log
+    )
 
-    # 创建第二个日志：保存在 logs2/，前缀为 "debug"
-    setup_logger(logger_name="debug", log_dir="./logs2", log_prefix="debug", level=logging.DEBUG)
+    # 此时 ./logs/testcase 目录还不存在，也没关系
 
-    # 写入不同的日志文件
-    info("app", "这是应用主日志")
-    error("app", "出错了！")
-    debug("app", "调试错误")
+    # 第一次写日志时才：
+    # 1. 创建目录
+    # 2. 清理旧日志（如果有）
+    # 3. 生成时间戳
+    # 4. 创建文件
+    info("app", "这是第一条日志，此时才创建文件！")
+    info("app", "这是第二条日志")
+    error("app", "出错了")
 
-    info("debug", "这是调试日志")
-    error("debug", "出错了！")
-    debug("debug", "调试错误")
-
-    # 输出：
-    # ./logs1/app_2025-04-05_12-34-56.log
-    # ./logs2/debug_2025-04-05_12-34-56.log
+    # 关闭 logger
+    close_logger("app")

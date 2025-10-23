@@ -10,26 +10,7 @@ from GuiFunction.video_processor import VideoProcessor
 import GuiFunction.image_player  # 导入 image_player 模块
 import GuiFunction.matrix_to_csv
 import GuiFunction.binhex_gui
-
-def can_child_window():
-    # 创建子窗口——can_child_window
-    child_window = tk.Toplevel(root)
-    child_window.title("CAN信号自动收发程序")
-    child_window.geometry("600x400")
-    
-    # 添加一些内容到子窗口
-    label = tk.Label(child_window, text="子窗口内容", padx=20, pady=20)
-    label.pack(padx=10, pady=10)
-    
-    # 添加关闭按钮
-    close_button = tk.Button(
-        child_window,
-        text="关闭",
-        command=child_window.destroy,
-        width=10,
-        height=2
-    )
-    close_button.pack(pady=20)
+from test_can_gui import CANFDGUI
 
 # 创建主窗口
 root = tk.Tk()
@@ -101,14 +82,14 @@ image_button = tk.Button(
 image_button.grid(row=2, column=0, padx=20, pady=20)
 
 # 添加“读取视频”按钮
-video_button = tk.Button(
+read_video_button = tk.Button(
     root,
     text="读取视频",
     command=video_processor.process_video,
     width=15,
     height=2
 )
-video_button.grid(row=2, column=1, padx=20, pady=20)
+read_video_button.grid(row=2, column=1, padx=20, pady=20)
 
 # 添加“播放图片视频”按钮
 image_video_button = tk.Button(
@@ -149,15 +130,49 @@ hex_button = tk.Button(
 )
 hex_button.grid(row=1, column=2, padx=20, pady=20)  
 
-# 添加“打开can信号自动收发程序”按钮
-video_button = tk.Button(
+# 添加“can测试”按钮，点击后调用test_can_gui.py
+can_window_instance = None      # 全局变量：用于存储子窗口实例
+def on_can_window_close():
+    """子窗口关闭时的回调"""
+    global can_window_instance
+    if can_window_instance:
+        can_window_instance.destroy()
+    can_window_instance = None
+    # 恢复按钮状态
+    can_control_button.config(state=tk.NORMAL)
+
+def open_can_gui():
+    global can_window_instance
+    # 如果窗口已存在，聚焦并返回
+    if can_window_instance is not None:
+        try:
+            if can_window_instance.winfo_exists():
+                can_window_instance.focus()
+                return
+        except tk.TclError:
+            can_window_instance = None # 窗口可能被异常销毁
+    # 禁用按钮
+    can_control_button.config(state=tk.DISABLED)
+    # 创建新窗口
+    new_window = tk.Toplevel(root)
+    new_window.title("CAN信号自动收发程序")
+    new_window.geometry("800x600")
+    # 赋值给全局变量，以便关闭时能找到
+    can_window_instance = new_window
+    # 实例化 GUI
+    CANFDGUI(new_window)
+    # 设置关闭协议
+    new_window.protocol("WM_DELETE_WINDOW", on_can_window_close)
+
+can_control_button = tk.Button(
     root,
-    text="打开can信号自动收发程序",
-    command=can_child_window,
-    width=20,
+    text="can测试",
+    command=open_can_gui,
+    width=15,
     height=2
 )
-video_button.grid(row=2, column=2, padx=20, pady=20)
+can_control_button.grid(row=2, column=2, padx=20, pady=20)
+
 
 # 运行主循环
 root.mainloop()
