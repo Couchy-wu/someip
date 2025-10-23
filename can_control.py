@@ -311,7 +311,7 @@ def Send_Can(chn_handle, stdorext, id, data, round):
             msgs[i].frame.data[j] = data[j]
 
     ret = zcanlib.Transmit(chn_handle, msgs, transmit_num)
-    with print_lock: mylog.info("candata", "成功发送 %d 条CAN报文" % ret)
+    # with print_lock: mylog.info("candata", "成功发送 %d 条CAN报文" % ret)
     return ret 
 
 # 发送 CANFD 报文
@@ -352,7 +352,8 @@ def Send_Canfd(chn_handle, stdorext, id, data, round):
         for j in range(length):
             canfd_msgs[i].frame.data[j] = data[j]
     ret = zcanlib.TransmitFD(chn_handle, canfd_msgs, transmit_canfd_num)
-    with print_lock: mylog.info("candata", "成功发送 %d 条CANFD报文" % ret)
+    # with print_lock: mylog.info("candata", "成功发送 %d 条CANFD报文" % ret)
+    return ret
 
 # 清除已有的定时发送设置
 def Clear_Auto_Can_Send(device_handle):
