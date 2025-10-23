@@ -242,22 +242,31 @@ class TestCaseProcessor:
 
     def _generate_can_data_from_call(self, func: str, arg: str) -> None:
         """
-        解析“输出”或“采集”函数的参数，生成对应的 CAN 数据帧
+        解析“输出”或“采集”函数的参数，生成对应的 CAN 数据帧，并打印合并的报文信息。
         支持格式：报文ID.信号名,值  例如：4C1.HUD_Mode_Settings_S,2
         """
         match = re.search(r'([0-9A-F]+)\.([a-zA-Z0-9_]+)\s*,\s*(\d+)', arg)
         if not match:
             mylog.warning(self.logger_name, f"      警告：无法解析参数 → {arg}")
             return
-
+    
         message_id, signal_name_en, enum_value_str = match.groups()
         enum_value = int(enum_value_str)
-
+    
         try:
-            data = create_can_data_by_signal(message_id, signal_name_en, enum_value)
-            mylog.info(self.logger_name, f"          → 生成CAN数据: {data}")
+            result = create_can_data_by_signal(message_id, signal_name_en, enum_value)
+            if result["success"]:
+                # 合并报文信息为一行
+                mylog.info(self.logger_name, 
+                          f"          → 报文ID: {result['message_id']} | "
+                          f"发送类型: {result['message_type']} | "
+                          f"周期时间: {result['cycle_time']}ms | "
+                          f"生成CAN数据: {result['can_data']}")
+            else:
+                mylog.warning(self.logger_name, f"          → 信号解析失败: {result['message_id']}.{result['signal_name_en']}")
         except Exception as e:
             mylog.error(self.logger_name, f"          → 生成CAN数据失败: {e}")
+
 
 # ----------------------------------------------------------------------
 # 使用示例（直接运行本文件即可）

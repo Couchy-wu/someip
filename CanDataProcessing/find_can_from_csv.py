@@ -90,16 +90,49 @@ def get_signal_info_by_id_and_name(message_id, signal_name_en, csv_file='CanData
 
     # 打印结果
     sub_id = record['子ID']
-    if pd.notna(sub_id) and str(sub_id).strip().upper() == 'NO':
-        print(f"找到信号：0x{message_id_clean} {signal_name_en}")
-    else:
-       print(f"找到信号：0x{message_id_clean} {sub_id} {signal_name_en}")
+    message_id_normalized = record['报文ID']
+    message_type = record['报文发送类型']
+    message_cycle = record['报文周期时间']
 
-    # print("找到信号：")
-    # for key, value in result_can.items():
-    #     print(f"  {key}: {value}")
+    cycle_str = "未知"
+    if pd.notna(message_cycle):
+        cycle_raw = str(message_cycle).strip()
+        if cycle_raw.lower() not in ['nan', '']:
+            if '/' in cycle_raw:
+                try:
+                    first_part = cycle_raw.split('/')[0]
+                    cycle_value = int(first_part)
+                    cycle_str = str(cycle_value)
+                except ValueError:
+                    pass  # 保持 "未知"
+            else:
+                try:
+                    cycle_value = int(cycle_raw)
+                    cycle_str = str(cycle_value)
+                except ValueError:
+                    pass  # 保持 "未知"
+
+    if pd.notna(sub_id) and str(sub_id).strip().upper() == 'NO':
+        print(f"找到信号：{message_id_normalized} {signal_name_en}")
+    else:
+        print(f"找到信号：{message_id_normalized} {sub_id} {signal_name_en}")
+
+    result_can = {
+        '报文名称': record['报文名称'],
+        '报文类型': record['报文类型'],
+        '报文ID': record['报文ID'],
+        '报文发送类型': record['报文发送类型'],
+        '报文周期时间': record['报文周期时间'],
+        '子ID': record['子ID'],
+        '报文长度': record['报文长度'],
+        '位': record['位'],
+        '信号长度': record['信号长度'],
+        '信号名称(英文)': record['信号名称(英文)'],
+        '信号名称(中文)': record['信号名称(中文)']
+    }
 
     return result_can
+
 
 def _parse_bit_range(bit_range: str, frame_length: int = 8) -> Tuple[int, int, int, int]:
     """解析 "row_start.col_start-row_end.col_end" → 四个整数坐标。
@@ -270,8 +303,16 @@ def create_can_data_by_signal(message_id: str, signal_name_en: str, enum_value: 
 
     # 调用生成函数，并传入 sub_id（可能为 None）和帧长度
     data = generate_can_data(bit_range, enum_value, sub_id=sub_id_hex, frame_length=frame_length)  # [0, 0, 0, 0, 12, 0, 0, 0]
-    data = format_can_data(data)  # [0x00, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00]
-    return data
+    data_str = format_can_data(data)  # [0x00, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00]
+    return {
+        "success": True,
+        "can_data": data_str,
+        "message_id": signal_info['报文ID'],
+        "message_type": signal_info['报文发送类型'],
+        "cycle_time": signal_info['报文周期时间'],
+        "signal_name_en": signal_name_en,
+        "enum_value": enum_value
+    }
 
 
 # 示例调用
@@ -279,6 +320,6 @@ if __name__ == "__main__":
     data1 = create_can_data_by_signal('1EF', 'RF_Window_Action_Request_S', 1)
     data2 = create_can_data_by_signal('12D', 'BCMPower_Gear_12D_S', 3)
     data3 = create_can_data_by_signal('496', 'Emitting_Function_S', 1)
-    print(data1)
-    print(data2)
-    print(data3)
+    print(data1["can_data"])
+    print(data2["can_data"])
+    print(data3["can_data"])
