@@ -572,9 +572,9 @@ def Close_Canfd_Device(handle, chn_handles, threads):
     else:
         mylog.error("candata", "关闭设备失败")
 
-# 发送 CAN 或 CANFD 报文的通用接口
-def Send_Can_Or_Canfd(chn_handle, stdorext, id, msg_type, data, round):
-    """发送 CAN 或 CANFD 报文的通用接口
+# 发送 CAN 或 CANFD 报文的通用接口————适用于事件型信号
+def Send_Can_Or_Canfd(chn_handle, stdorext, id, msg_type, data, signal_cycle=None, send_count=1):
+    """发送 CAN 或 CANFD 报文的通用接口————适用于事件型信号
 
     Args:
         chn_handle:     CAN 通道句柄
@@ -582,24 +582,50 @@ def Send_Can_Or_Canfd(chn_handle, stdorext, id, msg_type, data, round):
         id:             CAN 报文 ID
         msg_type:       报文类型，'can' 表示 CAN 报文，'canfd' 表示 CANFD 报文（不区分大小写）
         data:           要发送的数据，支持列表、字节串等可迭代对象
-        round:          发送帧数
+        signal_cycle:   信号周期(单位ms)，为 None 表示非周期发送
+        send_count:     发送次数
 
     Returns:
-        实际成功发送的报文数量，出错或类型不支持时返回 None
+        实际成功发送的报文数量，出错时返回 None
     """
-    if msg_type == "can":
-        return Send_Can(chn_handle, stdorext, id, data, round)
-    elif msg_type == "canfd":
-        return Send_Canfd(chn_handle, stdorext, id, data, round)
-    else:
+    mylog.info("candata", f"开始以 {signal_cycle} ms频率连续发送 {send_count} 帧0x{id:X}")
+
+    # 验证 msg_type
+    if msg_type not in ['can', 'canfd']:
         with print_lock:
             mylog.error("candata", "错误：不支持的报文类型 '%s'，请使用 'can' 或 'canfd'" % msg_type)
         return None
 
-# 定时发送 CAN 或 CANFD 报文的通用接口
+    success_count = 0
+
+    try:
+        for i in range(send_count):
+            if msg_type == 'can':
+                result = Send_Can(chn_handle, stdorext, id, data, 1)
+            elif msg_type == 'canfd':
+                result = Send_Canfd(chn_handle, stdorext, id, data, 1)
+            else:
+                # 理论不会走到这里
+                continue
+
+            if result is not None and result > 0:
+                success_count += result
+
+            # 如果是周期发送，在每次发送后 sleep (除了最后一次)
+            if signal_cycle is not None and i < send_count - 1:
+                time.sleep(signal_cycle / 1000.0)  # 转为秒
+
+        return success_count
+
+    except Exception as e:
+        with print_lock:
+            mylog.error("candata", "发送报文时发生异常: %s" % str(e))
+        return None      
+
+# 定时发送 CAN 或 CANFD 报文的通用接口————适用于周期型信号
 def Auto_Send_Can_Or_Canfd(device_handle, stdorext, id, msg_type, data, signal_cycle, index=0, send_count=-1):
     """
-    定时发送 CAN 或 CANFD 报文的通用接口
+    定时发送 CAN 或 CANFD 报文的通用接口————适用于周期型信号
     
     Args:
         device_handle:  设备句柄
@@ -723,7 +749,7 @@ def Remove_Auto_Send_By_Index(device_handle, msg_type, index):
         return False
     return True
 
-# 接口实现：以a频率连发b帧，然后以c频率持续发送
+# 接口实现：以a频率连发b帧，然后以c频率持续发送————适用于事件周期型信号
 def Send_Can_With_Dynamic_Interval(
     device_handle,
     stdorext,
@@ -736,7 +762,7 @@ def Send_Can_With_Dynamic_Interval(
     index=0
 ):
     """
-    以manual_cycle频率连发manu_number帧，然后以automatic_cycle频率持续发送
+    以manual_cycle频率连发manu_number帧，然后以automatic_cycle频率持续发送————适用于事件周期型信号
 
     :param device_handle:   设备句柄
     :param stdorext:        帧格式：标准帧=0, 扩展帧=1
@@ -756,7 +782,7 @@ def Send_Can_With_Dynamic_Interval(
     # 手动连发帧
     manual_cycle_ms = manual_cycle/1000
     for i in range(manual_number):
-        Send_Can_Or_Canfd(channel_handles[chn], stdorext, id, msg_type, data, 1)
+        Send_Can_Or_Canfd(channel_handles[chn], stdorext, id, msg_type, data, None, 1)
         time.sleep(manual_cycle_ms)     # 缺点：时间间隔会略大于预设值，延迟比预设要平均多1ms
     a = 1-manual_cycle_ms
     time.sleep(a)
@@ -797,7 +823,8 @@ if __name__ == "__main__":
         id =            0x234, 
         msg_type =      "can", 
         data=           data2, 
-        round =         1
+        signal_cycle =  100,
+        send_count =    3
         )
 
 
