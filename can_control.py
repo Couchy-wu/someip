@@ -13,7 +13,7 @@ import logging
 
 # 创建第一个日志：前缀为 "candata"
 LOG_PATH = "./logs/can"
-mylog.setup_logger(logger_name="candata", log_dir=LOG_PATH, log_prefix="candata", level=logging.INFO, clear_old=True)
+mylog.setup_logger(logger_name="candata", log_dir=LOG_PATH, log_prefix="candata", level=logging.INFO, clear_old=False)
 
 # 全局变量
 thread_flag = True              # 控制接收线程是否继续运行
