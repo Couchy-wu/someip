@@ -9,7 +9,7 @@ depth_multiple: 0.67   # 控制模型深度
 width_multiple: 0.75   # 控制通道宽度
 
 # Anchor-free 检测，不需要预定义 anchor
-anchors: 3
+#anchors: 3
 
 # -------------------------------
 # Backbone: 特征提取部分
