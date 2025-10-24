@@ -10,10 +10,11 @@ import xml.etree.ElementTree as ET
 from collections import deque
 import mylog
 import logging
+from typing import Union, Optional
 
 # 创建第一个日志：前缀为 "candata"
 LOG_PATH = "./logs/can"
-mylog.setup_logger(logger_name="candata", log_dir=LOG_PATH, log_prefix="candata", level=logging.INFO, clear_old=False)
+mylog.setup_logger(logger_name="candata", log_dir=LOG_PATH, log_prefix="candata", level=logging.INFO, clear_old=True)
 
 # 全局变量
 thread_flag = True              # 控制接收线程是否继续运行
@@ -195,7 +196,7 @@ def check_signal_received(signal_id, expected_data_list, channel):
     expected_data_list = [int(x) for x in expected_data_list]
 
     hex_expected_data = format_hex_bytes(expected_data_list)
-    mylog.info("candata", f"正在检查通道{channel}是否接收到信号: ID=0x{signal_id:X}, 数据={expected_data_list}")
+    mylog.info("candata", f"正在检查通道: {channel} 是否接收到信号: ID=0x{signal_id:X}, 数据={expected_data_list}")
 
     with received_messages_lock:
         for msg in received_messages:
@@ -584,12 +585,12 @@ def Send_Can_Or_Canfd(chn_handle, stdorext, id, msg_type, data, signal_cycle=Non
         msg_type:       报文类型，'can' 表示 CAN 报文，'canfd' 表示 CANFD 报文（不区分大小写）
         data:           要发送的数据，支持列表、字节串等可迭代对象
         signal_cycle:   信号周期(单位ms)，为 None 表示非周期发送
-        send_count:     发送次数
+        send_count:     发送次数，默认发1次
 
     Returns:
         实际成功发送的报文数量，出错时返回 None
     """
-    mylog.info("candata", f"开始以 {signal_cycle} ms频率连续发送 {send_count} 帧0x{id:X}")
+    mylog.debug("candata", f"开始以 {signal_cycle} ms频率连续发送 {send_count} 帧0x{id:X}")
 
     # 验证 msg_type
     if msg_type not in ['can', 'canfd']:
@@ -602,7 +603,7 @@ def Send_Can_Or_Canfd(chn_handle, stdorext, id, msg_type, data, signal_cycle=Non
     try:
         for i in range(send_count):
             if msg_type == 'can':
-                result = Send_Can(chn_handle, stdorext, id, data, 1)
+                result = Send_Can(chn_handle, stdorext, id, data, 1)    # 这里的1代表极短时间连发次数！直接写1就好
             elif msg_type == 'canfd':
                 result = Send_Canfd(chn_handle, stdorext, id, data, 1)
             else:
@@ -757,38 +758,153 @@ def Send_Can_With_Dynamic_Interval(
     id,
     data,
     msg_type,
-    manual_cycle=100,
-    manual_number=3,
-    automatic_cycle=1000,
+    event_cycle_ms=100,
+    event_count=3,
+    cycle_ms=1000,
     index=0
 ):
     """
-    以manual_cycle频率连发manu_number帧，然后以automatic_cycle频率持续发送————适用于事件周期型信号
+    以event_cycle_ms频率连发manu_number帧，然后以automatic_cycle_ms频率持续发送————适用于事件周期型信号
 
     :param device_handle:   设备句柄
     :param stdorext:        帧格式：标准帧=0, 扩展帧=1
     :param id:              CAN帧ID
     :param data:            发送的数据
     :param msg_type:        报文类型，'can' 表示 CAN，'canfd' 表示 CANFD
-    :param manual_cycle:    每帧之间的手动发送间隔（单位：ms）
-    :param manual_number:   手动发送的帧数
-    :param automatic_cycle: 自动发送的周期（单位：ms）
-    :param index: 自动发送任务索引
+    :param event_cycle_ms:  每帧之间的手动发送间隔（单位：ms）
+    :param event_count:     手动发送的帧数
+    :param cycle_ms:        定时发送的周期（单位：ms）
+    :param index:           定时发送任务索引
     """
     global chn
     # 导入将要定时持续发送的信息
-    Auto_Send_Can_Or_Canfd(device_handle, stdorext, id, msg_type, data, automatic_cycle, index, send_count=-1)
+    Auto_Send_Can_Or_Canfd(device_handle, stdorext, id, msg_type, data, cycle_ms, index, send_count=-1)
     # 打印开始日志
-    mylog.info("candata", f"开始以 {manual_cycle}ms 频率连续发送 {manual_number}帧 0x{id:X}")
+    mylog.info("candata", f"开始以 {event_cycle_ms}ms 频率连续发送 {event_count}帧 0x{id:X}")
     # 手动连发帧
-    manual_cycle_ms = manual_cycle/1000
-    for i in range(manual_number):
+    event_cycle_s = event_cycle_ms/1000 # 单位转换成秒
+    for i in range(event_count):
         Send_Can_Or_Canfd(channel_handles[chn], stdorext, id, msg_type, data, None, 1)
-        time.sleep(manual_cycle_ms)     # 缺点：时间间隔会略大于预设值，延迟比预设要平均多1ms
-    a = 1-manual_cycle_ms
-    time.sleep(a)
-    mylog.info("candata", f"连续发送{manual_number}帧已完成, 现在开始以{automatic_cycle}ms频率持续发送0x{id:X}")
+        time.sleep(event_cycle_s)     # 缺点：时间间隔会略大于预设值，延迟比预设要平均多1ms
+    a = 1-event_cycle_s
+    if a > 0:
+        time.sleep(a)
+    mylog.info("candata", f"连续发送{event_count}帧已完成, 现在开始以 {cycle_ms} ms频率持续发送 0x{id:X}")
     Enable_Auto_Can_Send(device_handle)
+
+# 通用信号发送接口，根据信号类型自动选择发送方式
+def Send_Can_Signal(
+    device_handle,
+    stdorext: int,
+    id: int,
+    data,
+    msg_type: str,
+    signal_type: str,
+    cycle_ms: Optional[Union[int, str]] = None,
+    index: int = 0
+):
+    """
+    通用CAN信号发送接口，支持事件、周期、事件周期三种信号类型
+
+    :param device_handle:       设备句柄
+    :param stdorext:            帧格式：标准帧=0, 扩展帧=1
+    :param id:                  CAN帧ID
+    :param data:                发送的数据
+    :param msg_type:            报文类型，'can' 或 'canfd'
+    :param signal_type:         信号类型: 'Event'(事件), 'Cycle'(周期), 'CE'(事件周期)
+    :param cycle_ms:            - EVENT: 事件帧间隔（ms）
+                                - CYCLE: 周期发送周期（ms）
+                                - CE:    "事件间隔/周期" 字符串
+    :param index:               定时任务索引（默认0）
+    """
+    global chn
+    msg_type = msg_type.lower()
+    signal_type = signal_type.strip().upper()
+    valid_signal_types = {"EVENT", "CYCLE", "CE"}
+
+    if msg_type not in ['can', 'canfd']:
+        mylog.error("candata", f"不支持的报文类型: {msg_type}")
+        return None
+
+    if signal_type not in valid_signal_types:
+        mylog.error("candata", f"不支持的信号类型: {signal_type}，仅支持 Event, Cycle, CE")
+        return None
+
+    # === 解析 cycle_ms 参数 ===
+    event_cycle_ms_val = None
+    cycle_period_ms = None
+
+    if signal_type == "CE":
+        if isinstance(cycle_ms, str):
+            try:
+                event_cycle_ms_val, cycle_period_ms = map(int, cycle_ms.split('/'))
+            except Exception:
+                mylog.error("candata", "CE信号的cycle_ms格式错误，应为 '事件间隔/周期' 如 '100/1000'")
+                return None
+        else:
+            mylog.error("candata", "CE信号必须提供 '事件间隔/周期' 形式的字符串，如 '100/1000'")
+            return None
+
+    elif signal_type == "CYCLE":
+        try:
+            cycle_period_ms = int(cycle_ms) if cycle_ms is not None else None
+            if cycle_period_ms is None or cycle_period_ms <= 0:
+                raise ValueError
+        except Exception:
+            mylog.error("candata", "Cycle信号的cycle_ms必须为正整数或可转换为正整数的值")
+            return None
+
+    elif signal_type == "EVENT":
+        try:
+            event_cycle_ms_val = int(cycle_ms) if cycle_ms is not None else 100
+            if event_cycle_ms_val <= 0:
+                event_cycle_ms_val = 100
+        except Exception:
+            event_cycle_ms_val = 100
+
+    # === 执行发送逻辑 ===
+    if signal_type == "EVENT":
+        mylog.info("candata", f"事件信号: 以 {event_cycle_ms_val} ms 间隔连发3帧 0x{id:X}, 已为信号分配 index={index}")
+        Send_Can_Or_Canfd(
+            chn_handle=channel_handles[chn],
+            stdorext=stdorext,
+            id=id,
+            msg_type=msg_type,
+            data=data,
+            signal_cycle=event_cycle_ms_val,
+            send_count=3
+        )
+
+    elif signal_type == "CYCLE":
+        mylog.info("candata", f"周期信号: 以 {cycle_period_ms} ms 周期持续发送 0x{id:X}, 已为信号分配 index={index}")
+        Auto_Send_Can_Or_Canfd(
+            device_handle=device_handle,
+            stdorext=stdorext,
+            id=id,
+            msg_type=msg_type,
+            data=data,
+            signal_cycle=cycle_period_ms,
+            index=index,
+            send_count=-1
+        )
+        Enable_Auto_Can_Send(device_handle)
+
+    elif signal_type == "CE":
+        mylog.info("candata", f"事件周期信号: 先以 {event_cycle_ms_val} ms 间隔连发3帧，再以 {cycle_period_ms} ms 周期持续发送 0x{id:X}, 已为信号分配 index={index}")
+        return Send_Can_With_Dynamic_Interval(
+            device_handle=device_handle,
+            stdorext=stdorext,
+            id=id,
+            data=data,
+            msg_type=msg_type,
+            event_cycle_ms=event_cycle_ms_val,
+            event_count=3,
+            cycle_ms=cycle_period_ms,
+            index=index
+        )
+
+    return True
+
 
 
 if __name__ == "__main__":
@@ -816,40 +932,19 @@ if __name__ == "__main__":
     data2 = [0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
     data3 = [0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
 
-    # ------------发送报文示例-------------------------------
+    # 发送事件信号：每50ms发一次，连发3帧
+    # Send_Can_Signal(device_handle, 0, 0x100, data1, 'can', 'Event', cycle_ms=50)
 
-    Send_Can_Or_Canfd(
-        chn_handle =    channel_handles[chn], 
-        stdorext =      0, 
-        id =            0x234, 
-        msg_type =      "can", 
-        data=           data2, 
-        signal_cycle =  100,
-        send_count =    3
-        )
+    # 发送周期信号：每200ms周期发送
+    # Send_Can_Signal(device_handle, 0, 0x200, data2, 'canfd', 'Cycle', cycle_ms=200)
 
+    # 发送事件周期信号：先每100ms发3帧，然后每1000ms持续发送
+    Send_Can_Signal(device_handle, 0, 0x300, data3, 'canfd', 'CE', cycle_ms="100/1000")
 
-    #-------------定时发送示例-------------------------------
-    # Clear_Auto_Can_Send(device_handle)
-    # Auto_Send_Can_Or_Canfd(device_handle, 0, 0x12D, "can", data1, 100, index=0, send_count=-1)
-    # Enable_Auto_Can_Send(device_handle)
-
-    # ------------以100ms频率连发3帧，然后以1s频率持续发送---------------
-    Send_Can_With_Dynamic_Interval(
-        device_handle =     device_handle,
-        stdorext =          0,
-        id =                0x12D,
-        msg_type =          "can",
-        data =              data1,
-        manual_cycle =      100,
-        manual_number =     3,
-        automatic_cycle =   1000,
-        index =             0
-    )
 
     # 检查是否收到 ID 为 0x12d，数据为 [0x01, 0x00, 0x00, 0x00] 的帧
-    time.sleep(2)
-    check_signal_received(0x234, data2, chn)
+    # time.sleep(2)
+    # check_signal_received(0x300, data3, chn)
 
     # 回车退出
     input()
