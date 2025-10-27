@@ -933,13 +933,13 @@ if __name__ == "__main__":
     data3 = [0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
 
     # 发送事件信号：每50ms发一次，连发3帧
-    # Send_Can_Signal(device_handle, 0, 0x100, data1, 'can', 'Event', cycle_ms=50)
+    # Send_Can_Signal(device_handle, 0, 0x100, data1, 'can', 'Event', cycle_ms=50, index = 0)
 
     # 发送周期信号：每200ms周期发送
-    # Send_Can_Signal(device_handle, 0, 0x200, data2, 'canfd', 'Cycle', cycle_ms=200)
+    # Send_Can_Signal(device_handle, 0, 0x200, data2, 'canfd', 'Cycle', cycle_ms=200, index = 1)
 
     # 发送事件周期信号：先每100ms发3帧，然后每1000ms持续发送
-    Send_Can_Signal(device_handle, 0, 0x300, data3, 'canfd', 'CE', cycle_ms="100/1000")
+    Send_Can_Signal(device_handle, 0, 0x300, data3, 'canfd', 'CE', cycle_ms="100/1000", index = 2)
 
 
     # 检查是否收到 ID 为 0x12d，数据为 [0x01, 0x00, 0x00, 0x00] 的帧
