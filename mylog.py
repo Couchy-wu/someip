@@ -1,4 +1,3 @@
-# mylog.py
 import logging
 import os
 from datetime import datetime
@@ -10,7 +9,7 @@ loggers = {}
 logger_configs = {}
 
 
-def setup_logger(logger_name, log_dir="./logs", log_prefix=None, level=logging.INFO, clear_old=False):
+def setup_logger(logger_name, log_dir="./logs", log_prefix=None, level=logging.INFO, clear_old=False, use_timestamp=True):
     """
     创建或获取一个独立的 logger，生成独立的日志文件
     但：日志文件和处理器延迟到第一条日志写入时才创建
@@ -19,6 +18,7 @@ def setup_logger(logger_name, log_dir="./logs", log_prefix=None, level=logging.I
     :param log_prefix: 用户自定义日志文件名前缀，如 "name1"
     :param level: 日志级别
     :param clear_old: 是否删除日志目录下同前缀的旧日志文件
+    :param use_timestamp: 是否在日志文件名中添加时间戳。False 表示只用 log_prefix.log
     :return: 配置好的 logger 实例
     """
     global loggers, logger_configs
@@ -32,6 +32,7 @@ def setup_logger(logger_name, log_dir="./logs", log_prefix=None, level=logging.I
         "log_prefix": log_prefix,
         "level": level,
         "clear_old": clear_old,
+        "use_timestamp": use_timestamp,
     }
 
     # 创建 logger 实例
@@ -63,7 +64,7 @@ class DelayedFileHandler(logging.Handler):
     只有在 emit 第一条日志时，才：
     - 确保目录存在
     - 清理旧日志（如果需要）
-    - 生成时间戳和文件名
+    - 生成文件名（可选带时间戳）
     - 创建真正的 FileHandler
     """
 
@@ -89,6 +90,7 @@ class DelayedFileHandler(logging.Handler):
         log_prefix = config["log_prefix"]
         level = config["level"]
         clear_old = config["clear_old"]
+        use_timestamp = config.get("use_timestamp", True)
 
         # =============== 第一步：确保日志目录存在 ===============
         try:
@@ -110,18 +112,23 @@ class DelayedFileHandler(logging.Handler):
             except Exception as e:
                 print(f"[警告] 清除旧日志时发生错误: {e}")
 
-        # =============== 第三步：生成文件名（使用第一条日志的时间） ===============
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        prefix = f"{log_prefix}_" if log_prefix else ""
-        log_filename = f"{prefix}{timestamp}.log"
-        log_file = os.path.join(log_dir, log_filename)
+        # =============== 第三步：生成文件名 ===============
+        prefix = log_prefix or "app"
+        if use_timestamp:
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            log_filename = f"{prefix}_{timestamp}.log"
+        else:
+            log_filename = f"{prefix}.log"
+
+        log_file = os.path.join(log_dir, log_filename)  # ✅ 提前定义 log_file
 
         # =============== 第四步：创建真正的 FileHandler ===============
         try:
             self._real_handler = logging.FileHandler(log_file, encoding='utf-8', mode='a')
             self._real_handler.setFormatter(self.formatter)
-            self._real_handler.setLevel(self.level)
+            self._real_handler.setLevel(level)
         except Exception as e:
+            # ✅ 此时 log_file 已定义，可安全打印
             print(f"[错误] 无法创建日志文件 {log_file}: {e}")
 
         self._initialized = True
@@ -175,31 +182,31 @@ def close_logger(logger_name):
         logger = loggers[logger_name]
         for handler in logger.handlers:
             handler.close()
-        # 注意：不移除 logger 本身，避免重复创建
-        # del loggers[logger_name]
 
 
 # ==================== 使用示例 ====================
 if __name__ == "__main__":
-    # 设置 logger，此时不会创建文件或目录
+    # 示例1：带时间戳（默认）
     setup_logger(
-        logger_name="app",
+        logger_name="app1",
         log_dir="./logs/testcase",
         log_prefix="testcase",
         level=logging.INFO,
-        clear_old=True  # 会清理旧的 testcase_*.log
+        clear_old=True,
+        use_timestamp=True
     )
+    info("app1", "这是带时间戳的日志")
 
-    # 此时 ./logs/testcase 目录还不存在，也没关系
+    # 示例2：不带时间戳（你想要的效果）
+    setup_logger(
+        logger_name="app2",
+        log_dir="./logs/testcase",
+        log_prefix="mystatic",
+        level=logging.INFO,
+        clear_old=False,
+        use_timestamp=False  # ✅ 关键：不加时间
+    )
+    info("app2", "这是不带时间戳的日志，文件名为 mystatic.log")
 
-    # 第一次写日志时才：
-    # 1. 创建目录
-    # 2. 清理旧日志（如果有）
-    # 3. 生成时间戳
-    # 4. 创建文件
-    info("app", "这是第一条日志，此时才创建文件！")
-    info("app", "这是第二条日志")
-    error("app", "出错了")
-
-    # 关闭 logger
-    close_logger("app")
+    close_logger("app1")
+    close_logger("app2")
