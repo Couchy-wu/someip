@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 from collections import deque
 import mylog
 import logging
-from typing import Union, Optional, Tuple
+from typing import Union, Optional
 
 # 创建第一个日志：前缀为 "candata"
 LOG_PATH = "./logs/can"
@@ -792,86 +792,7 @@ def Send_Can_With_Dynamic_Interval(
     mylog.info("candata", f"连续发送{event_count}帧已完成, 现在开始以 {cycle_ms} ms频率持续发送 0x{id:X}")
     Enable_Auto_Can_Send(device_handle)
 
-
-
-# 辅助函数：把任意合法的 cycle_ms 参数统一转成 str，再解析
-def _to_str_cycle(val: Optional[Union[int, str]]) -> str:
-    """
-    把可能的 int、str、None 参数统一转成合法的 str。
-    - None      → ""（后面会统一报错）
-    - int       → "int_value"
-    - str       → 原样返回（会在后面做语法检查）
-    """
-    if val is None:
-        return ""
-    if isinstance(val, int):
-        return str(val)
-    if isinstance(val, str):
-        return val.strip()
-    # 其它类型直接报错，保持严谨
-    raise TypeError(f"cycle_ms 参数类型错误，期望 int|str|None，实际为 {type(val)}")
-
-
-def _parse_cycle_str(
-    raw: str,
-    signal_type: str,
-) -> Tuple[Optional[int], Optional[int]]:
-    """
-    根据 signal_type 解析 raw（已经是 str）得到:
-        event_ms : 事件帧间隔（只在 EVENT / CE 中使用）
-        cycle_ms : 周期发送间隔（只在 CYCLE / CE 中使用）
-
-    返回 (event_ms, cycle_ms)。如果某个值在当前模式下不需要，则返回 None。
-
-    可能的 raw 形式
-    -----------------
-    1) "100"               → 单一数值
-        - EVENT  → event_ms = 100
-        - CYCLE  → cycle_ms = 100
-    2) "100/1000"          → 事件/周期 双数值，仅在 CE 中合法
-    3) "" / None           → 视模式而定使用默认值或报错
-    """
-    # ------------------- 统一去空格 -------------------
-    raw = raw.strip()
-    if not raw:
-        # 空字符串在后面统一报错（因为每种模式都需要至少一个数值）
-        raise ValueError("cycle_ms 不能为空字符串")
-
-    # ------------------- CE 专属 “a/b” 形式 -------------------
-    if signal_type == "CE":
-        if "/" not in raw:
-            raise ValueError(
-                "CE 信号的 cycle_ms 必须是 '事件间隔/周期' 形式，如 '100/1000'"
-            )
-        ev_str, cyc_str = raw.split("/", 1)
-        try:
-            event_ms = int(ev_str)
-            cycle_ms = int(cyc_str)
-        except Exception as exc:
-            raise ValueError(
-                f"CE 信号的 cycle_ms 解析失败，确保均为整数: {exc}"
-            ) from exc
-        if event_ms <= 0 or cycle_ms <= 0:
-            raise ValueError("CE 信号的事件间隔和周期必须均为正整数")
-        return event_ms, cycle_ms
-
-    # ------------------- EVENT / CYCLE 单值形式 -------------------
-    # 此时 raw 必须是单个整数
-    try:
-        val = int(raw)
-    except Exception as exc:
-        raise ValueError(
-            f"{signal_type} 信号的 cycle_ms 必须是可转换为整数的字符串，如 '100'，实际为 '{raw}'"
-        ) from exc
-    if val <= 0:
-        raise ValueError(f"{signal_type} 信号的 cycle_ms 必须为正整数，实际为 {val}")
-
-    if signal_type == "EVENT":
-        return val, None
-    else:  # CYCLE
-        return None, val
-
-# 主函数：Send_Can_Signal
+# 通用信号发送接口，根据信号类型自动选择发送方式
 def Send_Can_Signal(
     device_handle,
     stdorext: int,
@@ -879,66 +800,71 @@ def Send_Can_Signal(
     data,
     msg_type: str,
     signal_type: str,
-    cycle_ms: Optional[Union[int, str]] = None,   # 统一接受 int|str|None
-    index: int = 0,
+    cycle_ms: Optional[Union[int, str]] = None,
+    index: int = 0
 ):
     """
-    通用 CAN 信号发送接口，支持三种信号类型：
+    通用CAN信号发送接口，支持事件、周期、事件周期三种信号类型
 
-    参数说明（与原版保持一致，仅 cycle_ms 类型改变）：
-        device_handle : 设备句柄
-        stdorext      : 帧格式，0‑标准帧，1‑扩展帧
-        id            : CAN 帧 ID（十进制或十六进制均可）
-        data          : 发送的数据
-        msg_type      : 'can' 或 'canfd'（不区分大小写）
-        signal_type   : 'Event' / 'Cycle' / 'CE'（不区分大小写，内部统一转为大写）
-        cycle_ms      : 统一为 str
-                         * Event / Cycle : "100"
-                         * CE            : "100/1000"
-        index         : 定时任务索引（默认 0）
+    :param device_handle:       设备句柄
+    :param stdorext:            帧格式：标准帧=0, 扩展帧=1
+    :param id:                  CAN帧ID
+    :param data:                发送的数据
+    :param msg_type:            报文类型，'can' 或 'canfd'
+    :param signal_type:         信号类型: 'Event'(事件), 'Cycle'(周期), 'CE'(事件周期)
+    :param cycle_ms:            - EVENT: 事件帧间隔（ms）
+                                - CYCLE: 周期发送周期（ms）
+                                - CE:    "事件间隔/周期" 字符串
+    :param index:               定时任务索引（默认0）
     """
-    # ------------------------------------------------------------------
-    # ① 参数合法性检查（保持原有的大小写容错）
-    # ------------------------------------------------------------------
     global chn
-
     msg_type = msg_type.lower()
     signal_type = signal_type.strip().upper()
     valid_signal_types = {"EVENT", "CYCLE", "CE"}
 
-    if msg_type not in {"can", "canfd"}:
+    if msg_type not in ['can', 'canfd']:
         mylog.error("candata", f"不支持的报文类型: {msg_type}")
         return None
 
     if signal_type not in valid_signal_types:
-        mylog.error(
-            "candata",
-            f"不支持的信号类型: {signal_type}，仅支持 Event, Cycle, CE",
-        )
+        mylog.error("candata", f"不支持的信号类型: {signal_type}，仅支持 Event, Cycle, CE")
         return None
 
-    # ------------------------------------------------------------------
-    # ② 统一把 cycle_ms 转成 str，再统一解析
-    # ------------------------------------------------------------------
-    try:
-        raw_cycle_str = _to_str_cycle(cycle_ms)          # 可能是 ""（空串）或合法字符串
-        event_cycle_ms_val, cycle_period_ms = _parse_cycle_str(
-            raw=raw_cycle_str,
-            signal_type=signal_type,
-        )
-    except Exception as exc:   # 包括 TypeError、ValueError
-        mylog.error("candata", f"cycle_ms 参数错误: {exc}")
-        return None
+    # === 解析 cycle_ms 参数 ===
+    event_cycle_ms_val = None
+    cycle_period_ms = None
 
-    # ------------------------------------------------------------------
-    # ③ 根据信号类型执行对应的发送逻辑
-    # ------------------------------------------------------------------
+    if signal_type == "CE":
+        if isinstance(cycle_ms, str):
+            try:
+                event_cycle_ms_val, cycle_period_ms = map(int, cycle_ms.split('/'))
+            except Exception:
+                mylog.error("candata", "CE信号的cycle_ms格式错误，应为 '事件间隔/周期' 如 '100/1000'")
+                return None
+        else:
+            mylog.error("candata", "CE信号必须提供 '事件间隔/周期' 形式的字符串，如 '100/1000'")
+            return None
+
+    elif signal_type == "CYCLE":
+        try:
+            cycle_period_ms = int(cycle_ms) if cycle_ms is not None else None
+            if cycle_period_ms is None or cycle_period_ms <= 0:
+                raise ValueError
+        except Exception:
+            mylog.error("candata", "Cycle信号的cycle_ms必须为正整数或可转换为正整数的值")
+            return None
+
+    elif signal_type == "EVENT":
+        try:
+            event_cycle_ms_val = int(cycle_ms) if cycle_ms is not None else 100
+            if event_cycle_ms_val <= 0:
+                event_cycle_ms_val = 100
+        except Exception:
+            event_cycle_ms_val = 100
+
+    # === 执行发送逻辑 ===
     if signal_type == "EVENT":
-        # event_cycle_ms_val 在上面一定已经是正整数
-        mylog.info(
-            "candata",
-            f"事件信号: 以 {event_cycle_ms_val} ms 间隔连发3帧 0x{id:X}, 已为信号分配 index={index}",
-        )
+        mylog.info("candata", f"事件信号: 以 {event_cycle_ms_val} ms 间隔连发3帧 0x{id:X}, 已为信号分配 index={index}")
         Send_Can_Or_Canfd(
             chn_handle=channel_handles[chn],
             stdorext=stdorext,
@@ -946,14 +872,11 @@ def Send_Can_Signal(
             msg_type=msg_type,
             data=data,
             signal_cycle=event_cycle_ms_val,
-            send_count=3,
+            send_count=3
         )
+
     elif signal_type == "CYCLE":
-        # cycle_period_ms 在上面一定已经是正整数
-        mylog.info(
-            "candata",
-            f"周期信号: 以 {cycle_period_ms} ms 周期持续发送 0x{id:X}, 已为信号分配 index={index}",
-        )
+        mylog.info("candata", f"周期信号: 以 {cycle_period_ms} ms 周期持续发送 0x{id:X}, 已为信号分配 index={index}")
         Auto_Send_Can_Or_Canfd(
             device_handle=device_handle,
             stdorext=stdorext,
@@ -962,15 +885,12 @@ def Send_Can_Signal(
             data=data,
             signal_cycle=cycle_period_ms,
             index=index,
-            send_count=-1,
+            send_count=-1
         )
         Enable_Auto_Can_Send(device_handle)
-    else:  # CE
-        # 两个值在上面已经保证为正整数
-        mylog.info(
-            "candata",
-            f"事件周期信号: 先以 {event_cycle_ms_val} ms 间隔连发3帧，再以 {cycle_period_ms} ms 周期持续发送 0x{id:X}, 已为信号分配 index={index}",
-        )
+
+    elif signal_type == "CE":
+        mylog.info("candata", f"事件周期信号: 先以 {event_cycle_ms_val} ms 间隔连发3帧，再以 {cycle_period_ms} ms 周期持续发送 0x{id:X}, 已为信号分配 index={index}")
         return Send_Can_With_Dynamic_Interval(
             device_handle=device_handle,
             stdorext=stdorext,
@@ -980,10 +900,9 @@ def Send_Can_Signal(
             event_cycle_ms=event_cycle_ms_val,
             event_count=3,
             cycle_ms=cycle_period_ms,
-            index=index,
+            index=index
         )
 
-    # 所有非 CE 分支默认返回 True，保持原有接口语义
     return True
 
 
@@ -1014,10 +933,10 @@ if __name__ == "__main__":
     data3 = [0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
 
     # 发送事件信号：每50ms发一次，连发3帧
-    Send_Can_Signal(device_handle, 0, 0x100, data1, 'can', 'Event', cycle_ms="50", index = 0)
+    # Send_Can_Signal(device_handle, 0, 0x100, data1, 'can', 'Event', cycle_ms=50, index = 0)
 
     # 发送周期信号：每200ms周期发送
-    Send_Can_Signal(device_handle, 0, 0x200, data2, 'canfd', 'Cycle', cycle_ms="200", index = 1)
+    # Send_Can_Signal(device_handle, 0, 0x200, data2, 'canfd', 'Cycle', cycle_ms=200, index = 1)
 
     # 发送事件周期信号：先每100ms发3帧，然后每1000ms持续发送
     Send_Can_Signal(device_handle, 0, 0x300, data3, 'canfd', 'CE', cycle_ms="100/1000", index = 2)
