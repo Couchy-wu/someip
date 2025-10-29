@@ -268,7 +268,15 @@ def create_can_data_by_signal(message_id: str, signal_name_en: str, enum_value: 
         enum_value (int): 枚举值，用于生成数据
         csv_file (str): CSV文件路径，默认为 'outputMatrix.csv'
     返回:
-        str: 格式化后的CAN数据字符串，如 [0x00, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00]
+        字典，其中：
+        can_data:         List[int]类型的CAN数据字符串，如[0, 0, 0, 0, 12, 0, 0, 0]
+        can_data_str:     str类型字符串，用于打印显示，如 [0x00, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00]
+        message_id:       int，报文的 CAN ID（10进制,495）
+        message_id_str:   str字符串，可用于打印显示(16进制，0x1EF)
+        message_type:     str，报文的发送类型
+        cycle_time:       int or float or str or None
+        signal_name_en     (str): 信号英文名
+        enum_value         (int): 枚举值
     """
     # 获取信号信息
     signal_info = get_signal_info_by_id_and_name(message_id, signal_name_en, csv_file)
@@ -306,12 +314,14 @@ def create_can_data_by_signal(message_id: str, signal_name_en: str, enum_value: 
     data_str = format_can_data(data)  # [0x00, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00]
     return {
         "success": True,
-        "can_data": data_str,
-        "message_id": signal_info['报文ID'],
+        "can_data":data,
+        "can_data_str": data_str,
+        "message_id": int(signal_info['报文ID'].strip(), 16), 
+        "message_id_str": signal_info['报文ID'],
         "message_type": signal_info['报文发送类型'],
         "cycle_time": signal_info['报文周期时间'],
         "signal_name_en": signal_name_en,
-        "enum_value": enum_value
+        "enum_value": enum_value    # 枚举值
     }
 
 
@@ -321,5 +331,16 @@ if __name__ == "__main__":
     data2 = create_can_data_by_signal('12D', 'BCMPower_Gear_12D_S', 3)
     data3 = create_can_data_by_signal('496', 'Emitting_Function_S', 1)
     print(data1["can_data"])
-    print(data2["can_data"])
-    print(data3["can_data"])
+    print(data1["can_data_str"])
+    print(data1["message_id"])
+    print(data1["message_id_str"])
+    print(data1["message_type"])
+    print(data1["cycle_time"])
+    print(data1["signal_name_en"])
+    print(data1["enum_value"])
+
+
+    # print(data2["can_data"])
+    # print(data3["can_data"])
+    # print(data2["can_data_str"])
+    # print(data3["can_data_str"])
