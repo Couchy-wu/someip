@@ -103,12 +103,22 @@ class DelayedFileHandler(logging.Handler):
         # =============== 第二步：清除旧日志（如果需要） ===============
         if clear_old and log_prefix:
             try:
-                for filename in os.listdir(log_dir):
-                    if filename.startswith(f"{log_prefix}_") and filename.endswith(".log"):
-                        file_path = os.path.join(log_dir, filename)
-                        if os.path.isfile(file_path):
-                            os.remove(file_path)
-                            print(f"[清理日志] 已删除旧日志文件: {file_path}")
+                # 根据 use_timestamp 的值确定要删除的文件模式
+                if use_timestamp:
+                    # 带时间戳模式：删除所有以 log_prefix_ 开头的文件
+                    for filename in os.listdir(log_dir):
+                        if filename.startswith(f"{log_prefix}_") and filename.endswith(".log"):
+                            file_path = os.path.join(log_dir, filename)
+                            if os.path.isfile(file_path):
+                                os.remove(file_path)
+                                print(f"[清理日志] 已删除旧日志文件: {file_path}")
+                else:
+                    # 不带时间戳模式：只删除与当前日志文件同名的文件
+                    current_log_filename = f"{log_prefix}.log"
+                    file_path = os.path.join(log_dir, current_log_filename)
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+                        print(f"[清理日志] 已删除旧日志文件: {file_path}")
             except Exception as e:
                 print(f"[警告] 清除旧日志时发生错误: {e}")
 
@@ -203,10 +213,14 @@ if __name__ == "__main__":
         log_dir="./logs/testcase",
         log_prefix="mystatic",
         level=logging.INFO,
-        clear_old=False,
+        clear_old=True,  # 修改这里确保清除旧日志
         use_timestamp=False  # ✅ 关键：不加时间
     )
     info("app2", "这是不带时间戳的日志，文件名为 mystatic.log")
-
+    # 等待一些时间让日志写入
+    import time
+    time.sleep(2)
+    # 再次生成日志，验证是否清除旧日志
+    info("app2", "这是第二次不带时间戳的日志")
     close_logger("app1")
     close_logger("app2")
