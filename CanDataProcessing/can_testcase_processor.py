@@ -59,7 +59,8 @@ class TestCaseProcessor:
             log_dir="./logs/testcase",      # 日志保存路径
             log_prefix="testcase",          # 日志前缀名称
             level=logging.INFO,
-            clear_old = True
+            clear_old = True,
+            use_timestamp=False
         )
 
     # ----------------------------------------------------------------------
@@ -286,12 +287,12 @@ class TestCaseProcessor:
             if result["success"]:
                 # 合并报文信息为一行
                 mylog.info(self.logger_name, 
-                          f"          → 报文ID: {result['message_id']} | "
+                          f"          → 报文ID: {result['message_id_str']} | "
                           f"发送类型: {result['message_type']} | "
-                          f"周期时间: {result['cycle_time']}ms | "
-                          f"生成CAN数据: {result['can_data']}")
+                          f"周期时间: {result['cycle_time']} ms | "
+                          f"生成CAN数据: {result['can_data_str']}")
             else:
-                mylog.warning(self.logger_name, f"          → 信号解析失败: {result['message_id']}.{result['signal_name_en']}")
+                mylog.warning(self.logger_name, f"          → 信号解析失败: {result['message_id_str']}.{result['signal_name_en']}")
         except Exception as e:
             mylog.error(self.logger_name, f"          → 生成CAN数据失败: {e}")
 
@@ -340,5 +341,5 @@ class TestCaseProcessor:
 # ----------------------------------------------------------------------
 if __name__ == "__main__":
     
-    processor = TestCaseProcessor("TestcaseCollection/003_data.json")
+    processor = TestCaseProcessor("TestcaseCollection/005_data.json")
     processor.process()
