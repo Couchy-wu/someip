@@ -225,7 +225,7 @@ def wait_for_check_signal_received(
     signal_id: Union[int, str],
     expected_data_list: List[int],
     channel: int,
-    timeout: float = 5.0,
+    timeout: float = 3.0,
     check_interval: float = 0.1
 ) -> bool:
     """
@@ -884,7 +884,7 @@ def Send_Can_Signal(
             index=index,
             send_count=-1
         )
-        Enable_Auto_Can_Send(device_handle, 0)
+        Enable_Auto_Can_Send(device_handle, chn)
 
     elif signal_type == "CE":
         mylog.info("candata", f"事件周期信号: 先以 {event_cycle_ms_val} ms 间隔连发3帧，再以 {cycle_period_ms} ms 周期持续发送 0x{id:X}, 已为信号分配 index={index}")
