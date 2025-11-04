@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 from collections import deque
 import mylog
 import logging
-from typing import Union, Optional
+from typing import Union, Optional, List
 
 # 创建第一个日志：前缀为 "candata"
 LOG_PATH = "./logs/can"
@@ -168,7 +168,7 @@ def receive_thread(device_handle,chn_handle):
                         mylog.info("candata", f"[{msg.zcanfddata.timestamp}] CAN{msg.chnl} {can_type:<{CANType_width}}\t{direction} ID: {hex(can_id):<{id_width}}\t{frame_type} {frame_format}"
                         f" DLC: {frame.len}\tDATA(hex): {data}")
 
-# 检查是否接收到指定 ID 和 data 的信号 的接口
+# 检查是否接收到指定 ID 和 data 的信号
 def check_signal_received(signal_id, expected_data_list, channel):
     """
     检查是否接收到指定 ID 和 data 的信号（data 为字节列表）
@@ -196,7 +196,7 @@ def check_signal_received(signal_id, expected_data_list, channel):
     expected_data_list = [int(x) for x in expected_data_list]
 
     hex_expected_data = format_hex_bytes(expected_data_list)
-    mylog.info("candata", f"正在检查通道: {channel} 是否接收到信号: ID=0x{signal_id:X}, 数据={hex_expected_data}")
+    mylog.debug("candata", f"正在检查通道: {channel} 是否接收到信号: ID=0x{signal_id:X}, 数据={hex_expected_data}")
 
     with received_messages_lock:
         for msg in received_messages:
@@ -210,12 +210,56 @@ def check_signal_received(signal_id, expected_data_list, channel):
 
             # 如果指定了 channel，还需匹配通道
             if channel is not None:
-                # 注意：msg 中的 channel 需要你在缓存时保存
                 if msg.get('channel') != channel:
                     continue
+
+            # 完全匹配
             mylog.info("candata", f"成功检测到信号 0x{signal_id:X} 接收！")
             return True
-            mylog.warning("candata", f"未检测到信号 0x{signal_id:X} 接收！")
+
+    # 没找到匹配的消息 → 不打印任何日志
+    return False
+
+# 检查是否接收到指定 ID 和 data 的信号——支持超时等待
+def wait_for_check_signal_received(
+    signal_id: Union[int, str],
+    expected_data_list: List[int],
+    channel: int,
+    timeout: float = 5.0,
+    check_interval: float = 0.1
+) -> bool:
+    """
+    等待指定信号（ID + 数据 + 通道）在超时时间内被接收到
+
+    :param signal_id: CAN ID，如 0x123 或 "0x123"
+    :param expected_data_list: 期望的数据字节列表，如 [0x01, 0x00]
+    :param channel: 指定通道号（如 0 表示 CAN0）
+    :param timeout: 检查时间，单位：秒
+    :param check_interval: 每次检查间隔，单位：秒，默认 0.1 秒
+    :return: bool，是否在超时前成功接收到匹配信号
+    """
+    start_time = time.time()
+    end_time = start_time + timeout
+    def format_hex_bytes(data):
+        """将字节列表格式化为 0x01, 0x02 形式的列表字符串"""
+        return "[" + ", ".join(f"0x{x:02X}" for x in data) + "]"
+        
+    expected_data_list = [int(x) for x in expected_data_list]
+    hex_expected_data = format_hex_bytes(expected_data_list)
+    # 日志：开始等待
+    mylog.info("candata", f"开始等待信号: ID=0x{int(signal_id, 16) if isinstance(signal_id, str) else signal_id:X}, "
+                          f"数据={hex_expected_data}, 通道={channel}，等待时长: {timeout}s")
+
+    while time.time() < end_time:
+        # 调用原有的检查函数
+        if check_signal_received(signal_id, expected_data_list, channel):
+            return True  # 找到了，立即返回 True
+
+        # 小间隔休眠，避免过度占用 CPU
+        time.sleep(check_interval)
+
+    # 超时仍未收到
+    mylog.warning("candata", f"等待超时！未收到信号: ID=0x{signal_id:X}, 数据={hex_expected_data}, 通道={channel}")
     return False
 
 # 启动通道
@@ -882,12 +926,12 @@ if __name__ == "__main__":
     # Send_Can_Signal(device_handle, channel_handles[0], 0, 0, 0x200, data2, 'canfd', 'Cycle', cycle_ms=200, index = 1)
 
     # 发送事件周期信号：先每100ms发3帧，然后每1000ms持续发送
-    Send_Can_Signal(device_handle, channel_handles[0], 0, 0, 0x300, data3, 'canfd', 'CE', cycle_ms="100/1000", index = 2)
+    # Send_Can_Signal(device_handle, channel_handles[0], 0, 0, 0x300, data3, 'canfd', 'CE', cycle_ms="100/1000", index = 2)
 
 
     # 检查是否收到 ID 为 0x12d，数据为 [0x01, 0x00, 0x00, 0x00] 的帧
     time.sleep(2)
-    check_signal_received(0x300, data3, 0)
+    wait_for_check_signal_received(0x300, data3, 0)
 
     # 回车退出
     input()
