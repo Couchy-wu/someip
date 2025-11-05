@@ -380,7 +380,7 @@ def Send_Canfd(chn_handle, stdorext, id, data, round):
     # 确保数据长度不超过64字节（CANFD帧限制）
     if length > 64:
         with print_lock:
-            mylog.warning("candata", "警告：CAN数据长度为 %d，超过最大限制8字节，跳过发送。" % length)
+            mylog.warning("candata", "警告：CAN数据长度为 %d，超过最大限制64字节，跳过发送。" % length)
         return None 
     
     # 创建ZCAN_Transmit_Data数组
@@ -515,7 +515,7 @@ def Clear_Send_Task(device_handle,chn):
     "关闭发送任务 即关闭定时发送"
     ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/clear_auto_send", "0".encode("utf-8"))
     if ret != ZCAN_STATUS_OK:
-        mylog.error("candata", "Clear CH%d AutoSend failed!" % (chn))
+        mylog.warning("candata", "Clear CH%d AutoSend failed!" % (chn))
         exit(0)
 
 # CAN设备初始化函数
@@ -555,10 +555,10 @@ def Initialize_Canfd_Device(device_type=ZCAN_USBCANFD_200U, merge_receive=0):
     for i in range(can_number):  
         chn_handle = USBCANFD_Start(zcanlib, handle, i)
         if chn_handle is None:
-            mylog.error("candata", "启动通道%d失败！" % i)
+            mylog.error("candata", "启动通道%d失败!" % i)
             return None, None, None
         chn_handles.append(chn_handle)  # 将通道句柄添加到列表中
-        mylog.info("candata", f"打开通道{i}成功，通道句柄为: %d." % chn_handle)
+        mylog.info("candata", f"打开通道{i}成功, 通道句柄为: %d." % chn_handle)
     
     # 接收线程创建策略
     if merge_receive == 1:   #   若开启合并接收，所有通道都由一个接收线程处理
@@ -705,7 +705,7 @@ def Auto_Send_Can_Or_Canfd(device_handle, chn, stdorext, id, msg_type, data, sig
             time.sleep(total_delay) 
             Remove_Auto_Send_By_Index(device_handle, chn, msg_type, index)
             with print_lock:
-                mylog.info("candata", f"已停止发送 {msg_type.upper()} 信号：通道 0, ID=0x{id:X}, index={index}")
+                mylog.debug("candata", f"已停止发送 {msg_type.upper()} 信号：通道 0, ID=0x{id:X}, index={index}")
         threading.Thread(target=shutdown, daemon=True).start()
 
 # 关闭指定 index 的定时发送
@@ -773,7 +773,7 @@ def Send_Can_With_Dynamic_Interval(device_handle, chn_handle, chn, stdorext, id,
     # 导入将要定时持续发送的信息
     Auto_Send_Can_Or_Canfd(device_handle, chn, stdorext, id, msg_type, data, cycle_ms, index, send_count=-1)
     # 打印开始日志
-    mylog.info("candata", f"开始以 {event_cycle_ms}ms 频率连续发送 {event_count}帧 0x{id:X}")
+    mylog.debug("candata", f"开始以 {event_cycle_ms}ms 频率连续发送 {event_count}帧 0x{id:X}")
     # 手动连发帧
     event_cycle_s = event_cycle_ms/1000 # 单位转换成秒
     for i in range(event_count):
@@ -782,7 +782,7 @@ def Send_Can_With_Dynamic_Interval(device_handle, chn_handle, chn, stdorext, id,
     a = 1-event_cycle_s
     if a > 0:
         time.sleep(a)
-    mylog.info("candata", f"连续发送{event_count}帧已完成, 现在开始以 {cycle_ms} ms频率持续发送 0x{id:X}")
+    mylog.debug("candata", f"连续发送{event_count}帧已完成, 现在开始以 {cycle_ms} ms频率持续发送 0x{id:X}")
     Enable_Auto_Can_Send(device_handle, chn)
 
 # 通用信号发送接口，根据信号类型自动选择发送方式
@@ -860,7 +860,7 @@ def Send_Can_Signal(
 
     # === 执行发送逻辑 ===
     if signal_type == "EVENT":
-        mylog.info("candata", f"事件信号: 以 {event_cycle_ms_val} ms 间隔连发3帧 0x{id:X}, 已为信号分配 index={index}")
+        mylog.info("candata", f"在通道 {chn} 开始以 {event_cycle_ms_val} ms间隔连发3帧 0x{id:X} , 已为信号分配 index = {index}")
         Send_Can_Or_Canfd(
             chn_handle=chn_handle,
             stdorext=stdorext,
@@ -872,7 +872,7 @@ def Send_Can_Signal(
         )
 
     elif signal_type == "CYCLE":
-        mylog.info("candata", f"周期信号: 以 {cycle_period_ms} ms 周期持续发送 0x{id:X}, 已为信号分配 index={index}")
+        mylog.info("candata", f"在通道 {chn} 开始以 {cycle_period_ms} ms间隔定时发送 0x{id:X} , 已为信号分配 index = {index}")
         Auto_Send_Can_Or_Canfd(
             device_handle=device_handle,
             chn=chn,
@@ -887,7 +887,7 @@ def Send_Can_Signal(
         Enable_Auto_Can_Send(device_handle, chn)
 
     elif signal_type == "CE":
-        mylog.info("candata", f"事件周期信号: 先以 {event_cycle_ms_val} ms 间隔连发3帧，再以 {cycle_period_ms} ms 周期持续发送 0x{id:X}, 已为信号分配 index={index}")
+        mylog.info("candata", f"事件周期信号: 在通道 {chn} 先以 {event_cycle_ms_val} ms 间隔连发3帧,再以 {cycle_period_ms} ms 周期持续发送 0x{id:X}, 已为信号分配 index={index}")
         return Send_Can_With_Dynamic_Interval(
             device_handle=device_handle,
             chn_handle=chn_handle,
@@ -926,11 +926,10 @@ if __name__ == "__main__":
     # Send_Can_Signal(device_handle, channel_handles[0], 0, 0, 0x200, data2, 'canfd', 'Cycle', cycle_ms=200, index = 1)
 
     # 发送事件周期信号：先每100ms发3帧，然后每1000ms持续发送
-    # Send_Can_Signal(device_handle, channel_handles[0], 0, 0, 0x300, data3, 'canfd', 'CE', cycle_ms="100/1000", index = 2)
+    Send_Can_Signal(device_handle, channel_handles[0], 0, 0, 0x300, data3, 'canfd', 'CE', cycle_ms="100/1000", index = 2)
 
 
     # 检查是否收到 ID 为 0x12d，数据为 [0x01, 0x00, 0x00, 0x00] 的帧
-    time.sleep(2)
     wait_for_check_signal_received(0x300, data3, 0)
 
     # 回车退出
