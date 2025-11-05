@@ -330,6 +330,8 @@ if __name__ == "__main__":
     data1 = create_can_data_by_signal('1EF', 'RF_Window_Action_Request_S', 1)
     data2 = create_can_data_by_signal('12D', 'BCMPower_Gear_12D_S', 3)
     data3 = create_can_data_by_signal('496', 'Emitting_Function_S', 1)
+    data4 = create_can_data_by_signal('144', 'Left_Turn_Indicator_144_S', 1)
+
     print(data1["can_data"])
     print(data1["can_data_str"])
     print(data1["message_id"])
@@ -339,8 +341,3 @@ if __name__ == "__main__":
     print(data1["signal_name_en"])
     print(data1["enum_value"])
 
-
-    # print(data2["can_data"])
-    # print(data3["can_data"])
-    # print(data2["can_data_str"])
-    # print(data3["can_data_str"])

@@ -289,5 +289,5 @@ class TestCaseProcessor:
 # ----------------------------------------------------------------------
 if __name__ == "__main__":
     
-    processor = TestCaseProcessor("TestcaseCollection/005_data.json")
+    processor = TestCaseProcessor("TestcaseCollection/001_data.json")
     processor.process()

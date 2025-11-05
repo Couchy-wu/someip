@@ -13,6 +13,7 @@ import GuiFunction.matrix_to_csv
 import GuiFunction.binhex_gui
 from OtherGui.test_can_gui import CANFDGUI
 
+
 # 创建主窗口
 root = tk.Tk()
 root.title("主窗口")
@@ -70,8 +71,8 @@ file_menu.grid(row=0, column=2, padx=20, pady=20)
 file_updater.initialize_menu(selected_file, file_menu)
 
 # 更新按钮命令
-upload_button.config(command=lambda: file_updater.on_upload(selected_file, file_menu))
-delete_button.config(command=lambda: file_updater.on_delete(selected_file, file_menu))
+# upload_button.config(command=lambda: file_updater.on_upload(selected_file, file_menu))
+# delete_button.config(command=lambda: file_updater.on_delete(selected_file, file_menu))
 
 # 创建“查看用例”按钮
 view_button = tk.Button(
