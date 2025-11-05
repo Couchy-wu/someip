@@ -1,10 +1,17 @@
+import sys
 import os
+# 获取当前文件所在的目录
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# 将该目录加入模块搜索路径
+sys.path.append(current_dir)
+
 import shutil
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import json
 import pandas as pd
 import numpy as np   # 用于识别 NaN
+from can_testcase_processor import TestCaseProcessor
 
 # 函数：上传测试用例 Excel 文件
 def handle_file_upload():
@@ -79,6 +86,7 @@ def refresh_json_file(uploaded_file=None):
     - 生成/更新 `test_cases.json`（仅保存目录下所有 Excel 文件名）。
     - 若提供 `uploaded_file`，读取该 Excel，按每 4 行分组并写入
       `<excel_name>_data.json`，其中所有 NaN 均被写成 JSON 的 null。
+    - 新增：自动调用 can_testcase_processor.py 解析生成的 JSON 文件
     """
     target_folder = os.path.join(os.getcwd(), "TestcaseCollection")
     json_file = os.path.join(target_folder, "test_cases.json")
@@ -95,7 +103,7 @@ def refresh_json_file(uploaded_file=None):
         json.dump(file_list, f, indent=4, ensure_ascii=False)
 
     # -------------------------------------------------
-    # 2️⃣ 若有上传文件，则生成对应的 *_data.json
+    # 2️⃣ 若有上传文件，则生成对应的 *_data.json 并解析
     # -------------------------------------------------
     if uploaded_file:
         excel_path = os.path.join(target_folder, uploaded_file)
@@ -136,6 +144,15 @@ def refresh_json_file(uploaded_file=None):
                 json.dump(grouped_data, f, indent=4, ensure_ascii=False)
 
             print(f"生成分组 JSON 文件: {json_output_path}")
+
+            # 新增：调用 can_testcase_processor.py 解析该 JSON 文件
+            try:
+                print(f"正在解析生成的测试用例文件: {json_output_path}")
+                processor = TestCaseProcessor(json_file_path=json_output_path)
+                processor.process()
+                print(f"解析完成: {json_output_path}")
+            except Exception as e:
+                print(f"解析测试用例时出错: {str(e)}")
 
         except Exception as e:
             print(f"处理文件 {uploaded_file} 时出错: {str(e)}")

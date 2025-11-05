@@ -6,11 +6,8 @@ import json
 import time
 import re
 from typing import List, Dict, Any, Tuple, Optional
-from find_can_from_csv import create_can_data_by_signal
+from CanDataProcessing.find_can_from_csv import create_can_data_by_signal
 import logging
-import can_control
-
-ENABLE_CAN_DEVICE = True    # 是否启用 CAN 功能
 
 class TestCaseProcessor:
     """
@@ -46,12 +43,7 @@ class TestCaseProcessor:
         self.total_cases = 0          # 总用例数
         self.processed_count = 0      # 已处理用例数
 
-        # CAN 设备相关实例变量
-        self.device_handle = None
-        self.channel_handles = None
-        self.receive_threads = None
-        self.chn = 0
-        self._can_initialized = False  # 标记是否已初始化 CAN 设备
+
 
         # 初始化日志器，确保日志目录和配置已就绪
         mylog.setup_logger(
@@ -67,26 +59,20 @@ class TestCaseProcessor:
     # 入口 & 文件读取
     # ----------------------------------------------------------------------
     def process(self) -> None:
-        """遍历所有用例，逐条处理，并控制 CAN 设备启停"""
+        """遍历所有用例，逐条处理（已移除 CAN 设备初始化/关闭）"""
         data = self._load_json_data()
         if not data:
             return
 
         self.total_cases = len(data)
 
-        # === 在处理第一个用例之前初始化 CAN 设备 ===
-        if ENABLE_CAN_DEVICE and not self._can_initialized:
-            self._initialize_can_device()
-            self._can_initialized = True
+        # === 已移除 CAN 初始化 ===
 
         # 开始处理每个用例
         for idx, case in enumerate(data):
             self._process_single_case(case, idx + 1)
 
-        # === 所有用例处理完成后关闭 CAN 设备 ===
-        if ENABLE_CAN_DEVICE and self._can_initialized:
-            self._close_can_device()
-
+        # === 已移除 CAN 关闭 ===
 
     def _load_json_data(self) -> Optional[List[Dict[str, Any]]]:
         """
@@ -221,7 +207,7 @@ class TestCaseProcessor:
             for func, args in calls:
                 mylog.info(self.logger_name, f"          {func}({args})")
 
-                # 仅对 "输出" 和 "采集" 生成 CAN 数据
+                # 仅对 "输出" 和 "采集" 生成 CAN 数据（如果未来需要保留生成日志，可保留此块）
                 if func in {"输出", "采集"}:
                     self._generate_can_data_from_call(func, args)
 
@@ -295,44 +281,6 @@ class TestCaseProcessor:
                 mylog.warning(self.logger_name, f"          → 信号解析失败: {result['message_id_str']}.{result['signal_name_en']}")
         except Exception as e:
             mylog.error(self.logger_name, f"          → 生成CAN数据失败: {e}")
-
-    def _initialize_can_device(self):
-        """在第一个用例处理完成后初始化 CAN 设备"""
-        if not ENABLE_CAN_DEVICE:
-            mylog.info(self.logger_name, "CAN设备功能已禁用（ENABLE_CAN_DEVICE=False），跳过初始化。")
-            return
-
-        mylog.info(self.logger_name, "正在加载 CAN 设备配置并初始化...")
-        
-        config = can_control.load_config("CanDataProcessing/can_device_config.xml")
-        device_type_str = config["device_type"]
-        device_type = can_control.DEVICE_TYPE_MAP.get(device_type_str)
-        merge_receive = config["merge_receive"]
-        self.chn = config["chn"]
-
-        mylog.info("candata", f"使用通道: {self.chn}, 设备类型: {device_type_str}, 合并接收: {merge_receive}")
-
-        # 初始化设备
-        self.device_handle, self.channel_handles, self.receive_threads = can_control.Initialize_Canfd_Device(
-            device_type=device_type,
-            merge_receive=merge_receive
-        )
-
-
-    def _close_can_device(self):
-        """在所有用例处理完成后关闭 CAN 设备"""
-        if not ENABLE_CAN_DEVICE:
-            return
-
-        if self.device_handle is not None:
-            mylog.info(self.logger_name, "正在关闭 CAN FD 设备...")
-            try:
-                can_control.Close_Canfd_Device(self.device_handle, self.channel_handles, self.receive_threads)
-                mylog.info(self.logger_name, "CAN FD 设备已成功关闭。")
-            except Exception as e:
-                mylog.error(self.logger_name, f"关闭 CAN 设备失败: {e}")
-        else:
-            mylog.warning(self.logger_name, "尝试关闭 CAN 设备，但设备句柄为空。")
 
 
 
