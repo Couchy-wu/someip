@@ -248,7 +248,7 @@ def wait_for_check_signal_received(
     hex_expected_data = format_hex_bytes(expected_data_list)
     # 日志：开始等待
     mylog.info("candata", f"开始等待信号: ID=0x{int(signal_id, 16) if isinstance(signal_id, str) else signal_id:X}, "
-                          f"数据={hex_expected_data}, 通道={channel}，等待时长: {timeout}s")
+                          f"数据={hex_expected_data}, 通道={channel}, 等待时长: {timeout} s")
 
     while time.time() < end_time:
         # 调用原有的检查函数

@@ -58,6 +58,20 @@ class CANFDGUI:
         )
         self.sub_btn.grid(row=0, column=2, pady=5, padx=450, sticky='ew')
 
+        # 按键：发送信号
+        self.send_btn = tk.Button(
+            root,
+            text="发送信号",
+            font=("微软雅黑", 12),
+            bg="#F0AD4E",
+            fg="white",
+            activebackground="#EB983F",
+            state=tk.DISABLED,
+            command=self.start_send_signal
+        )
+        self.send_btn.grid(row=1, column=0, pady=5, padx=10, sticky='ew')
+
+
 
     # --------------------- CAN设备初始化 ---------------------
     def start_init(self):
@@ -86,8 +100,9 @@ class CANFDGUI:
             self.init_btn.config(state=tk.NORMAL)
             messagebox.showerror("错误", "CANFD 设备初始化失败！")
         else:
-            # 成功后让“关闭设备”按钮可用
+            # 成功后让“关闭设备”等按钮可用
             self.close_btn.config(state=tk.NORMAL)
+            self.send_btn.config(state=tk.NORMAL)
 
     # --------------------- CAN设备关闭 ---------------------
     def start_close(self):
@@ -112,6 +127,40 @@ class CANFDGUI:
         """关闭结束后的 UI 更新"""
         self.init_btn.config(state=tk.NORMAL)       # 重新允许初始化
         self.close_btn.config(state=tk.DISABLED)    # 关闭按钮保持不可用
+        self.send_btn.config(state=tk.DISABLED)     # 禁用发送
+
+    
+    #----------------------CAN信号发送---------------------------
+    def start_send_signal(self):
+        self.send_btn.config(state=tk.DISABLED)
+        threading.Thread(target=self.send_can_signal, daemon=True).start()
+
+    def send_can_signal(self):
+        try:
+            if self.handle is None or self.chn_handles is None:
+                raise Exception("设备未初始化，无法发送信号！")
+            device_handle = self.chn_handles[0]
+            chn_handles = self.chn_handles[0]
+            can_control.Send_Can_Signal(
+                device_handle=device_handle,
+                chn_handle=chn_handles,
+                chn=0,
+                stdorext=0,
+                id=0x12D,
+                data=[0x00, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00],
+                msg_type='canfd',
+                signal_type='Cycle',
+                cycle_ms=50,
+                index=1
+            )
+            self.root.after(0, lambda: messagebox.showinfo("成功", "CANFD 信号已启动发送（周期50ms）"))
+        except Exception as e:
+            error_msg = str(e)
+            self.root.after(0, lambda: messagebox.showerror("发送失败", error_msg))
+        finally:
+            self.root.after(0, lambda: self.send_btn.config(state=tk.NORMAL))
+
+
     
     # --------------------- can设备设置子窗口 ---------------------
     def open_subwindow(self):
@@ -131,11 +180,11 @@ class CANFDGUI:
         # 设置关闭事件回调
         self.sub_window.protocol("WM_DELETE_WINDOW", self._on_subwindow_close)
 
-        # --------------------- 加载配置（优先使用XML中的值）---------------------
+        # --------------------- 本地实现：加载配置 ---------------------
         config_file = "CanDataProcessing/can_device_config.xml"
-        config = can_control.load_config(config_file)  # 调用 load_config
+        config = self._local_load_config(config_file)  # 使用本地函数读取 XML
 
-        # # 设置默认值（若未读取到）
+        # 设置默认值（若未读取到）
         device_default = config["device_type"] if config else "ZCAN_USBCANFD_200U"
         merge_default = config["merge_receive"] if config else 0
         transmit_type_value = config["transmit_type"] if config else 2
@@ -174,11 +223,7 @@ class CANFDGUI:
         # 映射：显示文本 → 实际值
         self.merge_display_to_value = {"不启用": 0, "启用": 1}
         self.merge_value_to_display = {0: "不启用", 1: "启用"}
-
-        # 当前默认值（来自配置）转为显示文本
         current_merge_display = self.merge_value_to_display.get(merge_default, "不启用")
-
-        # 使用 StringVar 接收显示文本
         self.merge_display_var = tk.StringVar(value=current_merge_display)
         merge_combobox = ttk.Combobox(
             frame,
@@ -205,7 +250,7 @@ class CANFDGUI:
 
         # --- 4. 选择通道 ---
         tk.Label(frame, text="选择通道:", font=("微软雅黑", 10)).grid(row=3, column=0, sticky='w', pady=10)
-        self.chn_var = tk.StringVar(value=str(chn_default))  # 显示用 str，内部用 int
+        self.chn_var = tk.StringVar(value=str(chn_default))
         chn_combobox = ttk.Combobox(
             frame,
             textvariable=self.chn_var,
@@ -242,6 +287,29 @@ class CANFDGUI:
                 pass
             self.sub_window = None
         self.sub_btn.config(state=tk.NORMAL)
+
+    # 加载 XML 配置
+    def _local_load_config(self, config_file):
+        """本地实现：从 XML 文件读取配置，不依赖 can_control 模块"""
+        import os
+        import xml.etree.ElementTree as ET
+
+        if not os.path.exists(config_file):
+            return None  # 文件不存在则返回 None，使用默认值
+
+        try:
+            tree = ET.parse(config_file)
+            root = tree.getroot()
+            config = {
+                "device_type": root.find("device_type").text.strip() if root.find("device_type") is not None else "ZCAN_USBCANFD_200U",
+                "merge_receive": int(root.find("merge_receive").text.strip()) if root.find("merge_receive") is not None else 0,
+                "transmit_type": int(root.find("transmit_type").text.strip()) if root.find("transmit_type") is not None else 2,
+                "chn": root.find("chn").text.strip() if root.find("chn") is not None else "0"
+            }
+            return config
+        except Exception as e:
+            print(f"警告：解析 XML 配置失败，使用默认值。错误：{e}")
+            return None
 
     # 将用户选择保存到 XML 配置文件
     def save_config_to_xml(self, device_type, merge_receive, transmit_type_str, chn_str):

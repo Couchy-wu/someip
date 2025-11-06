@@ -164,7 +164,7 @@
 				</meta>
 			</auto_send>
 			<auto_send_canfd flag="0x0035">
-				<value>1</value>
+				<value>0</value>
 				<meta>
 					<visible>false</visible>
 					<type>string</type>
@@ -624,7 +624,7 @@
 				</meta>
 			</auto_send>
 			<auto_send_canfd flag="0x0135">
-				<value>1</value>
+				<value>0</value>
 				<meta>
 					<visible>false</visible>
 					<type>string</type>
