@@ -13,14 +13,24 @@ import GuiFunction.matrix_to_csv
 import GuiFunction.binhex_gui
 from OtherGui.test_can_gui import CANFDGUI
 
+# 重定向输出类
+class TextRedirector:
+    def __init__(self, widget):
+        self.widget = widget
+
+    def write(self, string):
+        self.widget.insert(tk.END, string)
+        self.widget.see(tk.END)  # 自动滚动到底部
+        self.widget.update_idletasks()  # 强制刷新
+
+    def flush(self):
+        pass  # 兼容性方法，标准输出需要
+
 
 # 创建主窗口
 root = tk.Tk()
 root.title("主窗口")
-root.geometry("800x600")
-
-# 定义一个的字体
-bold_font = tkfont.Font(family="微软雅黑", size=10, weight="normal")
+root.geometry("1200x600") 
 
 # 初始化文件更新器
 file_updater = FileUpdater()
@@ -34,6 +44,43 @@ image_handler = ImageHandler(root)
 
 # 初始化 VideoProcessor
 video_processor = VideoProcessor(root)  # 传入主窗口
+
+# 自定义字体
+bold_font = tkfont.Font(family="微软雅黑", size=10, weight="normal")
+
+# 创建右侧文本框
+log_frame = tk.Frame(root)
+log_frame.grid(row=0, column=4, rowspan=5, padx=10, pady=10, sticky="nsew")
+
+# 创建文本框
+log_text = tk.Text(
+    log_frame,
+    wrap=tk.WORD,
+    bg="#FFFFFF",          # 背景
+    fg="#000000",          # 文字
+    insertbackground="black",  # 光标颜色
+    font=tkfont.Font(family="微软雅黑", size=10, weight="normal"),      # 字体
+    height=20,
+    width=35
+)
+log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+# 创建垂直滚动条
+scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=log_text.yview)
+scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+# 关联文本框与滚动条
+log_text.config(yscrollcommand=scrollbar.set)
+
+# 重定向 stdout
+import sys
+sys.stdout = TextRedirector(log_text)
+
+# 配置行列权重（确保文本框和滚动条随窗口缩放）
+root.grid_rowconfigure(0, weight=1)
+root.grid_rowconfigure(1, weight=1)
+root.grid_rowconfigure(2, weight=1)
+root.grid_columnconfigure(4, weight=1)  # 第4列可伸展
 
 # 创建“上传测试用例”按钮
 upload_button = tk.Button(
