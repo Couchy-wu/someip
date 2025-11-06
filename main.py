@@ -6,6 +6,7 @@ from GuiFunction.file_updater import FileUpdater
 from GuiFunction.file_handler import handle_file_upload
 from GuiFunction.delete_handler import delete_test_case
 from GuiFunction.view_case_handler import ViewCaseHandler
+from GuiFunction.view_case_processor import LogViewer
 from GuiFunction.image_handler import ImageHandler
 from GuiFunction.video_processor import VideoProcessor
 import GuiFunction.image_player  # 导入 image_player 模块
@@ -39,6 +40,12 @@ selected_file = tk.StringVar()
 # 初始化查看用例处理器
 view_case_handler = ViewCaseHandler(selected_file)
 
+# 初始化查看用例处理器
+view_case_handler = ViewCaseHandler(selected_file)
+
+# 初始化测试用例解析出来的日志的查看器
+log_viewer = LogViewer(selected_file)
+
 # 初始化 ImageHandler
 image_handler = ImageHandler(root)
 
@@ -50,7 +57,7 @@ bold_font = tkfont.Font(family="微软雅黑", size=10, weight="normal")
 
 # 创建右侧文本框
 log_frame = tk.Frame(root)
-log_frame.grid(row=0, column=4, rowspan=5, padx=10, pady=10, sticky="nsew")
+log_frame.grid(row=0, column=5, rowspan=5, padx=10, pady=10, sticky="nsew")     # 第row+1行，第column+1列，跨越rowspan行，
 
 # 创建文本框
 log_text = tk.Text(
@@ -77,10 +84,10 @@ import sys
 sys.stdout = TextRedirector(log_text)
 
 # 配置行列权重（确保文本框和滚动条随窗口缩放）
-root.grid_rowconfigure(0, weight=1)
-root.grid_rowconfigure(1, weight=1)
-root.grid_rowconfigure(2, weight=1)
-root.grid_columnconfigure(4, weight=1)  # 第4列可伸展
+grid_rowconfigure_number = 5
+for i in range(grid_rowconfigure_number):
+    root.grid_rowconfigure(i, weight=1)
+root.grid_columnconfigure(grid_rowconfigure_number, weight=1)
 
 # 创建“上传测试用例”按钮
 upload_button = tk.Button(
@@ -134,6 +141,20 @@ view_button = tk.Button(
     height=2
 )
 view_button.grid(row=0, column=3, padx=20, pady=20)
+
+# 创建“查看解析”按钮
+inspect_button = tk.Button(
+    root,
+    text="查看解析",
+    bg="#4A90E2",
+    font=bold_font,
+    fg="white",
+    activebackground="#357ABD",
+    command=log_viewer.view_log,
+    width=15,
+    height=2
+)
+inspect_button.grid(row=0, column=4, padx=20, pady=20)
 
 # 添加“打开图片”按钮
 image_button = tk.Button(
