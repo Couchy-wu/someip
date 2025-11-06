@@ -17,13 +17,8 @@ import mylog, logging
 
 def handle_file_upload():
     """
-    实现测试用例 Excel 文件的上传流程：
-    1. 用户选择原始文件；
-    2. 提示用户重命名并指定保存路径；
-    3. 将文件复制到 TestcaseCollection 目录；
-    4. 调用 refresh_json_file 生成对应的 JSON 和日志文件；
-    5. 所有步骤成功后统一提示“上传成功”。
-    返回值：成功时返回目标文件名（不含路径），失败返回 None。
+    只负责把用户选中的 Excel 复制到 TestcaseCollection 并返回目标文件名。
+    解析、生成 JSON、日志等交给调用方（FileUpdater）完成。
     """
     # 选择原始 Excel 文件
     file_path = filedialog.askopenfilename(
@@ -40,8 +35,7 @@ def handle_file_upload():
 
     # 确保目标文件夹存在
     target_folder = os.path.join(os.getcwd(), "TestcaseCollection")
-    if not os.path.exists(target_folder):
-        os.makedirs(target_folder)
+    os.makedirs(target_folder, exist_ok=True)
 
     # 获取原文件名，让用户输入新文件名（带路径）
     file_name = os.path.basename(file_path)
@@ -56,44 +50,21 @@ def handle_file_upload():
 
     # 规范化路径并进行基本校验
     target_path = os.path.normpath(new_file_name)
-
-    # 检查是否与原路径相同
     if target_path == os.path.normpath(file_path):
         messagebox.showerror("错误", "目标路径与原文件路径相同，请选择不同的位置")
         return None
-
-    # 确保目标目录存在
-    target_folder = os.path.dirname(target_path)
-    if not os.path.exists(target_folder):
-        os.makedirs(target_folder)
-
-    # 防止文件名重复
-    if os.path.basename(new_file_name) in os.listdir(target_folder):
+    if os.path.basename(target_path) in os.listdir(os.path.dirname(target_path)):
         messagebox.showerror("错误", "文件名称重复，无法上传")
         return None
-
-    # 检查文件名是否为空
     if not os.path.basename(target_path):
         messagebox.showerror("错误", "文件名不能为空")
         return None
 
     # 执行文件复制和后续处理
     try:
-        # 复制文件到目标路径
         shutil.copy(file_path, target_path)
-        print(f"文件已复制到：{target_path}")
-
-        # 生成对应的 JSON 和日志文件
-        try:
-            refresh_json_file(uploaded_file=os.path.basename(target_path))
-        except Exception as e:
-            messagebox.showerror("生成错误", f"文件已复制，但生成 JSON/LOG 失败：{e}")
-            return None
-
-        # 全部成功后显示统一提示
-        messagebox.showinfo("上传成功", "文件已成功上传，并成功解析")
+        messagebox.showinfo("上传成功", "文件已成功复制")
         return os.path.basename(target_path)
-
     except Exception as e:
         messagebox.showerror("错误", f"文件上传失败：{str(e)}")
         return None
@@ -101,8 +72,7 @@ def handle_file_upload():
 
 def _replace_nan(obj):
     """
-    递归地将对象中的 np.nan 替换为 None，以便正确序列化为 JSON 中的 null。
-    支持嵌套的字典和列表结构。
+    将 np.nan 替换为 None，支持嵌套字典和列表，便于 JSON 序列化。
     """
     if isinstance(obj, dict):
         return {k: _replace_nan(v) for k, v in obj.items()}
@@ -115,9 +85,9 @@ def _replace_nan(obj):
 
 def refresh_json_file(uploaded_file=None):
     """
-    更新测试用例元数据文件 test_cases.json，并在上传新文件时：
-    - 读取 Excel 文件，按每 4 行分组生成 <filename>_data.json；
-    - 使用 TestCaseProcessor 解析该 JSON，并将日志输出至同名 .log 文件。
+    更新 test_cases.json 文件，并在上传新文件时：
+    - 将 Excel 按每4行分组生成 <filename>_data.json；
+    - 使用 TestCaseProcessor 解析该 JSON，日志输出至同名 .log。
     """
     target_folder = os.path.join(os.getcwd(), "TestcaseCollection")
     json_file = os.path.join(target_folder, "test_cases.json")

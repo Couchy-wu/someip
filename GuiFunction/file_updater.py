@@ -33,9 +33,16 @@ class FileUpdater:
 
     # 上传后处理
     def on_upload(self, menu_var, option_menu):
-        uploaded_file = handle_file_upload()
+        """
+        1. 调用 handle_file_upload() 完成文件复制；
+        2. 若复制成功，调用一次 refresh_json_file() 进行解析；
+        3. 最后刷新下拉菜单。
+        """
+        uploaded_file = handle_file_upload()          # 只会返回文件名，或 None
         if uploaded_file:
-            refresh_json_file(uploaded_file)  # 仅处理上传的文件
+            # 只在这里调用一次解析
+            refresh_json_file(uploaded_file)          # 处理单个上传的文件
+        # 不管成功与否，都尝试刷新下拉列表（若列表为空会显示 “无文件”）
         self.refresh_file_list(menu_var, option_menu)
 
     # 删除后处理
