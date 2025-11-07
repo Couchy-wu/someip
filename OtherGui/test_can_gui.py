@@ -16,6 +16,11 @@ class CANFDGUI:
         self.root.geometry("800x600")
         self.sub_window = None  # 用于跟踪子窗口是否存在
 
+        # 用来保存初始化返回的句柄、通道列表、线程列表
+        self.device_handle = None            # 设备句柄
+        self.channel_handles = None       # 通道句柄
+        self.receive_threads = None           # 接收线程列表        
+
         # 按键：设备初始化按键
         self.init_btn = tk.Button(
             root,
@@ -40,11 +45,6 @@ class CANFDGUI:
             command=self.start_close,
         )
         self.close_btn.grid(row=0, column=1, pady=5, padx=10, sticky='ew')
-
-        # 用来保存初始化返回的句柄、通道列表、线程列表
-        self.handle = None
-        self.chn_handles = None
-        self.threads = None
 
         # 按键：设备管理
         self.sub_btn = tk.Button(
@@ -71,8 +71,6 @@ class CANFDGUI:
         )
         self.send_btn.grid(row=1, column=0, pady=5, padx=10, sticky='ew')
 
-
-
     # --------------------- CAN设备初始化 ---------------------
     def start_init(self):
         """点击“初始化设备”后，启动子线程执行真正的初始化逻辑"""
@@ -81,21 +79,21 @@ class CANFDGUI:
 
     def init_device(self):
         """调用初始化函数并保存返回值"""
-        handle, chn_handles, threads = can_control.Initialize_Canfd_Device(
+        device_handle, channel_handles, receive_threads = can_control.Initialize_Canfd_Device(
             device_type=can_control.ZCAN_USBCANFD_200U,
             merge_receive=0,
         )
         # 保存返回值，后面关闭时会用到
-        self.handle = handle
-        self.chn_handles = chn_handles
-        self.threads = threads
+        self.device_handle = device_handle
+        self.channel_handles = channel_handles
+        self.receive_threads = receive_threads
 
         # 回到主线程更新 UI
         self.root.after(0, self._post_init)
 
     def _post_init(self):
         """初始化结束后的 UI 更新"""
-        if self.handle is None:
+        if self.device_handle is None:
             # 初始化失败，恢复“初始化设备”按钮
             self.init_btn.config(state=tk.NORMAL)
             messagebox.showerror("错误", "CANFD 设备初始化失败！")
@@ -112,13 +110,13 @@ class CANFDGUI:
 
     def close_device(self):
         """调用关闭can设备函数,并在完成后恢复 UI 状态"""
-        if self.handle is not None:
-            can_control.Close_Canfd_Device(self.handle, self.chn_handles, self.threads)
+        if self.device_handle is not None:
+            can_control.Close_Canfd_Device(self.device_handle, self.channel_handles, self.receive_threads)
 
         # 关闭后清理内部状态
-        self.handle = None
-        self.chn_handles = None
-        self.threads = None
+        self.device_handle = None
+        self.channel_handles = None
+        self.receive_threads = None
 
         # 回到主线程更新 UI
         self.root.after(0, self._post_close)
@@ -127,7 +125,7 @@ class CANFDGUI:
         """关闭结束后的 UI 更新"""
         self.init_btn.config(state=tk.NORMAL)       # 重新允许初始化
         self.close_btn.config(state=tk.DISABLED)    # 关闭按钮保持不可用
-        self.send_btn.config(state=tk.DISABLED)     # 禁用发送
+        self.send_btn.config(state=tk.DISABLED)     # 发送按键保持不可用
 
     
     #----------------------CAN信号发送---------------------------
@@ -137,13 +135,13 @@ class CANFDGUI:
 
     def send_can_signal(self):
         try:
-            if self.handle is None or self.chn_handles is None:
+            if self.device_handle is None or self.channel_handles is None:
                 raise Exception("设备未初始化，无法发送信号！")
-            device_handle = self.chn_handles[0]
-            chn_handles = self.chn_handles[0]
+            device_handle = self.device_handle         
+            channel_handles = self.channel_handles[0]
             can_control.Send_Can_Signal(
                 device_handle=device_handle,
-                chn_handle=chn_handles,
+                chn_handle=channel_handles,
                 chn=0,
                 stdorext=0,
                 id=0x12D,
@@ -153,16 +151,15 @@ class CANFDGUI:
                 cycle_ms=50,
                 index=1
             )
-            self.root.after(0, lambda: messagebox.showinfo("成功", "CANFD 信号已启动发送（周期50ms）"))
+            print("can信号发送成功!") 
         except Exception as e:
             error_msg = str(e)
-            self.root.after(0, lambda: messagebox.showerror("发送失败", error_msg))
+            print(f"can信号发送失败: {error_msg}") 
         finally:
             self.root.after(0, lambda: self.send_btn.config(state=tk.NORMAL))
 
 
-    
-    # --------------------- can设备设置子窗口 ---------------------
+    # --------------------- can设备管理子窗口 ---------------------
     def open_subwindow(self):
         """打开子窗口，限制只能打开一个"""
         if self.sub_window is not None and self.sub_window.winfo_exists():
@@ -180,7 +177,7 @@ class CANFDGUI:
         # 设置关闭事件回调
         self.sub_window.protocol("WM_DELETE_WINDOW", self._on_subwindow_close)
 
-        # --------------------- 本地实现：加载配置 ---------------------
+        # 加载配置
         config_file = "CanDataProcessing/can_device_config.xml"
         config = self._local_load_config(config_file)  # 使用本地函数读取 XML
 
