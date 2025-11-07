@@ -271,9 +271,10 @@ class TestCaseProcessor:
         try:
             result = create_can_data_by_signal(message_id, signal_name_en, enum_value)
             if result["success"]:
-                # 合并报文信息为一行
+                # 根据 func 类型区分输出或采集
+                prefix = "输出" if func == "输出" else "采集"
                 mylog.info(self.logger_name, 
-                          f"          → 报文ID: {result['message_id_str']} | "
+                          f"          → {prefix}CAN报文 ID: {result['message_id_str']} | "
                           f"发送类型: {result['message_type']} | "
                           f"周期时间: {result['cycle_time']} ms | "
                           f"生成CAN数据: {result['can_data_str']}")
