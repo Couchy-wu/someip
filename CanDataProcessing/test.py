@@ -4,9 +4,13 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 import re
 import time
 import can_control
+import mylog
+import logging
 
+ENABLE_AUTO_OPEN_CLOSE_CAN = True  # 是否自动开关CAN设备
 
-ENABLE_AUTO_OPEN_CLOSE_CAN = True  # 是否每次解析前后自动开关CAN设备
+# 全局 logger 名称（统一使用一个日志文件）
+LOGGER_NAME = "parser"
 
 
 class LogParser:
@@ -17,21 +21,37 @@ class LogParser:
         """
         self.log_path = log_path
         self.log_content = ""
-        self.test_cases = []  # 存储解析出的测试用例块
+        self.test_cases = []
+
+        # 初始化统一的日志器（延迟创建文件）
+        mylog.setup_logger(
+            logger_name=LOGGER_NAME,
+            log_dir="./logs",
+            log_prefix="parser",
+            level=mylog.logging.INFO,
+            clear_old=False,          # 设为 True 可自动清理旧日志
+            use_timestamp=True,       # 文件名带时间戳
+            show_prefix=True          # 显示时间与日志级别
+        )
+
+        # 定义日志函数快捷方式
+        self.log = lambda msg: mylog.info(LOGGER_NAME, msg)
+        self.error = lambda msg: mylog.error(LOGGER_NAME, msg)
 
     def load_log(self):
         """加载日志文件内容"""
         if not os.path.exists(self.log_path):
-            raise FileNotFoundError(f"日志文件未找到: {self.log_path}")
+            error_msg = f"日志文件未找到: {self.log_path}"
+            self.error(error_msg)
+            raise FileNotFoundError(error_msg)
 
         with open(self.log_path, 'r', encoding='utf-8') as file:
             self.log_content = file.read()
-            print("文件加载成功！")
+        self.log("文件加载成功！")
 
     def split_test_cases(self):
         """根据日志中的用例分隔符拆分测试用例"""
-        print("\n开始处理用例")
-        # 使用正则匹配每个用例的开始标志
+        self.log("开始处理用例")
         case_pattern = r"=== 开始处理 用例 ([A-Z0-9_]+) ==="
         matches = list(re.finditer(case_pattern, self.log_content))
 
@@ -46,6 +66,7 @@ class LogParser:
                 'id': case_id,              # id: 每个测试用例的唯一标识符
                 'content': case_block       # content：  每个测试用例的具体内容
             })
+        self.log(f"共拆分出 {len(self.test_cases)} 个测试用例。")
 
     def has_script_result(self, case_content):
         """
@@ -59,77 +80,74 @@ class LogParser:
     def parse_all_cases(self):
         """依次解析所有测试用例"""
         if not self.test_cases:
-            print("未检测到任何测试用例，请先调用 split_test_cases() 方法。")
+            self.log("未检测到任何测试用例，请先调用 split_test_cases() 方法。")
             return
     
         # 如果开关打开，在解析前打开 CAN 设备
         if ENABLE_AUTO_OPEN_CLOSE_CAN:
-            device_handle, channel_handles, receive_threads = can_control.Initialize_Canfd_Device(
-                device_type=can_control.ZCAN_USBCANFD_200U,
-                merge_receive=0
-            )
-            print("CAN设备已开启")
-            # 将设备句柄存入实例，供后续使用
-            self.can_device = (device_handle, channel_handles, receive_threads)
+            try:
+                device_handle, channel_handles, receive_threads = can_control.Initialize_Canfd_Device(
+                    device_type=can_control.ZCAN_USBCANFD_200U,
+                    merge_receive=0
+                )
+                self.log("CAN设备已开启")
+                self.can_device = (device_handle, channel_handles, receive_threads)
+            except Exception as e:
+                self.error(f"CAN设备开启失败: {e}")
+                return
         else:
             self.can_device = None  # 不启用时设为 None
     
         try:
             for case in self.test_cases:
-                print(f"\n正在处理用例: {case['id']}")
+                case_id = case['id']
+                self.log(f"正在处理用例: {case_id}")
                 if self.has_script_result(case['content']):
-                    print("存在脚本解析结果, 开始执行测试")
+                    self.log("存在脚本解析结果，开始执行测试")
                     self.analyze_script_parts(case['content'])
                 else:
-                    print("不存在脚本解析结果，开始进行下一项")
-                    continue
+                    self.log("不存在脚本解析结果，跳过该用例")
         finally:
-            # 如果开关打开，在解析结束后关闭 CAN 设备
+            # 关闭 CAN 设备（如启用）
             if ENABLE_AUTO_OPEN_CLOSE_CAN and hasattr(self, 'can_device') and self.can_device:
                 device_handle, channel_handles, receive_threads = self.can_device
-                can_control.Close_Canfd_Device(device_handle, channel_handles, receive_threads)
-                print("CAN设备已关闭")
-
-
+                try:
+                    can_control.Close_Canfd_Device(device_handle, channel_handles, receive_threads)
+                    self.log("CAN设备已关闭")
+                except Exception as e:
+                    self.error(f"CAN设备关闭失败: {e}")
 
     def analyze_script_parts(self, content):
-        """解析脚本中的状态、动作、响应部分（按顺序调用三个独立函数）"""
+        """解析状态、动作、响应"""
         self._analyze_state(content)
         self._analyze_action(content)
         self._analyze_response(content)
 
 
     def _analyze_state(self, content):
-        """只处理“状态”块内的行"""
-        print("执行“状态”")
-        state_block = self._extract_block(content, "状态")
-        if state_block:
-            self._process_block_lines(state_block)
-
+        self.log("执行“状态”")
+        block = self._extract_block(content, "状态")
+        if block:
+            self._process_block_lines(block)
 
     def _analyze_action(self, content):
-        """只处理“动作”块内的行"""
-        print("执行“动作”")
-        action_block = self._extract_block(content, "动作")
-        if action_block:
-            self._process_block_lines(action_block)
-
+        self.log("执行“动作”")
+        block = self._extract_block(content, "动作")
+        if block:
+            self._process_block_lines(block)
 
     def _analyze_response(self, content):
-        """只处理“响应”块内的行，并视为执行阶段完成"""
-        print("执行“响应”")
-        response_block = self._extract_block(content, "响应")
-        if response_block:
-            self._process_block_lines(response_block)
-
+        self.log("执行“响应”")
+        block = self._extract_block(content, "响应")
+        if block:
+            self._process_block_lines(block)
 
     def _extract_block(self, content, block_name):
-        """
-        提取“状态”、“动作”、“响应”块中的具体内容（缩进部分）
-        """
+        """提取指定块内容"""
         pattern = rf'{block_name}[:：]\s*\n((?:[ \t]+.+?(?:\n|$))+)'
         match = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
         if not match:
+            self.log(f"未找到 {block_name} 块")
             return []
 
         block_text = match.group(1)
@@ -144,10 +162,9 @@ class LogParser:
         忽略以 '→' 开头的说明性行
         """
         rules = [
-            # 匹配 输出(...) 或 采集(...)
-            (r'^输出\(([^)]+)\)', lambda match: print("SndOK")),
-            (r'^采集\(([^)]+)\)', lambda match: print("RcvOK")),
-            (r'^等待\((\d+)\)', lambda match: self._delay_ms(int(match.group(1))))
+            (r'^输出\(([^)]+)\)', lambda m: self.log("SndOK")),
+            (r'^采集\(([^)]+)\)', lambda m: self.log("RcvOK")),
+            (r'^等待\((\d+)\)', lambda m: self._delay_ms(int(m.group(1)))),
         ]
 
         for line in lines:
@@ -156,37 +173,41 @@ class LogParser:
                 # 跳过空行、说明行（→）或列表符号（─）
                 continue
 
+            matched = False
             for pattern, action in rules:
-                match = re.match(pattern, line)  # 使用 match 而非 search，确保从行首匹配
+                match = re.match(pattern, line)
                 if match:
                     action(match)
+                    matched = True
                     break
-
-
-
-    def run(self):
-        """一键运行日志解析全流程"""
-        print(f"正在加载文件: {self.log_path}")
-        self.load_log()
-        self.split_test_cases()
-        self.parse_all_cases()
+            if not matched:
+                self.log(f"未识别的指令: {line}")
 
     def _delay_ms(self, milliseconds):
         """延迟指定毫秒数"""
         seconds = milliseconds / 1000.0
-        print(f"Wait {milliseconds} ms")
+        self.log(f"Wait {milliseconds} ms")
         time.sleep(seconds)
-    
+
+    def run(self):
+        """一键运行全流程"""
+        self.log(f"开始解析日志文件: {self.log_path}")
+        try:
+            self.load_log()
+            self.split_test_cases()
+            self.parse_all_cases()
+            self.log("日志解析执行完成。")
+        except Exception as e:
+            self.error(f"解析过程中发生未预期异常: {e}")
+            raise
 
 
-
-# 使用示例（可直接运行）
+# ==================== 使用示例 ====================
 if __name__ == "__main__":
-    # 设置日志文件路径
-    log_file_path = "TestcaseCollection/004_data.log"  # 请替换为你的实际日志路径
 
-    # 创建解析器实例
+    # 设置你的日志文件路径
+    log_file_path = "TestcaseCollection/004_data.log"  # ← 修改为你的实际路径
+
+    # 创建解析器并运行
     parser = LogParser(log_file_path)
-
-    # 运行解析
     parser.run()
