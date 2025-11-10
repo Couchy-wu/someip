@@ -9,7 +9,7 @@ loggers = {}
 logger_configs = {}
 
 
-def setup_logger(logger_name, log_dir="./logs", log_prefix=None, level=logging.INFO, clear_old=False, use_timestamp=True):
+def setup_logger(logger_name, log_dir="./logs", log_prefix=None, level=logging.INFO, clear_old=False, use_timestamp=True, show_prefix=True):
     """
     创建或获取一个独立的 logger，生成独立的日志文件
     但：日志文件和处理器延迟到第一条日志写入时才创建
@@ -19,6 +19,7 @@ def setup_logger(logger_name, log_dir="./logs", log_prefix=None, level=logging.I
     :param level: 日志级别
     :param clear_old: 是否删除日志目录下同前缀的旧日志文件
     :param use_timestamp: 是否在日志文件名中添加时间戳。False 表示只用 log_prefix.log
+    :param show_prefix: 是否显示日志前缀（时间戳和日志级别）。False 表示只输出消息内容
     :return: 配置好的 logger 实例
     """
     global loggers, logger_configs
@@ -33,6 +34,7 @@ def setup_logger(logger_name, log_dir="./logs", log_prefix=None, level=logging.I
         "level": level,
         "clear_old": clear_old,
         "use_timestamp": use_timestamp,
+        "show_prefix": show_prefix,  # 新增
     }
 
     # 创建 logger 实例
@@ -45,11 +47,14 @@ def setup_logger(logger_name, log_dir="./logs", log_prefix=None, level=logging.I
 
     # 添加延迟处理器
     handler = DelayedFileHandler(logger_name)
-    formatter = logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    handler.setFormatter(formatter)
+    
+    # 根据 show_prefix 创建默认 formatter（临时，真正 formatter 在 _setup 中设置）
+    if show_prefix:
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    else:
+        formatter = logging.Formatter('%(message)s')  # 只显示消息
+
+    handler.setFormatter(formatter)  # 这个 formatter 会被 _setup 覆盖，但用于临时 emit
     handler.setLevel(level)
 
     logger.addHandler(handler)
@@ -91,6 +96,7 @@ class DelayedFileHandler(logging.Handler):
         level = config["level"]
         clear_old = config["clear_old"]
         use_timestamp = config.get("use_timestamp", True)
+        show_prefix = config.get("show_prefix", True)  # 获取新参数
 
         # =============== 第一步：确保日志目录存在 ===============
         try:
@@ -130,15 +136,22 @@ class DelayedFileHandler(logging.Handler):
         else:
             log_filename = f"{prefix}.log"
 
-        log_file = os.path.join(log_dir, log_filename)  # ✅ 提前定义 log_file
+        log_file = os.path.join(log_dir, log_filename)
 
         # =============== 第四步：创建真正的 FileHandler ===============
         try:
             self._real_handler = logging.FileHandler(log_file, encoding='utf-8', mode='a')
-            self._real_handler.setFormatter(self.formatter)
             self._real_handler.setLevel(level)
+
+            # 根据 show_prefix 设置 formatter
+            if show_prefix:
+                formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+            else:
+                formatter = logging.Formatter('%(message)s')  # 只输出消息
+
+            self._real_handler.setFormatter(formatter)
+
         except Exception as e:
-            # ✅ 此时 log_file 已定义，可安全打印
             print(f"[错误] 无法创建日志文件 {log_file}: {e}")
 
         self._initialized = True
@@ -196,31 +209,16 @@ def close_logger(logger_name):
 
 # ==================== 使用示例 ====================
 if __name__ == "__main__":
-    # 示例1：带时间戳（默认）
+    # 示例：不显示日志前缀（时间戳、INFO 等）
     setup_logger(
-        logger_name="app1",
-        log_dir="./logs/testcase",
-        log_prefix="testcase",
+        logger_name="simple",
+        log_dir="./logs",
+        log_prefix="simple",
         level=logging.INFO,
         clear_old=True,
-        use_timestamp=True
+        use_timestamp=False,
+        show_prefix=False  
     )
-    info("app1", "这是带时间戳的日志")
 
-    # 示例2：不带时间戳（你想要的效果）
-    setup_logger(
-        logger_name="app2",
-        log_dir="./logs/testcase",
-        log_prefix="mystatic",
-        level=logging.INFO,
-        clear_old=True,  # 修改这里确保清除旧日志
-        use_timestamp=False  # ✅ 关键：不加时间
-    )
-    info("app2", "这是不带时间戳的日志，文件名为 mystatic.log")
-    # 等待一些时间让日志写入
-    import time
-    time.sleep(2)
-    # 再次生成日志，验证是否清除旧日志
-    info("app2", "这是第二次不带时间戳的日志")
-    close_logger("app1")
-    close_logger("app2")
+    info("simple", "这条日志将不包含任何前缀，只有这句话本身")
+    debug("simple", "调试信息也一样")

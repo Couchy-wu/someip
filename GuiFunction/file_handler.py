@@ -140,7 +140,8 @@ def refresh_json_file(uploaded_file=None):
                 log_prefix=log_basename,
                 level=logging.INFO,
                 clear_old=True,
-                use_timestamp=False
+                use_timestamp=False,
+                show_prefix=False
             )
 
             # 调用处理器解析测试用例，并记录日志

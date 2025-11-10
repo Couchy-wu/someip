@@ -52,7 +52,8 @@ class TestCaseProcessor:
             log_prefix="testcase",          # 日志前缀名称
             level=logging.INFO,
             clear_old = True,
-            use_timestamp=False
+            use_timestamp=False,
+            show_prefix=False
         )
 
     # ----------------------------------------------------------------------
@@ -274,7 +275,7 @@ class TestCaseProcessor:
                 # 根据 func 类型区分输出或采集
                 prefix = "输出" if func == "输出" else "采集"
                 mylog.info(self.logger_name, 
-                          f"          → {prefix}CAN报文 ID: {result['message_id_str']} | "
+                          f"          →  {prefix}CAN报文 ID: {result['message_id_str']} | "
                           f"发送类型: {result['message_type']} | "
                           f"周期时间: {result['cycle_time']} ms | "
                           f"生成CAN数据: {result['can_data_str']}")
