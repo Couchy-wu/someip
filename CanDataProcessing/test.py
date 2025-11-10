@@ -1,8 +1,13 @@
-# log_parser.py
-
+import sys
 import os
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 import re
 import time
+import can_control
+
+
+ENABLE_AUTO_OPEN_CLOSE_CAN = True  # 是否每次解析前后自动开关CAN设备
+
 
 class LogParser:
     def __init__(self, log_path):
@@ -56,17 +61,35 @@ class LogParser:
         if not self.test_cases:
             print("未检测到任何测试用例，请先调用 split_test_cases() 方法。")
             return
+    
+        # 如果开关打开，在解析前打开 CAN 设备
+        if ENABLE_AUTO_OPEN_CLOSE_CAN:
+            device_handle, channel_handles, receive_threads = can_control.Initialize_Canfd_Device(
+                device_type=can_control.ZCAN_USBCANFD_200U,
+                merge_receive=0
+            )
+            print("CAN设备已开启")
+            # 将设备句柄存入实例，供后续使用
+            self.can_device = (device_handle, channel_handles, receive_threads)
+        else:
+            self.can_device = None  # 不启用时设为 None
+    
+        try:
+            for case in self.test_cases:
+                print(f"\n正在处理用例: {case['id']}")
+                if self.has_script_result(case['content']):
+                    print("存在脚本解析结果, 开始执行测试")
+                    self.analyze_script_parts(case['content'])
+                else:
+                    print("不存在脚本解析结果，开始进行下一项")
+                    continue
+        finally:
+            # 如果开关打开，在解析结束后关闭 CAN 设备
+            if ENABLE_AUTO_OPEN_CLOSE_CAN and hasattr(self, 'can_device') and self.can_device:
+                device_handle, channel_handles, receive_threads = self.can_device
+                can_control.Close_Canfd_Device(device_handle, channel_handles, receive_threads)
+                print("CAN设备已关闭")
 
-        for case in self.test_cases:
-            print(f"\n正在处理用例: {case['id']}")
-            if self.has_script_result(case['content']):
-                print("存在脚本解析结果, 开始执行测试")
-                # 进一步解析状态、动作、响应
-                self.analyze_script_parts(case['content'])
-            else:
-                print("不存在脚本解析结果，开始进行下一项")
-                continue
-        print("\n所有用例处理完成")
 
 
     def analyze_script_parts(self, content):
