@@ -42,7 +42,7 @@ class TestCaseProcessor:
         self.logger_name = logger_name
         self.total_cases = 0          # 总用例数
         self.processed_count = 0      # 已处理用例数
-
+        self.output_index = 0         # 输出CAN报文编号计数器
 
 
         # 初始化日志器，确保日志目录和配置已就绪
@@ -110,6 +110,9 @@ class TestCaseProcessor:
         if len(rows) != 4:
             mylog.warning(self.logger_name, f"[用例 {case_index}] 行数异常（应为 4 行），跳过...")
             return
+
+        # 重置输出编号
+        self.output_index = 0  # 每个用例的发送信号从 index 0 开始
 
         # 按 *类型 查找四类行
         test_case_row = self._find_row_by_type(rows, "*类型", "测试用例")
@@ -271,16 +274,39 @@ class TestCaseProcessor:
     
         try:
             result = create_can_data_by_signal(message_id, signal_name_en, enum_value)
-            if result["success"]:
-                # 根据 func 类型区分输出或采集
-                prefix = "输出" if func == "输出" else "采集"
-                mylog.info(self.logger_name, 
-                          f"          →  {prefix}CAN报文 ID: {result['message_id_str']} | "
-                          f"发送类型: {result['message_type']} | "
-                          f"周期时间: {result['cycle_time']} ms | "
-                          f"生成CAN数据: {result['can_data_str']}")
-            else:
+            if not result["success"]:
                 mylog.warning(self.logger_name, f"          → 信号解析失败: {result['message_id_str']}.{result['signal_name_en']}")
+                return
+    
+            # 格式化CAN数据为 [0xXX, 0xXX, ...]
+            if isinstance(result['can_data'], bytes):
+                data_bytes = list(result['can_data'])
+            elif isinstance(result['can_data'], (list, tuple)):
+                data_bytes = result['can_data']
+            else:
+                data_bytes = []
+            can_data_hex = [f"0x{b:02X}" for b in data_bytes]
+            can_data_str = f"[{', '.join(can_data_hex)}]"
+    
+            # 设置报文类型前缀和index
+            if func == "输出":
+                index = self.output_index
+                self.output_index += 1
+                prefix = "输出CAN报文"
+            else:
+                index = ""  # 采集不编号，显示为空
+                prefix = "采集CAN报文"
+    
+            # 构建标准格式日志
+            log_msg = (
+                f"          → {prefix} ID: {result['message_id_str']} | "
+                f"发送类型: {result['message_type']} | "
+                f"周期时间: {result['cycle_time']} ms | "
+                f"生成CAN数据: {can_data_str} | "
+                f"分配index: {index}"
+            )
+            mylog.info(self.logger_name, log_msg)
+    
         except Exception as e:
             mylog.error(self.logger_name, f"          → 生成CAN数据失败: {e}")
 
@@ -291,5 +317,5 @@ class TestCaseProcessor:
 # ----------------------------------------------------------------------
 if __name__ == "__main__":
     
-    processor = TestCaseProcessor("TestcaseCollection/001_data.json")
+    processor = TestCaseProcessor("TestcaseCollection/004_data.json")
     processor.process()
