@@ -91,8 +91,13 @@ class LogParser:
         else:
             self.can_device = None
 
+        device_handle = None
+        channel_handles = None
+        if self.can_device:
+            device_handle, channel_handles, _ = self.can_device
+
         try:
-            for case in self.test_cases:
+            for i, case in enumerate(self.test_cases):
                 case_id = case['id']
                 mylog.info(LOGGER_NAME, f"正在处理用例: {case_id}")
                 if self.has_script_result(case['content']):
@@ -100,6 +105,20 @@ class LogParser:
                     self.analyze_script_parts(case['content'])
                 else:
                     mylog.info(LOGGER_NAME, "不存在脚本解析结果，跳过该用例")
+
+                # 每个用例结束后延迟 X 秒，并清除自动发送列表
+                delay_time = 3
+                mylog.info(LOGGER_NAME, f"当前用例执行完成，等待{delay_time}秒后清理自动发送列表...")
+                time.sleep(delay_time)
+
+                # 清除通道0的自动发送列表（假设使用 chn=0）
+                if ENABLE_AUTO_OPEN_CLOSE_CAN and device_handle is not None and channel_handles is not None:
+                    chn = 0  # 与发送时一致
+                    if not can_control.Clear_Auto_Can_Send(device_handle, chn):
+                        mylog.warning(LOGGER_NAME, f"清除通道 {chn} 定时发送列表失败")
+                    else:
+                        mylog.info(LOGGER_NAME, f"已清除通道 {chn} 的定时发送列表")
+
         finally:
             # 关闭 CAN 设备（如启用）
             if ENABLE_AUTO_OPEN_CLOSE_CAN and hasattr(self, 'can_device') and self.can_device:
@@ -109,6 +128,7 @@ class LogParser:
                     mylog.info(LOGGER_NAME, "CAN设备已关闭")
                 except Exception as e:
                     mylog.error(LOGGER_NAME, f"CAN设备关闭失败: {e}")
+
 
     def analyze_script_parts(self, content):
         """解析状态、动作、响应"""
@@ -147,27 +167,181 @@ class LogParser:
         return [line for line in lines if line]
 
     def _process_block_lines(self, lines):
-        """处理块内每一行指令"""
-        rules = [
-            (r'^输出\(([^)]+)\)', lambda m: mylog.info(LOGGER_NAME, "SndOK")),
-            (r'^采集\(([^)]+)\)', lambda m: mylog.info(LOGGER_NAME, "RcvOK")),
-            (r'^等待\((\d+)\)', lambda m: self._delay_ms(int(m.group(1)))),
-        ]
+        """处理块内每一行指令，支持上下文感知（如提取下一行的CAN参数）"""
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            if not line or line.startswith('-') or line.startswith('→'):
+                i += 1
+                continue
 
-        for line in lines:
-            line = line.strip()
-            if not line or line.startswith('→') or line.startswith('-'):
-                continue  # 跳过说明行
+            # 匹配 输出(信号名, index)
+            output_match = re.match(r'^输出\(([^,]+),\s*(\d+)\)', line)
+            if output_match:
+                self._handle_output_can_with_context(lines, i)
+                i += 1
+                continue
 
-            matched = False
-            for pattern, action in rules:
-                match = re.match(pattern, line)
-                if match:
-                    action(match)
-                    matched = True
-                    break
-            if not matched:
-                mylog.info(LOGGER_NAME, f"未识别的指令: {line}")
+            # 其他指令
+            wait_match = re.match(r'^等待\((\d+)\)', line)
+            if wait_match:
+                self._delay_ms(int(wait_match.group(1)))
+                i += 1
+                continue
+
+            collect_match = re.match(r'^采集\(([^)]+)\)', line)
+            if collect_match:
+                mylog.info(LOGGER_NAME, "RcvOK")
+                i += 1
+                continue
+
+            mylog.info(LOGGER_NAME, f"未识别的指令: {line}")
+            i += 1
+
+    def _handle_output_can_with_context(self, lines, current_index):
+        """
+        处理 '输出(...)' 指令：
+        - 提取 enum_value（仅用于日志或后续扩展，当前不参与逻辑）
+        - 从下一行提取 CAN 参数，尤其是 '分配index: X' 作为发送通道编号
+        """
+        current_line = lines[current_index].strip()
+
+        # === 1. 提取 enum_value（仅用于日志提示，当前不使用）===
+        enum_match = re.match(r'^输出\([^,]+,\s*(\d+)\)', current_line)
+        if not enum_match:
+            mylog.error(LOGGER_NAME, "输出指令格式错误，未匹配到枚举值")
+            return
+        try:
+            enum_value = int(enum_match.group(1))
+        except ValueError:
+            mylog.error(LOGGER_NAME, f"无效的枚举值: {enum_match.group(1)}")
+            return
+
+        # === 2. 获取下一行 CAN 报文描述 ===
+        if current_index + 1 >= len(lines):
+            mylog.error(LOGGER_NAME, "缺少CAN报文参数：未找到下一行")
+            return
+        next_line = lines[current_index + 1].strip()
+
+        if not next_line.startswith("→") or "输出CAN报文" not in next_line:
+            mylog.error(LOGGER_NAME, "下一行未包含CAN报文参数（应以 → 开头）")
+            return
+
+        # === 3. 提取分配index（这才是真正的发送通道编号）===
+        index_match = re.search(r'分配index:\s*(\d+)', next_line)
+        if not index_match:
+            mylog.error(LOGGER_NAME, "未找到 '分配index' 字段，请检查日志格式")
+            return
+        try:
+            index = int(index_match.group(1))  # 真正的 index
+        except ValueError:
+            mylog.error(LOGGER_NAME, f"无效的分配index: {index_match.group(1)}")
+            return
+
+        # === 4. 提取 CAN ID ===
+        id_match = re.search(r'ID:\s*0x([0-9A-Fa-f]+)', next_line)
+        if not id_match:
+            mylog.error(LOGGER_NAME, "未解析到CAN ID")
+            return
+        try:
+            can_id = int(id_match.group(1), 16)
+        except:
+            mylog.error(LOGGER_NAME, "CAN ID 格式错误")
+            return
+
+        # === 5. 提取发送类型 ===
+        type_match = re.search(r'发送类型:\s*(\w+)', next_line)
+        if not type_match:
+            mylog.error(LOGGER_NAME, "未解析到发送类型")
+            return
+        signal_type = type_match.group(1).upper()
+        valid_types = {"EVENT", "CYCLE", "CE"}
+        if signal_type not in valid_types:
+            mylog.error(LOGGER_NAME, f"不支持的发送类型: {signal_type}")
+            return
+
+        # === 6. 提取 CAN 数据 ===
+        data_match = re.search(r'生成CAN数据:\s*(\[.*?\])', next_line)
+        if not data_match:
+            mylog.error(LOGGER_NAME, "未解析到CAN数据")
+            return
+        try:
+            data_str = data_match.group(1)
+            data = [int(x.strip(), 16) for x in data_str[1:-1].split(',') if x.strip()]
+            if len(data) < 1 or len(data) > 64:
+                mylog.error(LOGGER_NAME, f"CAN数据长度非法: {len(data)} 字节")
+                return
+        except Exception as e:
+            mylog.error(LOGGER_NAME, f"解析CAN数据失败: {e}")
+            return
+
+        # === 7. 处理 cycle_ms ===
+        cycle_ms = None
+        if signal_type == "CYCLE":
+            cycle_match = re.search(r'周期时间:\s*(\d+)', next_line)
+            if not cycle_match:
+                mylog.error(LOGGER_NAME, "Cycle类型需提供周期时间")
+                return
+            try:
+                cycle_ms = int(cycle_match.group(1))
+                if cycle_ms <= 0:
+                    raise ValueError
+            except:
+                mylog.error(LOGGER_NAME, "周期时间必须为正整数")
+                return
+
+        elif signal_type == "EVENT":
+            event_cycle_match = re.search(r'事件间隔:\s*(\d+)', next_line)
+            try:
+                cycle_ms = int(event_cycle_match.group(1)) if event_cycle_match else 100
+            except:
+                cycle_ms = 100
+
+        elif signal_type == "CE":
+            event_match = re.search(r'事件间隔:\s*(\d+)', next_line)
+            cycle_match = re.search(r'周期:\s*(\d+)', next_line)
+            if not event_match or not cycle_match:
+                mylog.error(LOGGER_NAME, "CE类型必须提供事件间隔和周期")
+                return
+            try:
+                event_ms = int(event_match.group(1))
+                cycle_period_ms = int(cycle_match.group(1))
+                if event_ms <= 0 or cycle_period_ms <= 0:
+                    raise ValueError
+                cycle_ms = f"{event_ms}/{cycle_period_ms}"
+            except:
+                mylog.error(LOGGER_NAME, "CE类型的事件间隔或周期格式错误")
+                return
+
+        # === 8. 获取 CAN 设备句柄 ===
+        if not hasattr(self, 'can_device') or self.can_device is None:
+            mylog.error(LOGGER_NAME, "CAN设备未初始化，无法发送信号")
+            return
+        device_handle, channel_handles, receive_threads = self.can_device
+        chn = 0
+        chn_handle = channel_handles[chn]
+
+        # === 9. 发送信号   ===
+        result = can_control.Send_Can_Signal(
+            device_handle=device_handle,
+            chn_handle=chn_handle,
+            chn=chn,
+            stdorext=0,
+            id=can_id,
+            data=data,
+            msg_type="canfd",
+            signal_type=signal_type,
+            cycle_ms=cycle_ms,
+            index=index  
+        )
+
+        # === 10. 日志输出 ===
+        if result is not None:
+            mylog.info(LOGGER_NAME, f"SndOK → 已发送 CAN ID: 0x{can_id:X} (index={index}) [信号枚举值={enum_value}]")
+        else:
+            mylog.error(LOGGER_NAME, f"发送失败: CAN ID: 0x{can_id:X} (index={index})")
+
+
 
     def _delay_ms(self, milliseconds):
         """延迟指定毫秒数"""
