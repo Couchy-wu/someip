@@ -13,7 +13,7 @@ ENABLE_AUTO_OPEN_CLOSE_CAN = True  # 是否自动开关CAN设备
 LOGGER_NAME = "parser"
 
 # 每个测试用例重复执行的次数
-CASE_REPEAT_COUNT = 30 
+CASE_REPEAT_COUNT = 1 
 
 class LogParser:
     def __init__(self, log_path):
@@ -79,7 +79,7 @@ class LogParser:
             mylog.info(LOGGER_NAME, "未检测到任何测试用例，请先调用 split_test_cases() 方法。")
             return
 
-        # 如果开关打开，在解析前打开 CAN 设备
+        # ========== 启动 CAN 设备 ==========
         if ENABLE_AUTO_OPEN_CLOSE_CAN:
             try:
                 device_handle, channel_handles, receive_threads = can_control.Initialize_Canfd_Device(
@@ -120,27 +120,20 @@ class LogParser:
                             mylog.info(LOGGER_NAME, f"第 {round_idx} 次检测完成，等待{delay_time}秒后开始下一次...")
                             time.sleep(delay_time)
 
-                            if ENABLE_AUTO_OPEN_CLOSE_CAN and device_handle is not None and channel_handles is not None:
-                                chn = 0
-                                if not can_control.Clear_Auto_Can_Send(device_handle, chn):
-                                    mylog.warning(LOGGER_NAME, f"清除通道 {chn} 定时发送列表失败")
-                                else:
-                                    mylog.info(LOGGER_NAME, f"已清除通道 {chn} 的定时发送列表")
+                            # 清理操作：只要 CAN 设备已打开，就执行，不再依赖 ENABLE_AUTO_OPEN_CLOSE_CAN
+                            if self.can_device and device_handle is not None and channel_handles is not None:
+                                self._clear_can_channel(chn=0)
                         else:
                             # 最后一次执行后仍进行清理
                             mylog.info(LOGGER_NAME, f"第 {round_idx} 次检测完成，正在清理...")
-                            if ENABLE_AUTO_OPEN_CLOSE_CAN and device_handle is not None and channel_handles is not None:
-                                chn = 0
-                                if not can_control.Clear_Auto_Can_Send(device_handle, chn):
-                                    mylog.warning(LOGGER_NAME, f"清除通道 {chn} 定时发送列表失败")
-                                else:
-                                    mylog.info(LOGGER_NAME, f"已清除通道 {chn} 的定时发送列表")
+                            if self.can_device and device_handle is not None and channel_handles is not None:
+                                self._clear_can_channel(chn=0)
                 else:
                     mylog.info(LOGGER_NAME, "不存在脚本解析结果，跳过该用例")
                     continue
 
         finally:
-            # 关闭 CAN 设备（如启用）
+            # ========== 关闭 CAN 设备 ==========
             if ENABLE_AUTO_OPEN_CLOSE_CAN and hasattr(self, 'can_device') and self.can_device:
                 device_handle, channel_handles, receive_threads = self.can_device
                 try:
@@ -149,6 +142,25 @@ class LogParser:
                 except Exception as e:
                     mylog.error(LOGGER_NAME, f"CAN设备关闭失败: {e}")
 
+
+    def _clear_can_channel(self, chn=0):
+        """
+        清理指定 CAN 通道的定时发送列表
+        :param chn: 通道编号
+        """
+        if not self.can_device:
+            return
+        device_handle, channel_handles, _ = self.can_device
+        if device_handle is None or chn >= len(channel_handles):
+            mylog.warning(LOGGER_NAME, f"无效的设备或通道编号: {chn}")
+            return
+        try:
+            if can_control.Clear_Auto_Can_Send(device_handle, chn):
+                mylog.info(LOGGER_NAME, f"已清除通道 {chn} 的定时发送列表")
+            else:
+                mylog.warning(LOGGER_NAME, f"清除通道 {chn} 定时发送列表失败")
+        except Exception as e:
+            mylog.error(LOGGER_NAME, f"清理定时发送列表时发生异常: {e}")
 
     def analyze_script_parts(self, content):
         """解析状态、动作、响应"""
