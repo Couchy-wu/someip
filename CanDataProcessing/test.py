@@ -12,6 +12,9 @@ ENABLE_AUTO_OPEN_CLOSE_CAN = True  # 是否自动开关CAN设备
 # 全局 logger 名称
 LOGGER_NAME = "parser"
 
+# 每个测试用例重复执行的次数
+CASE_REPEAT_COUNT = 30 
+
 class LogParser:
     def __init__(self, log_path):
         """
@@ -71,7 +74,7 @@ class LogParser:
         return "脚本解析结果：" in case_content
 
     def parse_all_cases(self):
-        """依次解析所有测试用例"""
+        """依次解析所有测试用例，并重复执行指定次数"""
         if not self.test_cases:
             mylog.info(LOGGER_NAME, "未检测到任何测试用例，请先调用 split_test_cases() 方法。")
             return
@@ -101,23 +104,37 @@ class LogParser:
                 case_id = case['id']
                 mylog.info(LOGGER_NAME, "=============================================")
                 mylog.info(LOGGER_NAME, f"正在处理用例: {case_id}")
-                
-                # 仅当存在脚本解析结果时才执行测试
+
+                # 仅当存在脚本解析结果时才进行重复执行
                 if self.has_script_result(case['content']):
-                    mylog.info(LOGGER_NAME, "存在脚本解析结果，开始执行测试")
-                    self.analyze_script_parts(case['content'])
+                    mylog.info(LOGGER_NAME, f"存在脚本解析结果，开始执行测试（共重复 {CASE_REPEAT_COUNT} 次）")
 
-                    # 只有执行了测试，才等待并清理
-                    delay_time = 3
-                    mylog.info(LOGGER_NAME, f"当前用例执行完成，等待{delay_time}秒后清理自动发送列表...")
-                    time.sleep(delay_time)
+                    for round_idx in range(1, CASE_REPEAT_COUNT + 1):
+                        mylog.info(LOGGER_NAME, f"第 {round_idx} 次检测开始...")
 
-                    if ENABLE_AUTO_OPEN_CLOSE_CAN and device_handle is not None and channel_handles is not None:
-                        chn = 0
-                        if not can_control.Clear_Auto_Can_Send(device_handle, chn):
-                            mylog.warning(LOGGER_NAME, f"清除通道 {chn} 定时发送列表失败")
+                        self.analyze_script_parts(case['content'])
+
+                        # 每次执行后等待并清理（最后一次也清理）
+                        if round_idx < CASE_REPEAT_COUNT:
+                            delay_time = 3
+                            mylog.info(LOGGER_NAME, f"第 {round_idx} 次检测完成，等待{delay_time}秒后开始下一次...")
+                            time.sleep(delay_time)
+
+                            if ENABLE_AUTO_OPEN_CLOSE_CAN and device_handle is not None and channel_handles is not None:
+                                chn = 0
+                                if not can_control.Clear_Auto_Can_Send(device_handle, chn):
+                                    mylog.warning(LOGGER_NAME, f"清除通道 {chn} 定时发送列表失败")
+                                else:
+                                    mylog.info(LOGGER_NAME, f"已清除通道 {chn} 的定时发送列表")
                         else:
-                            mylog.info(LOGGER_NAME, f"已清除通道 {chn} 的定时发送列表")
+                            # 最后一次执行后仍进行清理
+                            mylog.info(LOGGER_NAME, f"第 {round_idx} 次检测完成，正在清理...")
+                            if ENABLE_AUTO_OPEN_CLOSE_CAN and device_handle is not None and channel_handles is not None:
+                                chn = 0
+                                if not can_control.Clear_Auto_Can_Send(device_handle, chn):
+                                    mylog.warning(LOGGER_NAME, f"清除通道 {chn} 定时发送列表失败")
+                                else:
+                                    mylog.info(LOGGER_NAME, f"已清除通道 {chn} 的定时发送列表")
                 else:
                     mylog.info(LOGGER_NAME, "不存在脚本解析结果，跳过该用例")
                     continue
