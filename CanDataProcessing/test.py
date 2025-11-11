@@ -99,25 +99,28 @@ class LogParser:
         try:
             for i, case in enumerate(self.test_cases):
                 case_id = case['id']
+                mylog.info(LOGGER_NAME, "=============================================")
                 mylog.info(LOGGER_NAME, f"正在处理用例: {case_id}")
+                
+                # 仅当存在脚本解析结果时才执行测试
                 if self.has_script_result(case['content']):
                     mylog.info(LOGGER_NAME, "存在脚本解析结果，开始执行测试")
                     self.analyze_script_parts(case['content'])
+
+                    # 只有执行了测试，才等待并清理
+                    delay_time = 3
+                    mylog.info(LOGGER_NAME, f"当前用例执行完成，等待{delay_time}秒后清理自动发送列表...")
+                    time.sleep(delay_time)
+
+                    if ENABLE_AUTO_OPEN_CLOSE_CAN and device_handle is not None and channel_handles is not None:
+                        chn = 0
+                        if not can_control.Clear_Auto_Can_Send(device_handle, chn):
+                            mylog.warning(LOGGER_NAME, f"清除通道 {chn} 定时发送列表失败")
+                        else:
+                            mylog.info(LOGGER_NAME, f"已清除通道 {chn} 的定时发送列表")
                 else:
                     mylog.info(LOGGER_NAME, "不存在脚本解析结果，跳过该用例")
-
-                # 每个用例结束后延迟 X 秒，并清除自动发送列表
-                delay_time = 3
-                mylog.info(LOGGER_NAME, f"当前用例执行完成，等待{delay_time}秒后清理自动发送列表...")
-                time.sleep(delay_time)
-
-                # 清除通道0的自动发送列表（假设使用 chn=0）
-                if ENABLE_AUTO_OPEN_CLOSE_CAN and device_handle is not None and channel_handles is not None:
-                    chn = 0  # 与发送时一致
-                    if not can_control.Clear_Auto_Can_Send(device_handle, chn):
-                        mylog.warning(LOGGER_NAME, f"清除通道 {chn} 定时发送列表失败")
-                    else:
-                        mylog.info(LOGGER_NAME, f"已清除通道 {chn} 的定时发送列表")
+                    continue
 
         finally:
             # 关闭 CAN 设备（如启用）
