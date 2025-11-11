@@ -167,7 +167,7 @@ class LogParser:
         return [line for line in lines if line]
 
     def _process_block_lines(self, lines):
-        """处理块内每一行指令，支持上下文感知（如提取下一行的CAN参数）"""
+        """处理块内每一行指令，支持上下文感知"""
         i = 0
         while i < len(lines):
             line = lines[i].strip()
@@ -175,28 +175,30 @@ class LogParser:
                 i += 1
                 continue
 
-            # 匹配 输出(信号名, index)
+            # === 输出CAN信号 ===
             output_match = re.match(r'^输出\(([^,]+),\s*(\d+)\)', line)
             if output_match:
                 self._handle_output_can_with_context(lines, i)
                 i += 1
                 continue
 
-            # 其他指令
+            # === 采集CAN信号（新增）===
+            collect_match = re.match(r'^采集\(([^)]+)\)', line)
+            if collect_match:
+                result = self._handle_collect_can_with_context(lines, i)
+                i += 1
+                continue
+
+            # === 等待 ===
             wait_match = re.match(r'^等待\((\d+)\)', line)
             if wait_match:
                 self._delay_ms(int(wait_match.group(1)))
                 i += 1
                 continue
 
-            collect_match = re.match(r'^采集\(([^)]+)\)', line)
-            if collect_match:
-                mylog.info(LOGGER_NAME, "RcvOK")
-                i += 1
-                continue
-
             mylog.info(LOGGER_NAME, f"未识别的指令: {line}")
             i += 1
+
 
     def _handle_output_can_with_context(self, lines, current_index):
         """
@@ -341,6 +343,74 @@ class LogParser:
         else:
             mylog.error(LOGGER_NAME, f"发送失败: CAN ID: 0x{can_id:X} (index={index})")
 
+    def _handle_collect_can_with_context(self, lines, current_index):
+        """
+        处理 '采集(...)' 指令：
+        - 从下一行提取 '→ 采集CAN报文...' 中的 ID 和 数据
+        - 调用 wait_for_check_signal_received 阻塞等待接收
+        """
+        current_line = lines[current_index].strip()
+
+        # 获取下一行
+        if current_index + 1 >= len(lines):
+            mylog.error(LOGGER_NAME, "缺少采集参数：未找到下一行")
+            return False
+        next_line = lines[current_index + 1].strip()
+
+        if not next_line.startswith("→") or "采集CAN报文" not in next_line:
+            mylog.error(LOGGER_NAME, "下一行未包含采集CAN报文参数（应以 → 开头）")
+            return False
+
+        # 提取 CAN ID
+        id_match = re.search(r'ID:\s*0x([0-9A-Fa-f]+)', next_line)
+        if not id_match:
+            mylog.error(LOGGER_NAME, "未解析到CAN ID")
+            return False
+        try:
+            can_id = int(id_match.group(1), 16)
+        except ValueError:
+            mylog.error(LOGGER_NAME, f"无效的CAN ID: {id_match.group(1)}")
+            return False
+
+        # 提取期望数据
+        data_match = re.search(r'生成CAN数据:\s*(\[.*?\])', next_line)
+        if not data_match:
+            mylog.error(LOGGER_NAME, "未解析到期望CAN数据")
+            return False
+        try:
+            data_str = data_match.group(1)
+            expected_data = [int(x.strip(), 16) for x in data_str[1:-1].split(',') if x.strip()]
+            if len(expected_data) < 1 or len(expected_data) > 64:
+                mylog.error(LOGGER_NAME, f"期望数据长度非法: {len(expected_data)} 字节")
+                return False
+        except Exception as e:
+            mylog.error(LOGGER_NAME, f"解析期望数据失败: {e}")
+            return False
+
+        # 固定通道为 0（可根据实际扩展）
+        channel = 0
+
+        # 获取 CAN 设备句柄
+        if not hasattr(self, 'can_device') or self.can_device is None:
+            mylog.error(LOGGER_NAME, "CAN设备未初始化，无法接收信号")
+            return False
+
+        # 调用接收等待函数
+        mylog.info(LOGGER_NAME, f"RcvWait → 等待 CAN ID: 0x{can_id:X} 数据: {expected_data}")
+        received = can_control.wait_for_check_signal_received(
+            signal_id=can_id,
+            expected_data_list=expected_data,
+            channel=channel,
+            timeout=3.0,
+            check_interval=0.1
+        )
+
+        if received:
+            mylog.info(LOGGER_NAME, f"RcvOK → 已接收到 CAN ID: 0x{can_id:X}")
+            return True
+        else:
+            mylog.error(LOGGER_NAME, f"RcvFail → 未收到预期信号: ID: 0x{can_id:X} 数据: {expected_data}")
+            return False
 
 
     def _delay_ms(self, milliseconds):
