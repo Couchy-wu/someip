@@ -16,6 +16,9 @@ class CANFDGUI:
         self.root.geometry("800x600")
         self.sub_window = None  # 用于跟踪子窗口是否存在
 
+        # 一些变量
+        self.repeat_var = tk.StringVar(value="1")   # 用例重复检测次数
+
         # 用来保存初始化返回的句柄、通道列表、线程列表
         self.device_handle = None            # 设备句柄
         self.channel_handles = None       # 通道句柄
@@ -83,6 +86,20 @@ class CANFDGUI:
             command=self.start_testing
         )
         self.test_btn.grid(row=1, column=1, pady=5, padx=10, sticky='ew')
+
+        # 输入框：用例重复侧测试次数
+        tk.Label(root, text="用例重复侧测试次数:", font=("微软雅黑", 10)).grid(row=2, column=0, sticky='w', padx=12, pady=5)
+        self.repeat_entry = tk.Entry(
+            root,
+            textvariable=self.repeat_var,
+            width=10,
+            font=("微软雅黑", 10),
+            state=tk.NORMAL
+        )
+        self.repeat_entry.grid(row=2, column=1, sticky='w', padx=10, pady=5)
+
+        # 为输入框绑定验证功能
+        self.repeat_entry.configure(validate='key', validatecommand=(root.register(self._validate_positive_integer), '%P'))
 
     # --------------------- CAN设备初始化 ---------------------
     def start_init(self):
@@ -176,30 +193,51 @@ class CANFDGUI:
     def start_testing(self):
         """启动自动化测试，调用 can_testcase_runner.py 中的逻辑"""
         self.test_btn.config(state=tk.DISABLED)  # 防止重复点击
+        self.repeat_entry.config(state=tk.DISABLED) # 禁用输入框
         threading.Thread(target=self.run_automation_test, daemon=True).start()
 
     def run_automation_test(self):
         """执行自动化测试主逻辑"""
         try:
-            import CanDataProcessing.can_testcase_runner
             from CanDataProcessing.can_testcase_runner import LogParser
 
             log_file_path = "TestcaseCollection/004_data.log"
 
-            # 把当前已初始化的 CAN 设备句柄传给 LogParser
+            # 获取重复次数（从输入框读取）
+            try:
+                repeat_count = int(self.repeat_var.get())
+            except:
+                repeat_count = 1
+
+            # 创建解析器并传入重复次数（需 LogParser 支持）
             parser = LogParser(
                 log_path=log_file_path,
                 device_handle=self.device_handle,
                 channel_handles=self.channel_handles,
-                receive_threads=self.receive_threads
+                receive_threads=self.receive_threads,
+                case_repeat_count=repeat_count
             )
             parser.run()
-
         except Exception as e:
             error_msg = str(e)
             self.root.after(0, lambda msg=error_msg: messagebox.showerror("测试错误", f"自动化测试执行失败：\n{msg}"))
         finally:
-            self.root.after(0, lambda: self.test_btn.config(state=tk.NORMAL))
+            self.root.after(0, self._post_test_finish)
+
+    def _post_test_finish(self):
+        """测试结束后的 UI 恢复"""
+        self.test_btn.config(state=tk.NORMAL)
+        self.repeat_entry.config(state=tk.NORMAL)  # 恢复输入框可编辑
+
+    def _validate_positive_integer(self, value):
+        """验证输入是否为大于 0 的整数"""
+        if value == "":
+            return True  # 允许空（便于删除）
+        try:
+            val = int(value)
+            return val > 0
+        except ValueError:
+            return False
 
 
     # --------------------- can设备管理子窗口 ---------------------

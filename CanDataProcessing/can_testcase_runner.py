@@ -7,8 +7,7 @@ import can_control
 import mylog
 import logging
 
-# 注意！ 请仅在调试该文件时将自动初始化及关闭开关打开，非调试时保持False，避免其他文件调用该文件时重复初始化
-ENABLE_AUTO_OPEN_CLOSE_CAN = False  # 是否自动开关CAN设备
+ENABLE_AUTO_OPEN_CLOSE_CAN = True  # 是否自动开关CAN设备
 
 # 全局 logger 名称
 LOGGER_NAME = "parser"
@@ -17,22 +16,22 @@ LOGGER_NAME = "parser"
 CASE_REPEAT_COUNT = 1 
 
 class LogParser:
-    def __init__(self, log_path, device_handle=None, channel_handles=None, receive_threads=None):
-
+    def __init__(self, log_path, device_handle=None, channel_handles=None, receive_threads=None, case_repeat_count=None):
         """
         初始化日志解析器
         :param log_path: 日志文件路径
         :param device_handle: 外部传入的设备句柄（可选）
         :param channel_handles: 外部传入的通道句柄列表（可选）
+        :param case_repeat_count: 外部指定的重复次数（可选），优先级高于全局 CASE_REPEAT_COUNT
         """
         self.log_path = log_path
         self.log_content = ""
         self.test_cases = []
-        
-        # 接收外部传入的设备资源
-        self.can_device = (device_handle, channel_handles, receive_threads) 
-    
-        # 初始化日志器
+        self.can_device = (device_handle, channel_handles, receive_threads)
+
+        # 使用传入值或默认值
+        self.case_repeat_count = case_repeat_count if case_repeat_count is not None else CASE_REPEAT_COUNT
+
         mylog.setup_logger(
             logger_name=LOGGER_NAME,
             log_dir="./logs",
@@ -89,13 +88,20 @@ class LogParser:
 
         # ========== 启动 CAN 设备 ==========
         if ENABLE_AUTO_OPEN_CLOSE_CAN:
-            try:
-                device_handle, channel_handles, receive_threads = can_control.Initialize_Canfd_Device(...)
-                self.can_device = (device_handle, channel_handles, receive_threads)
-                mylog.info(LOGGER_NAME, "CAN设备已开启")
-            except Exception as e:
-                mylog.error(LOGGER_NAME, f"CAN设备开启失败: {e}")
-                return
+            # 如果外部已传入设备，则跳过自动初始化
+            if self.can_device and self.can_device[0] is not None:
+                mylog.info(LOGGER_NAME, "检测到外部传入的CAN设备，跳过自动初始化")
+            else:
+                try:
+                    device_handle, channel_handles, receive_threads = can_control.Initialize_Canfd_Device(
+                        device_type=can_control.ZCAN_USBCANFD_200U,
+                        merge_receive=0
+                    )
+                    self.can_device = (device_handle, channel_handles, receive_threads)
+                    mylog.info(LOGGER_NAME, "CAN设备已开启")
+                except Exception as e:
+                    mylog.error(LOGGER_NAME, f"CAN设备开启失败: {e}")
+                    return
 
         device_handle = None
         channel_handles = None
@@ -110,15 +116,15 @@ class LogParser:
 
                 # 仅当存在脚本解析结果时才进行重复执行
                 if self.has_script_result(case['content']):
-                    mylog.info(LOGGER_NAME, f"存在脚本解析结果，开始执行测试（共重复 {CASE_REPEAT_COUNT} 次）")
+                    mylog.info(LOGGER_NAME, f"存在脚本解析结果，开始执行测试（共重复 {self.case_repeat_count} 次）")
 
-                    for round_idx in range(1, CASE_REPEAT_COUNT + 1):
+                    for round_idx in range(1, self.case_repeat_count + 1):
                         mylog.info(LOGGER_NAME, f"第 {round_idx} 次检测开始...")
 
                         self.analyze_script_parts(case['content'])
 
                         # 每次执行后等待并清理（最后一次也清理）
-                        if round_idx < CASE_REPEAT_COUNT:
+                        if round_idx < self.case_repeat_count:
                             delay_time = 3
                             mylog.info(LOGGER_NAME, f"第 {round_idx} 次检测完成，等待{delay_time}秒后开始下一次...")
                             time.sleep(delay_time)
