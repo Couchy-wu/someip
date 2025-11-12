@@ -7,7 +7,9 @@ import can_control
 import mylog
 import logging
 
-ENABLE_AUTO_OPEN_CLOSE_CAN = True  # 是否自动开关CAN设备
+# 注意！仅调试该文件时打开开关，其他情况请务必关掉该开关，避免重复初始化或意外关闭can设备
+# 其实现在逻辑已经解决了重复初始化，但是没解决意外关闭can设别，后续再修改
+ENABLE_AUTO_OPEN_CLOSE_CAN = False  # 是否自动开关CAN设备
 
 # 全局 logger 名称
 LOGGER_NAME = "parser"
@@ -480,7 +482,7 @@ if __name__ == "__main__":
     import mylog  # 显式导入（可选，已在上方导入）
 
     # 设置日志文件路径
-    log_file_path = "TestcaseCollection/004_data.log"  # ← 修改为你的实际路径
+    log_file_path = "TestcaseCollection/001_data.log"  # ← 修改为你的实际路径
 
     # 创建解析器并运行
     parser = LogParser(log_file_path)

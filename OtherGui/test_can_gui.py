@@ -10,11 +10,12 @@ import time
 import xml.etree.ElementTree as ET
 
 class CANFDGUI:
-    def __init__(self, root):
+    def __init__(self, root, selected_file=None):
         self.root = root
         self.root.title("CANFD 设备控制")
         self.root.geometry("800x600")
         self.sub_window = None  # 用于跟踪子窗口是否存在
+        self.selected_file = selected_file  # 保存主窗口的 StringVar
 
         # 一些变量
         self.repeat_var = tk.StringVar(value="1")   # 用例重复检测次数
@@ -31,6 +32,8 @@ class CANFDGUI:
             font=("微软雅黑", 12),
             bg="#4A90E2",    # 蓝色背景
             fg="white",      # 白色文字
+            width=10,
+            height=1,
             activebackground="#357ABD",  # 按下时背景色
             command=self.start_init,
         )
@@ -43,6 +46,8 @@ class CANFDGUI:
             font=("微软雅黑", 12),
             bg="#D9534F",
             fg="white",
+            width=10,
+            height=1,
             activebackground="#C9302C",
             state=tk.DISABLED,          # 只有成功初始化后才可点
             command=self.start_close,
@@ -57,9 +62,11 @@ class CANFDGUI:
             bg="#5CB85C",
             fg="white",
             activebackground="#4CAE4C",
+            width=10,
+            height=1,
             command=self.open_subwindow
         )
-        self.sub_btn.grid(row=0, column=2, pady=5, padx=450, sticky='ew')
+        self.sub_btn.grid(row=0, column=2, pady=5, padx=400, sticky='ew')
 
         # 按键：发送信号
         self.send_btn = tk.Button(
@@ -69,6 +76,8 @@ class CANFDGUI:
             bg="#F0AD4E",
             fg="white",
             activebackground="#EB983F",
+            width=10,
+            height=1,
             state=tk.DISABLED,
             command=self.start_send_signal
         )
@@ -82,6 +91,8 @@ class CANFDGUI:
             bg="#B655C7",
             fg="white",
             activebackground="#7B1FA2",
+            width=10,
+            height=1,
             state=tk.DISABLED,
             command=self.start_testing
         )
@@ -94,7 +105,7 @@ class CANFDGUI:
             textvariable=self.repeat_var,
             width=10,
             font=("微软雅黑", 10),
-            state=tk.NORMAL
+            state=tk.DISABLED  # 初始禁用，等待初始化完成再启用
         )
         self.repeat_entry.grid(row=2, column=1, sticky='w', padx=10, pady=5)
 
@@ -132,6 +143,7 @@ class CANFDGUI:
             self.close_btn.config(state=tk.NORMAL)
             self.send_btn.config(state=tk.NORMAL)
             self.test_btn.config(state=tk.NORMAL)
+            self._update_repeat_entry_state()  # 控制输入框
 
     # --------------------- CAN设备关闭 ---------------------
     def start_close(self):
@@ -158,6 +170,7 @@ class CANFDGUI:
         self.close_btn.config(state=tk.DISABLED)    # 关闭按钮保持不可用
         self.send_btn.config(state=tk.DISABLED)     # 发送按键保持不可用
         self.test_btn.config(state=tk.DISABLED)     # 开始测试按键保持不可用
+        self._update_repeat_entry_state()           # 自动禁用输入框
 
     
     #----------------------CAN信号发送---------------------------
@@ -193,23 +206,39 @@ class CANFDGUI:
     def start_testing(self):
         """启动自动化测试，调用 can_testcase_runner.py 中的逻辑"""
         self.test_btn.config(state=tk.DISABLED)  # 防止重复点击
+        self.send_btn.config(state=tk.DISABLED)     # 禁用发送信号按钮
         self.repeat_entry.config(state=tk.DISABLED) # 禁用输入框
         threading.Thread(target=self.run_automation_test, daemon=True).start()
 
     def run_automation_test(self):
-        """执行自动化测试主逻辑"""
+        """执行自动化测试主逻辑：从 xlsx 推导出 _data.log 文件"""
         try:
             from CanDataProcessing.can_testcase_runner import LogParser
 
-            log_file_path = "TestcaseCollection/004_data.log"
+            # === 获取选中的 xlsx 文件名 ===
+            if not self.selected_file:
+                raise ValueError("未传入测试用例选择器")
 
-            # 获取重复次数（从输入框读取）
+            selected_xlsx = self.selected_file.get()
+            if not selected_xlsx or selected_xlsx == "无文件":
+                raise ValueError("请先选择一个有效的测试用例文件")
+
+            # 去掉 .xlsx 后缀，加上 _data.log
+            base_name = os.path.splitext(selected_xlsx)[0]  # 如：x
+            log_filename = f"{base_name}_data.log"         # 如：x_data.log
+            log_file_path = os.path.join("TestcaseCollection", log_filename)
+
+            # 检查日志文件是否存在
+            if not os.path.exists(log_file_path):
+                raise FileNotFoundError(f"对应的日志文件未找到: {log_file_path}")
+
+            # 获取重复次数
             try:
                 repeat_count = int(self.repeat_var.get())
-            except:
+            except Exception:
                 repeat_count = 1
 
-            # 创建解析器并传入重复次数（需 LogParser 支持）
+            # 创建解析器并运行测试
             parser = LogParser(
                 log_path=log_file_path,
                 device_handle=self.device_handle,
@@ -218,16 +247,19 @@ class CANFDGUI:
                 case_repeat_count=repeat_count
             )
             parser.run()
+
         except Exception as e:
             error_msg = str(e)
             self.root.after(0, lambda msg=error_msg: messagebox.showerror("测试错误", f"自动化测试执行失败：\n{msg}"))
         finally:
             self.root.after(0, self._post_test_finish)
 
+
     def _post_test_finish(self):
         """测试结束后的 UI 恢复"""
         self.test_btn.config(state=tk.NORMAL)
-        self.repeat_entry.config(state=tk.NORMAL)  # 恢复输入框可编辑
+        self.send_btn.config(state=tk.NORMAL)      # 恢复发送信号按钮
+        self._update_repeat_entry_state()          # 根据当前按钮状态决定是否启用
 
     def _validate_positive_integer(self, value):
         """验证输入是否为大于 0 的整数"""
@@ -238,6 +270,16 @@ class CANFDGUI:
             return val > 0
         except ValueError:
             return False
+
+    def _update_repeat_entry_state(self):
+        """根据按钮状态决定是否允许编辑重复次数输入框"""
+        init_btn_disabled = self.init_btn['state'] == tk.DISABLED
+        test_btn_enabled = self.test_btn['state'] == tk.NORMAL
+
+        if init_btn_disabled and test_btn_enabled:
+            self.repeat_entry.config(state=tk.NORMAL)
+        else:
+            self.repeat_entry.config(state=tk.DISABLED)
 
 
     # --------------------- can设备管理子窗口 ---------------------

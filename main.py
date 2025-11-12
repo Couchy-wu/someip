@@ -264,8 +264,8 @@ def open_can_gui():
     new_window.geometry("800x600")
     # 赋值给全局变量，以便关闭时能找到
     can_window_instance = new_window
-    # 实例化 GUI
-    CANFDGUI(new_window)
+    # 实例化 GUI，并传入 selected_file
+    CANFDGUI(new_window, selected_file=selected_file)
     # 设置关闭协议
     new_window.protocol("WM_DELETE_WINDOW", on_can_window_close)
 
