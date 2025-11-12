@@ -71,6 +71,19 @@ class CANFDGUI:
         )
         self.send_btn.grid(row=1, column=0, pady=5, padx=10, sticky='ew')
 
+        # 按键：开始测试
+        self.test_btn = tk.Button(
+            root,
+            text="开始测试",
+            font=("微软雅黑", 12),
+            bg="#B655C7",
+            fg="white",
+            activebackground="#7B1FA2",
+            state=tk.DISABLED,
+            command=self.start_testing
+        )
+        self.test_btn.grid(row=1, column=1, pady=5, padx=10, sticky='ew')
+
     # --------------------- CAN设备初始化 ---------------------
     def start_init(self):
         """点击“初始化设备”后，启动子线程执行真正的初始化逻辑"""
@@ -101,6 +114,7 @@ class CANFDGUI:
             # 成功后让“关闭设备”等按钮可用
             self.close_btn.config(state=tk.NORMAL)
             self.send_btn.config(state=tk.NORMAL)
+            self.test_btn.config(state=tk.NORMAL)
 
     # --------------------- CAN设备关闭 ---------------------
     def start_close(self):
@@ -157,6 +171,34 @@ class CANFDGUI:
             print(f"can信号发送失败: {error_msg}") 
         finally:
             self.root.after(0, lambda: self.send_btn.config(state=tk.NORMAL))
+
+    def start_testing(self):
+        """启动自动化测试，调用 can_testcase_runner.py 中的逻辑"""
+        self.test_btn.config(state=tk.DISABLED)  # 防止重复点击
+        threading.Thread(target=self.run_automation_test, daemon=True).start()
+
+    def run_automation_test(self):
+        """执行自动化测试主逻辑"""
+        try:
+            import CanDataProcessing.can_testcase_runner
+            from CanDataProcessing.can_testcase_runner import LogParser
+
+            log_file_path = "TestcaseCollection/004_data.log"
+
+            # 把当前已初始化的 CAN 设备句柄传给 LogParser
+            parser = LogParser(
+                log_path=log_file_path,
+                device_handle=self.device_handle,
+                channel_handles=self.channel_handles,
+                receive_threads=self.receive_threads
+            )
+            parser.run()
+
+        except Exception as e:
+            error_msg = str(e)
+            self.root.after(0, lambda msg=error_msg: messagebox.showerror("测试错误", f"自动化测试执行失败：\n{msg}"))
+        finally:
+            self.root.after(0, lambda: self.test_btn.config(state=tk.NORMAL))
 
 
     # --------------------- can设备管理子窗口 ---------------------

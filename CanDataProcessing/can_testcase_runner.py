@@ -7,7 +7,8 @@ import can_control
 import mylog
 import logging
 
-ENABLE_AUTO_OPEN_CLOSE_CAN = True  # 是否自动开关CAN设备
+# 注意！ 请仅在调试该文件时将自动初始化及关闭开关打开，非调试时保持False，避免其他文件调用该文件时重复初始化
+ENABLE_AUTO_OPEN_CLOSE_CAN = False  # 是否自动开关CAN设备
 
 # 全局 logger 名称
 LOGGER_NAME = "parser"
@@ -16,16 +17,22 @@ LOGGER_NAME = "parser"
 CASE_REPEAT_COUNT = 1 
 
 class LogParser:
-    def __init__(self, log_path):
+    def __init__(self, log_path, device_handle=None, channel_handles=None, receive_threads=None):
+
         """
         初始化日志解析器
         :param log_path: 日志文件路径
+        :param device_handle: 外部传入的设备句柄（可选）
+        :param channel_handles: 外部传入的通道句柄列表（可选）
         """
         self.log_path = log_path
         self.log_content = ""
         self.test_cases = []
-
-        # 初始化统一的日志器（延迟创建文件）
+        
+        # 接收外部传入的设备资源
+        self.can_device = (device_handle, channel_handles, receive_threads) 
+    
+        # 初始化日志器
         mylog.setup_logger(
             logger_name=LOGGER_NAME,
             log_dir="./logs",
@@ -75,6 +82,7 @@ class LogParser:
 
     def parse_all_cases(self):
         """依次解析所有测试用例，并重复执行指定次数"""
+        mylog.debug(LOGGER_NAME, f"使用外部CAN设备资源: device={self.can_device[0]}, chn_handles={self.can_device[1]}, threads={self.can_device[2]}")
         if not self.test_cases:
             mylog.info(LOGGER_NAME, "未检测到任何测试用例，请先调用 split_test_cases() 方法。")
             return
@@ -82,17 +90,12 @@ class LogParser:
         # ========== 启动 CAN 设备 ==========
         if ENABLE_AUTO_OPEN_CLOSE_CAN:
             try:
-                device_handle, channel_handles, receive_threads = can_control.Initialize_Canfd_Device(
-                    device_type=can_control.ZCAN_USBCANFD_200U,
-                    merge_receive=0
-                )
-                mylog.info(LOGGER_NAME, "CAN设备已开启")
+                device_handle, channel_handles, receive_threads = can_control.Initialize_Canfd_Device(...)
                 self.can_device = (device_handle, channel_handles, receive_threads)
+                mylog.info(LOGGER_NAME, "CAN设备已开启")
             except Exception as e:
                 mylog.error(LOGGER_NAME, f"CAN设备开启失败: {e}")
                 return
-        else:
-            self.can_device = None
 
         device_handle = None
         channel_handles = None
@@ -238,6 +241,7 @@ class LogParser:
         - 提取 enum_value（仅用于日志或后续扩展，当前不参与逻辑）
         - 从下一行提取 CAN 参数，尤其是 '分配index: X' 作为发送通道编号
         """
+        mylog.debug(LOGGER_NAME, f"当前 CAN 设备状态: {self.can_device is not None}")
         current_line = lines[current_index].strip()
 
         # === 1. 提取 enum_value（仅用于日志提示，当前不使用）===
