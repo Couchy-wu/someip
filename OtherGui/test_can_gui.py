@@ -140,6 +140,7 @@ class CANFDGUI:
         self.init_btn.config(state=tk.NORMAL)       # 重新允许初始化
         self.close_btn.config(state=tk.DISABLED)    # 关闭按钮保持不可用
         self.send_btn.config(state=tk.DISABLED)     # 发送按键保持不可用
+        self.test_btn.config(state=tk.DISABLED)     # 开始测试按键保持不可用
 
     
     #----------------------CAN信号发送---------------------------
