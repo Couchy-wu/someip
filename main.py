@@ -31,7 +31,7 @@ class TextRedirector:
 # 创建主窗口
 root = tk.Tk()
 root.title("主窗口")
-root.geometry("1200x600") 
+root.geometry("1300x600") 
 
 # 初始化文件更新器
 file_updater = FileUpdater()
@@ -168,7 +168,7 @@ image_button = tk.Button(
     width=15,
     height=2
 )
-image_button.grid(row=1, column=0, padx=20, pady=20)
+image_button.grid(row=2, column=0, padx=20, pady=20)
 
 # 添加“提取视频帧”按钮
 read_video_button = tk.Button(
@@ -182,7 +182,7 @@ read_video_button = tk.Button(
     width=15,
     height=2
 )
-read_video_button.grid(row=1, column=1, padx=20, pady=20)
+read_video_button.grid(row=2, column=1, padx=20, pady=20)
 
 # 添加“播放图片视频”按钮
 image_video_button = tk.Button(
@@ -196,7 +196,7 @@ image_video_button = tk.Button(
     width=15,
     height=2
 )
-image_video_button.grid(row=1, column=2, padx=20, pady=20)
+image_video_button.grid(row=2, column=2, padx=20, pady=20)
 
 # 添加“转换信号矩阵”按钮
 convert_matrix_button = tk.Button(
@@ -210,7 +210,7 @@ convert_matrix_button = tk.Button(
     width=15,
     height=2
 )
-convert_matrix_button.grid(row=2, column=0, padx=20, pady=20)
+convert_matrix_button.grid(row=1, column=0, padx=20, pady=20)
 
 def open_matrix_converter():
     converter_window = tk.Toplevel(root)
@@ -233,7 +233,7 @@ hex_button = tk.Button(
     width=15,
     height=2
 )
-hex_button.grid(row=2, column=1, padx=20, pady=20)  
+hex_button.grid(row=1, column=1, padx=20, pady=20)  
 
 # 添加“can测试”按钮，点击后调用test_can_gui.py
 can_window_instance = None      # 全局变量：用于存储子窗口实例
@@ -280,7 +280,7 @@ can_control_button = tk.Button(
     width=15,
     height=2
 )
-can_control_button.grid(row=2, column=2, padx=20, pady=20)
+can_control_button.grid(row=1, column=2, padx=20, pady=20)
 
 
 # 运行主循环
