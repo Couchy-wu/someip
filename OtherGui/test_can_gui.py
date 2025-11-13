@@ -66,40 +66,57 @@ class CANFDGUI:
             height=1,
             command=self.open_subwindow
         )
-        self.sub_btn.grid(row=0, column=2, pady=5, padx=400, sticky='ew')
+        self.sub_btn.grid(row=0, column=3, pady=5, padx=10, sticky='e')  # 修改列位置为3，靠右对齐
+        # 配置列权重，使第3列（设备管理所在列）吸收多余空间，实现右对齐
+        root.grid_columnconfigure(3, weight=1)
 
-        # 按键：发送信号
+        # 按键：ON档电
         self.send_btn = tk.Button(
             root,
-            text="发送信号",
+            text="ON档电",
             font=("微软雅黑", 12),
-            bg="#F0AD4E",
+            bg="#CEA022",    
             fg="white",
-            activebackground="#EB983F",
+            activebackground="#8D8119",
             width=10,
             height=1,
             state=tk.DISABLED,
-            command=self.start_send_signal
+            command=self.start_send_on_signal
         )
         self.send_btn.grid(row=1, column=0, pady=5, padx=10, sticky='ew')
+
+        # 新增：OFF档电
+        self.off_btn = tk.Button(
+            root,
+            text="OFF档电",
+            font=("微软雅黑", 12),
+            bg="#CEA022",    
+            fg="white",
+            activebackground="#8D8119",
+            width=10,
+            height=1,
+            state=tk.DISABLED,
+            command=self.start_send_off_signal
+        )
+        self.off_btn.grid(row=1, column=1, pady=5, padx=10, sticky='ew')
 
         # 按键：开始测试
         self.test_btn = tk.Button(
             root,
             text="开始测试",
             font=("微软雅黑", 12),
-            bg="#B655C7",
+            bg="#DB218E",
             fg="white",
-            activebackground="#7B1FA2",
+            activebackground="#5A1154",
             width=10,
             height=1,
             state=tk.DISABLED,
             command=self.start_testing
         )
-        self.test_btn.grid(row=1, column=1, pady=5, padx=10, sticky='ew')
+        self.test_btn.grid(row=2, column=0, pady=5, padx=10, sticky='ew')
 
         # 输入框：用例重复侧测试次数
-        tk.Label(root, text="用例重复侧测试次数:", font=("微软雅黑", 10)).grid(row=2, column=0, sticky='w', padx=12, pady=5)
+        tk.Label(root, text="用例重复侧测试次数:", font=("微软雅黑", 10)).grid(row=3, column=0, sticky='w', padx=12, pady=5)
         self.repeat_entry = tk.Entry(
             root,
             textvariable=self.repeat_var,
@@ -107,7 +124,7 @@ class CANFDGUI:
             font=("微软雅黑", 10),
             state=tk.DISABLED  # 初始禁用，等待初始化完成再启用
         )
-        self.repeat_entry.grid(row=2, column=1, sticky='w', padx=10, pady=5)
+        self.repeat_entry.grid(row=3, column=1, sticky='w', padx=10, pady=5)
 
         # 为输入框绑定验证功能
         self.repeat_entry.configure(validate='key', validatecommand=(root.register(self._validate_positive_integer), '%P'))
@@ -142,6 +159,7 @@ class CANFDGUI:
             # 成功后让“关闭设备”等按钮可用
             self.close_btn.config(state=tk.NORMAL)
             self.send_btn.config(state=tk.NORMAL)
+            self.off_btn.config(state=tk.NORMAL)
             self.test_btn.config(state=tk.NORMAL)
             self._update_repeat_entry_state()  # 控制输入框
 
@@ -168,17 +186,17 @@ class CANFDGUI:
         """关闭结束后的 UI 更新"""
         self.init_btn.config(state=tk.NORMAL)       # 重新允许初始化
         self.close_btn.config(state=tk.DISABLED)    # 关闭按钮保持不可用
-        self.send_btn.config(state=tk.DISABLED)     # 发送按键保持不可用
+        self.send_btn.config(state=tk.DISABLED)     # ON 电禁用
+        self.off_btn.config(state=tk.DISABLED)      # OFF电禁用
         self.test_btn.config(state=tk.DISABLED)     # 开始测试按键保持不可用
         self._update_repeat_entry_state()           # 自动禁用输入框
 
-    
-    #----------------------CAN信号发送---------------------------
-    def start_send_signal(self):
+    #----------------------ON档电信号发送---------------------------
+    def start_send_on_signal(self):
         self.send_btn.config(state=tk.DISABLED)
-        threading.Thread(target=self.send_can_signal, daemon=True).start()
+        threading.Thread(target=self.send_can_on_signal, daemon=True).start()
 
-    def send_can_signal(self):
+    def send_can_on_signal(self):
         try:
             if self.device_handle is None or self.channel_handles is None:
                 raise Exception("设备未初始化，无法发送信号！")
@@ -196,17 +214,49 @@ class CANFDGUI:
                 cycle_ms=50,
                 index=1
             )
-            print("can信号发送成功!") 
+            print("ON档电信号发送成功!") 
         except Exception as e:
             error_msg = str(e)
-            print(f"can信号发送失败: {error_msg}") 
+            print(f"ON档电信号发送失败: {error_msg}") 
         finally:
             self.root.after(0, lambda: self.send_btn.config(state=tk.NORMAL))
+
+
+    #----------------------OFF档电信号发送---------------------------
+    def start_send_off_signal(self):
+        self.off_btn.config(state=tk.DISABLED)
+        threading.Thread(target=self.send_can_off_signal, daemon=True).start()
+
+    def send_can_off_signal(self):
+        try:
+            if self.device_handle is None or self.channel_handles is None:
+                raise Exception("设备未初始化，无法发送信号！")
+            device_handle = self.device_handle         
+            channel_handles = self.channel_handles[0]
+            can_control.Send_Can_Signal(
+                device_handle=device_handle,
+                chn_handle=channel_handles,
+                chn=0,
+                stdorext=0,
+                id=0x12D,
+                data=[0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00],  # OFF数据
+                msg_type='canfd',
+                signal_type='Cycle',
+                cycle_ms=50,
+                index=1
+            )
+            print("OFF档电信号发送成功!") 
+        except Exception as e:
+            error_msg = str(e)
+            print(f"OFF档电信号发送失败: {error_msg}") 
+        finally:
+            self.root.after(0, lambda: self.off_btn.config(state=tk.NORMAL))
 
     def start_testing(self):
         """启动自动化测试，调用 can_testcase_runner.py 中的逻辑"""
         self.test_btn.config(state=tk.DISABLED)  # 防止重复点击
-        self.send_btn.config(state=tk.DISABLED)     # 禁用发送信号按钮
+        self.send_btn.config(state=tk.DISABLED)  # 禁用ON
+        self.off_btn.config(state=tk.DISABLED)   # 禁用OFF
         self.repeat_entry.config(state=tk.DISABLED) # 禁用输入框
         threading.Thread(target=self.run_automation_test, daemon=True).start()
 
@@ -258,7 +308,8 @@ class CANFDGUI:
     def _post_test_finish(self):
         """测试结束后的 UI 恢复"""
         self.test_btn.config(state=tk.NORMAL)
-        self.send_btn.config(state=tk.NORMAL)      # 恢复发送信号按钮
+        self.send_btn.config(state=tk.NORMAL)      # 恢复ON
+        self.off_btn.config(state=tk.NORMAL)      # 恢复OFF
         self._update_repeat_entry_state()          # 根据当前按钮状态决定是否启用
 
     def _validate_positive_integer(self, value):
