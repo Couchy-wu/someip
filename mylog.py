@@ -50,9 +50,12 @@ def setup_logger(logger_name, log_dir="./logs", log_prefix=None, level=logging.I
     
     # 根据 show_prefix 创建默认 formatter（临时，真正 formatter 在 _setup 中设置）
     if show_prefix:
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+        formatter = logging.Formatter(
+            '%(asctime)s.%(msecs)03d - %(levelname)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
     else:
-        formatter = logging.Formatter('%(message)s')  # 只显示消息
+        formatter = logging.Formatter('%(message)s')
 
     handler.setFormatter(formatter)  # 这个 formatter 会被 _setup 覆盖，但用于临时 emit
     handler.setLevel(level)
@@ -145,9 +148,12 @@ class DelayedFileHandler(logging.Handler):
 
             # 根据 show_prefix 设置 formatter
             if show_prefix:
-                formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+                formatter = logging.Formatter(
+                    '%(asctime)s.%(msecs)03d - %(levelname)s - %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S'
+                )
             else:
-                formatter = logging.Formatter('%(message)s')  # 只输出消息
+                formatter = logging.Formatter('%(message)s')
 
             self._real_handler.setFormatter(formatter)
 
