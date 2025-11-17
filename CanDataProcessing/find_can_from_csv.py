@@ -135,18 +135,22 @@ def get_signal_info_by_id_and_name(message_id, signal_name_en, csv_file='CanData
 
 
 def _parse_bit_range(bit_range: str, frame_length: int = 8) -> Tuple[int, int, int, int]:
-    """解析 "row_start.col_start-row_end.col_end" → 四个整数坐标。
-    
-    参数:
-        bit_range: 字符串形式的位范围，格式为 "row_start.col_start-row_end.col_end"
-        frame_length: 帧长度（字节数，默认为8）
-    """
+    """支持 '7.2' → 自动转为 '7.2-7.2'"""
+    if '-' not in bit_range:
+        # 单个位置，自动扩展为范围
+        try:
+            row_col = bit_range.strip()
+            row, col = map(int, row_col.split('.'))
+            bit_range = f"{row}.{col}-{row}.{col}"
+        except:
+            raise ValueError(f"无效的位地址格式: {bit_range}")
+    # 继续原有逻辑...
     try:
         start, end = bit_range.split("-")
         start_row, start_col = map(int, start.split("."))
         end_row, end_col = map(int, end.split("."))
     except Exception as exc:
-        raise ValueError(f'位范围格式错误') from exc
+        raise ValueError(f'位范围格式错误: {bit_range}') from exc
     
     # 计算最大列号（基于帧长度）
     max_col = frame_length * 8 - 1
@@ -327,7 +331,7 @@ def create_can_data_by_signal(message_id: str, signal_name_en: str, enum_value: 
 
 # 示例调用
 if __name__ == "__main__":
-    data1 = create_can_data_by_signal('1EF', 'RF_Window_Action_Request_S', 1)
+    data1 = create_can_data_by_signal('38B', 'Smart_Projection_Configuration_Judgment_S', 0)
     data2 = create_can_data_by_signal('12D', 'BCMPower_Gear_12D_S', 3)
     data3 = create_can_data_by_signal('496', 'Emitting_Function_S', 1)
     data4 = create_can_data_by_signal('144', 'Left_Turn_Indicator_144_S', 1)
