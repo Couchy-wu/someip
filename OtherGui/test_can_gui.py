@@ -13,7 +13,7 @@ class CANFDGUI:
     def __init__(self, root, selected_file=None):
         self.root = root
         self.root.title("CANFD 设备控制")
-        self.root.geometry("800x600")
+        self.root.geometry("500x300")
         self.sub_window = None  # 用于跟踪子窗口是否存在
         self.selected_file = selected_file  # 保存主窗口的 StringVar
 
@@ -116,7 +116,7 @@ class CANFDGUI:
         self.test_btn.grid(row=2, column=0, pady=5, padx=10, sticky='ew')
 
         # 输入框：用例重复侧测试次数
-        tk.Label(root, text="用例重复侧测试次数:", font=("微软雅黑", 10)).grid(row=3, column=0, sticky='w', padx=12, pady=5)
+        tk.Label(root, text="用例重复测试次数:", font=("微软雅黑", 10)).grid(row=3, column=0, sticky='w', padx=12, pady=5)
         self.repeat_entry = tk.Entry(
             root,
             textvariable=self.repeat_var,
@@ -261,11 +261,11 @@ class CANFDGUI:
         threading.Thread(target=self.run_automation_test, daemon=True).start()
 
     def run_automation_test(self):
-        """执行自动化测试主逻辑：从 xlsx 推导出 _data.log 文件"""
+        """执行自动化测试主逻辑"""
+        success = False
         try:
             from CanDataProcessing.can_testcase_runner import LogParser
 
-            # === 获取选中的 xlsx 文件名 ===
             if not self.selected_file:
                 raise ValueError("未传入测试用例选择器")
 
@@ -273,9 +273,8 @@ class CANFDGUI:
             if not selected_xlsx or selected_xlsx == "无文件":
                 raise ValueError("请先选择一个有效的测试用例文件")
 
-            # 去掉 .xlsx 后缀，加上 _data.log
-            base_name = os.path.splitext(selected_xlsx)[0]  # 如：x
-            log_filename = f"{base_name}_data.log"         # 如：x_data.log
+            base_name = os.path.splitext(selected_xlsx)[0]
+            log_filename = f"{base_name}_data.log"
             log_file_path = os.path.join("TestcaseCollection", log_filename)
 
             # 检查日志文件是否存在
@@ -297,20 +296,70 @@ class CANFDGUI:
                 case_repeat_count=repeat_count
             )
             parser.run()
+            success = True  # 标记成功
 
         except Exception as e:
             error_msg = str(e)
             self.root.after(0, lambda msg=error_msg: messagebox.showerror("测试错误", f"自动化测试执行失败：\n{msg}"))
         finally:
-            self.root.after(0, self._post_test_finish)
+            self.root.after(0, lambda: self._post_test_finish(success))
 
 
-    def _post_test_finish(self):
-        """测试结束后的 UI 恢复"""
+
+    def _post_test_finish(self, success=False):
+        """测试结束后的 UI 恢复，并弹出独立提示窗口"""
+        # 恢复主界面按钮状态
         self.test_btn.config(state=tk.NORMAL)
-        self.send_btn.config(state=tk.NORMAL)      # 恢复ON
-        self.off_btn.config(state=tk.NORMAL)      # 恢复OFF
-        self._update_repeat_entry_state()          # 根据当前按钮状态决定是否启用
+        self.send_btn.config(state=tk.NORMAL)
+        self.off_btn.config(state=tk.NORMAL)
+        self._update_repeat_entry_state()
+        # 成功完成才弹出提示
+        if success:
+            self.show_test_completed_window()
+
+    def show_test_completed_window(self):
+        """创建一个非模态的独立提示窗口，不阻塞主窗口"""
+        # 创建 Toplevel 窗口
+        notify_window = tk.Toplevel(self.root)
+        notify_window.title("测试完成提醒")
+        notify_window.geometry("400x200")
+        notify_window.resizable(False, False)
+
+        # 设置窗口图标（可选）
+        # notify_window.iconbitmap("path/to/icon.ico")
+
+        # 居中显示
+        notify_window.transient(self.root)  # 置于主窗口上方
+        notify_window.grab_set()            # 可选：点击其他地方不失去焦点（若想完全非模态可注释这行）
+        notify_window.focus_set()
+
+        # 提示内容
+        container = tk.Frame(notify_window)
+        container.pack(expand=True)
+
+        tk.Label(
+            container,
+            text="测试已完成！",
+            font=("微软雅黑", 12, "bold"),
+            fg="#4A90E2"
+        ).pack(pady=5)
+
+        tk.Label(
+            container,
+            text="所有测试用例已执行完毕",
+            font=("微软雅黑", 10)
+        ).pack(pady=5)
+
+        # # 可选：10秒后自动关闭
+        # self.root.after(10000, lambda: self.destroy_window_safely(notify_window))
+
+    def destroy_window_safely(self, window):
+        """安全地关闭窗口，防止调用已销毁的窗口"""
+        try:
+            if window.winfo_exists():
+                window.destroy()
+        except tk.TclError:
+            pass  # 窗口已被销毁，忽略错误
 
     def _validate_positive_integer(self, value):
         """验证输入是否为大于 0 的整数"""
