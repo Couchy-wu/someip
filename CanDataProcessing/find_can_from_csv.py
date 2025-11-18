@@ -61,7 +61,7 @@ def get_signal_info_by_id_and_name(message_id, signal_name_en, csv_file='CanData
         data_subset = final_match[compare_cols].drop_duplicates()
 
         if len(data_subset) == 1:
-            print(f"在报文ID {message_id_normalized} 中找到 {len(final_match)} 个完全相同的 '{signal_name_en}' 信号，自动取第一条。")
+            # print(f"在报文ID {message_id_normalized} 中找到 {len(final_match)} 个完全相同的 '{signal_name_en}' 信号，自动取第一条。")
             record = final_match.iloc[0]  # 取第一条
         else:
             print(f"错误：在报文ID {message_id_normalized} 中找到多个名为 '{signal_name_en}' 的信号（共 {len(final_match)} 个），且数据不一致，请检查数据唯一性。")
@@ -112,10 +112,10 @@ def get_signal_info_by_id_and_name(message_id, signal_name_en, csv_file='CanData
                 except ValueError:
                     pass  # 保持 "未知"
 
-    if pd.notna(sub_id) and str(sub_id).strip().upper() == 'NO':
-        print(f"找到信号：{message_id_normalized} {signal_name_en}")
-    else:
-        print(f"找到信号：{message_id_normalized} {sub_id} {signal_name_en}")
+    # if pd.notna(sub_id) and str(sub_id).strip().upper() == 'NO':
+    #     print(f"找到信号：{message_id_normalized} {signal_name_en}")
+    # else:
+    #     print(f"找到信号：{message_id_normalized} {sub_id} {signal_name_en}")
 
     result_can = {
         '报文名称': record['报文名称'],

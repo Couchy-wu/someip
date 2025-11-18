@@ -60,20 +60,46 @@ class TestCaseProcessor:
     # 入口 & 文件读取
     # ----------------------------------------------------------------------
     def process(self) -> None:
-        """遍历所有用例，逐条处理（已移除 CAN 设备初始化/关闭）"""
+        """遍历所有用例，逐条处理，出错时不中断，最后打印失败用例"""
         data = self._load_json_data()
         if not data:
             return
 
         self.total_cases = len(data)
+        self.failed_cases = []  # 用于记录出错的用例
 
-        # === 已移除 CAN 初始化 ===
-
-        # 开始处理每个用例
         for idx, case in enumerate(data):
-            self._process_single_case(case, idx + 1)
+            case_index = idx + 1
+            try:
+                self._process_single_case(case, case_index)
+            except Exception as e:
+                case_id = "未知"
+                # 尽量提取用例编号
+                try:
+                    rows = case.get("rows", [])
+                    test_case_row = self._find_row_by_type(rows, "*类型", "测试用例")
+                    case_id = test_case_row.get("*用例编号", "未知")
+                except:
+                    pass  # 如果也出错，就保留“未知”
 
-        # === 已移除 CAN 关闭 ===
+                self.failed_cases.append({
+                    "index": case_index,
+                    "case_id": case_id,
+                    "error": str(e)
+                })
+                # 可选：在日志中记录完整 traceback
+                mylog.error(self.logger_name, f"[用例 {case_id}] 解析时发生异常: {e}")
+
+        # === 所有用例处理完成后，打印汇总错误 ===
+        if self.failed_cases:
+            print("\n" + "="*50)
+            print("❌ 以下测试用例解析失败：")
+            print("="*50)
+            for fail in self.failed_cases:
+                print(f"❌ 用例 {fail['case_id']} (索引: {fail['index']}) → 错误: {fail['error']}")
+            print(f"\n共 {len(self.failed_cases)} 个用例解析失败。")
+        print("\n✅ 所有用例解析完成")
+
 
     def _load_json_data(self) -> Optional[List[Dict[str, Any]]]:
         """
@@ -136,6 +162,7 @@ class TestCaseProcessor:
         level2    = test_case_row.get("二级功能", "未知")
         test_env  = test_case_row.get("*测试环境", "")
 
+        print(f"✅ 解析到测试用例 {case_id}")
         mylog.info(self.logger_name, f"=== 开始处理 用例 {case_id} ===")
         mylog.info(self.logger_name, f"功能：{level1} - {level2}")
 
