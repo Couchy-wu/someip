@@ -904,6 +904,194 @@ def Send_Can_Signal(
 
     return True
 
+import time
+from typing import List, Union
+import mylog
+from collections import deque
+import threading
+
+# 假设已定义
+# received_messages = deque(maxlen=1000)
+# received_messages_lock = threading.Lock()
+
+
+def extract_bits_from_data(data_list: List[int], bit_range: str) -> int:
+    """
+    从 CAN 数据中提取指定范围的位（支持跨字节）
+    注意：位表示法中，"1.0-1.7" 对应 data[0]，"2.0-2.7" 对应 data[1]，以此类推
+    """
+    try:
+        bit_range = bit_range.strip()
+        if '-' in bit_range:
+            start_part, end_part = bit_range.split('-')
+        else:
+            start_part = end_part = bit_range
+
+        # 解析 byte.bit，注意：1.0 表示第1字节bit0 → data[0]
+        start_byte_idx, start_bit = map(int, start_part.split('.'))
+        end_byte_idx, end_bit = map(int, end_part.split('.'))
+
+        # 转换为 data 索引：第 n 字节 → data[n-1]
+        start_data_index = start_byte_idx - 1
+        end_data_index = end_byte_idx - 1
+
+        # 检查数据长度
+        max_data_index = max(start_data_index, end_data_index)
+        if max_data_index >= len(data_list):
+            mylog.warning("bit_parse", f"数据长度不足，无法访问 data[{max_data_index}]")
+            return -1
+
+        value = 0
+        current_pos = 0
+
+        byte_idx = start_data_index
+        bit_idx = start_bit
+
+        while byte_idx <= end_data_index:
+            if byte_idx == end_data_index and bit_idx > end_bit:
+                break
+            if byte_idx == start_data_index and bit_idx < start_bit:
+                bit_idx += 1
+                continue
+
+            if data_list[byte_idx] & (1 << bit_idx):
+                value |= (1 << current_pos)
+
+            current_pos += 1
+            bit_idx += 1
+            if bit_idx > 7:
+                byte_idx += 1
+                bit_idx = 0
+                if byte_idx > end_data_index:
+                    break
+
+        return value
+
+    except Exception as e:
+        mylog.error("bit_parse", f"解析位范围失败: {bit_range}, 错误: {e}")
+        return -1
+
+
+def calculate_bit_length(bit_range: str) -> int:
+    """计算位范围长度"""
+    try:
+        bit_range = bit_range.strip()
+        if '-' in bit_range:
+            start_part, end_part = bit_range.split('-')
+        else:
+            start_part = end_part = bit_range
+
+        start_byte, start_bit = map(int, start_part.split('.'))
+        end_byte, end_bit = map(int, end_part.split('.'))
+
+        if start_byte == end_byte:
+            length = end_bit - start_bit + 1
+        else:
+            start_remaining = 8 - start_bit
+            middle_full = 8 * (end_byte - start_byte - 1) if end_byte - start_byte > 1 else 0
+            end_prefix = end_bit + 1
+            length = start_remaining + middle_full + end_prefix
+
+        return max(1, length) if length <= 32 else 32
+
+    except Exception as e:
+        mylog.error("bit_parse", f"计算位长度失败: {bit_range}, 错误: {e}")
+        return -1
+
+
+def wait_for_check_signal_by_bit_enum(
+    signal_id: Union[int, str],
+    sub_id: Union[int, str],
+    bit_position: str,
+    expected_enum_value: int,
+    channel: int,
+    timeout: float = 3.0,
+    check_interval: float = 0.1
+) -> bool:
+    """
+    等待并检查 CAN 信号
+    """
+    # 解析 CAN ID
+    if isinstance(signal_id, str):
+        try:
+            can_id_int = int(signal_id, 16)
+        except ValueError:
+            mylog.error("can", f"无效 CAN ID: {signal_id}")
+            return False
+    else:
+        can_id_int = int(signal_id)
+
+    can_id_hex_str = f"0x{can_id_int:X}"
+
+    # 子ID 检查逻辑
+    check_sub_id = sub_id != "No"
+    expect_sub_id_val = int(sub_id) if check_sub_id else 0
+
+    # 计算位长度（日志用）
+    signal_length = calculate_bit_length(bit_position)
+
+    start_time = time.time()
+    end_time = start_time + timeout
+
+    mylog.info("candata", f"开始等待信号: ID={can_id_hex_str}, 子ID={sub_id:#x}, "
+                          f"位域={bit_position}({signal_length}bits), "
+                          f"期望值={expected_enum_value}, 通道={channel}, 超时={timeout}s")
+
+    while time.time() < end_time:
+        current_messages = []
+        with received_messages_lock:
+            current_messages = list(received_messages)
+
+        for msg in current_messages:
+            # CAN ID 匹配
+            try:
+                msg_id = int(msg['can_id'], 16)
+            except:
+                continue
+            if msg_id != can_id_int:
+                continue
+
+            # 通道匹配
+            if msg.get('channel') != channel:
+                continue
+
+            data_list = msg.get('data_list', [])
+            if not isinstance(data_list, list) or len(data_list) == 0:
+                continue
+
+            # ✅ 检查子ID：对应 data[0]（因为 1.0-1.7 是第1字节）
+            if check_sub_id:
+                if len(data_list) <= 0:
+                    continue
+                if data_list[0] != expect_sub_id_val:
+                    continue  # data[0] 不匹配
+
+            # 提取目标位值
+            actual_value = extract_bits_from_data(data_list, bit_position)
+            if actual_value == -1:
+                continue
+            if actual_value != expected_enum_value:
+                continue
+
+            # ✅ 成功
+            hex_data = " ".join(f"{b:02X}" for b in data_list)
+
+            # 日志区分是否检查 sub_id
+            if check_sub_id:
+                sub_id_log = f"子ID=0x{data_list[0]:02X}"
+            else:
+                sub_id_log = f"子ID=不检查(data[0]=0x{data_list[0]:02X})"
+
+            mylog.info("candata", f"✅ 条件满足! ID={can_id_hex_str}, 数据=[{hex_data}], "
+                                  f"{sub_id_log}, {bit_position}={actual_value}")
+            return True
+
+        time.sleep(check_interval)
+
+    mylog.warning("candata", f"❌ 等待超时! ID={can_id_hex_str}, 子ID={sub_id:#x}, "
+                             f"位={bit_position}, 期望值={expected_enum_value}")
+    return False
+
 
 if __name__ == "__main__":
 
@@ -918,19 +1106,32 @@ if __name__ == "__main__":
     data1 = [0x01, 0x00, 0x00, 0x00]
     data2 = [0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
     data3 = [0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+    data4 = [0x2B, 0x46, 0x1B, 0x10, 0x00, 0x28, 0x12, 0x00]
 
     # 发送事件信号：每50ms发一次，连发3帧
-    Send_Can_Signal(device_handle, channel_handles[0], 0, 0, 0x100, data1, 'can', 'Event', cycle_ms=50, index = 0)
+    # Send_Can_Signal(device_handle, channel_handles[0], 0, 0, 0x100, data1, 'can', 'Event', cycle_ms=50, index = 0)
 
     # 发送周期信号：每200ms周期发送
     # Send_Can_Signal(device_handle, channel_handles[0], 0, 0, 0x200, data2, 'canfd', 'Cycle', cycle_ms=200, index = 1)
 
     # 发送事件周期信号：先每100ms发3帧，然后每1000ms持续发送
-    Send_Can_Signal(device_handle, channel_handles[0], 0, 0, 0x300, data3, 'canfd', 'CE', cycle_ms="100/1000", index = 2)
+    Send_Can_Signal(device_handle, channel_handles[0], 0, 0, 0x38B, data4, 'canfd', 'Cycle', cycle_ms="100", index = 2)
 
 
     # 检查是否收到 ID 为 0x12d，数据为 [0x01, 0x00, 0x00, 0x00] 的帧
-    wait_for_check_signal_received(0x300, data3, 0)
+    # wait_for_check_signal_received(0x300, data3, 0)
+
+    # 
+    input()
+    wait_for_check_signal_by_bit_enum(
+        signal_id="0x38B",
+        sub_id="No",
+        bit_position="7.2",
+        expected_enum_value=0,
+        channel=0,
+        timeout=3.0
+    )
+
 
     # 回车退出
     input()
