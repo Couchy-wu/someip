@@ -112,7 +112,7 @@ class TestCaseProcessor:
                 for err in fail['errors']:
                     print(f"  • {err}")
             print(f"\n共 {len(self.failed_cases)} 个用例处理失败。")
-        print("\n✅ 所有用例解析完成，无错误。")
+        print("\n✅ 所有用例解析完成。")
     
 
     def _load_json_data(self) -> Optional[List[Dict[str, Any]]]:
