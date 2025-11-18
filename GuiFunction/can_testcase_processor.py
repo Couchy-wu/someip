@@ -44,6 +44,10 @@ class TestCaseProcessor:
         self.processed_count = 0      # 已处理用例数
         self.output_index = 0         # 输出CAN报文编号计数器
 
+        # 用于记录当前用例处理中的错误
+        self.current_case_errors = []  # 存储当前用例的错误信息
+        self.current_case_id = "未知"  # 当前正在处理的用例ID
+        self.failed_cases = []  # 存储所有失败的用例
 
         # 初始化日志器，确保日志目录和配置已就绪
         mylog.setup_logger(
@@ -66,40 +70,50 @@ class TestCaseProcessor:
             return
 
         self.total_cases = len(data)
-        self.failed_cases = []  # 用于记录出错的用例
+        self.failed_cases.clear()  # 确保清空旧数据
 
         for idx, case in enumerate(data):
             case_index = idx + 1
             try:
                 self._process_single_case(case, case_index)
+
+                # 处理完成后，检查是否有信号生成等错误
+                if self.current_case_errors:
+                    self.failed_cases.append({
+                        "index": case_index,
+                        "case_id": self.current_case_id,
+                        "errors": self.current_case_errors.copy()
+                    })
+
             except Exception as e:
+                # 捕获完全解析失败的异常
                 case_id = "未知"
-                # 尽量提取用例编号
                 try:
                     rows = case.get("rows", [])
                     test_case_row = self._find_row_by_type(rows, "*类型", "测试用例")
-                    case_id = test_case_row.get("*用例编号", "未知")
+                    case_id = test_case_row.get("*用例编号", f"索引_{case_index}")
                 except:
-                    pass  # 如果也出错，就保留“未知”
+                    pass
 
                 self.failed_cases.append({
                     "index": case_index,
                     "case_id": case_id,
-                    "error": str(e)
+                    "errors": [str(e)]
                 })
-                # 可选：在日志中记录完整 traceback
                 mylog.error(self.logger_name, f"[用例 {case_id}] 解析时发生异常: {e}")
 
-        # === 所有用例处理完成后，打印汇总错误 ===
+        # === 最终汇总输出 ===
         if self.failed_cases:
-            print("\n" + "="*50)
-            print("❌ 以下测试用例解析失败：")
-            print("="*50)
+            print("\n" + "="*60)
+            print("❌ 以下测试用例处理失败：")
+            print("="*60)
             for fail in self.failed_cases:
-                print(f"❌ 用例 {fail['case_id']} (索引: {fail['index']}) → 错误: {fail['error']}")
-            print(f"\n共 {len(self.failed_cases)} 个用例解析失败。")
-        print("\n✅ 所有用例解析完成")
-
+                print(f"❌ 用例 {fail['case_id']} (索引: {fail['index']}):")
+                for err in fail['errors']:
+                    print(f"  • {err}")
+            print(f"\n共 {len(self.failed_cases)} 个用例处理失败。")
+        print("\n✅ 所有用例解析完成，无错误。")
+    
 
     def _load_json_data(self) -> Optional[List[Dict[str, Any]]]:
         """
@@ -132,13 +146,16 @@ class TestCaseProcessor:
         - 环境过滤（仅处理含“台架”的用例）
         - 打印结构并抽取脚本
         """
+
+        # 清空上一个用例的错误记录
+        self.current_case_errors.clear()
+
         rows = case.get("rows", [])
         if len(rows) != 4:
-            mylog.warning(self.logger_name, f"[用例 {case_index}] 行数异常（应为 4 行），跳过...")
+            error_msg = f"[用例 {case_index}] 行数异常（应为 4 行）"
+            self.current_case_errors.append(error_msg)
+            mylog.warning(self.logger_name, error_msg)
             return
-
-        # 重置输出编号
-        self.output_index = 0  # 每个用例的发送信号从 index 0 开始
 
         # 按 *类型 查找四类行
         test_case_row = self._find_row_by_type(rows, "*类型", "测试用例")
@@ -148,12 +165,14 @@ class TestCaseProcessor:
 
         # 检查必要行是否缺失
         missing = [(name, row) for name, row in
-                   [("测试用例", test_case_row), ("状态", status_row),
+                [("测试用例", test_case_row), ("状态", status_row),
                     ("动作", action_row), ("响应", response_row)]
-                   if row is None]
+                if row is None]
         if missing:
             for name, _ in missing:
-                mylog.warning(self.logger_name, f"[用例 {case_index}] 缺少 【{name}】 行，跳过...")
+                error_msg = f"[用例 {case_index}] 缺少 【{name}】 行"
+                self.current_case_errors.append(error_msg)
+                mylog.warning(self.logger_name, error_msg)
             return
 
         # 提取基本信息
@@ -162,27 +181,29 @@ class TestCaseProcessor:
         level2    = test_case_row.get("二级功能", "未知")
         test_env  = test_case_row.get("*测试环境", "")
 
+        # 在终端打印：解析到测试用例
         print(f"✅ 解析到测试用例 {case_id}")
+
+        # 设置当前用例ID（供后续错误记录使用）
+        self.current_case_id = case_id
+
         mylog.info(self.logger_name, f"=== 开始处理 用例 {case_id} ===")
         mylog.info(self.logger_name, f"功能：{level1} - {level2}")
 
-        # 环境过滤：仅处理包含 “台架” 的用例
         if "台架" not in test_env:
             mylog.info(self.logger_name, f"测试环境：{test_env} （不含台架），跳过该用例")
-            mylog.info(self.logger_name, "")  # 添加空行分隔（日志中用于可读性）
+            mylog.info(self.logger_name, "")
             return
 
         mylog.info(self.logger_name, f"测试环境：{test_env} （含台架），继续处理")
 
-        # 输出结构信息并抽取脚本
+        # 输出结构并抽取脚本
         self._print_case_structure(status_row, action_row, response_row)
         self._extract_and_print_scripts(status_row, action_row, response_row)
 
         # 增加已处理用例计数
         self.processed_count += 1
 
-        # 添加延时
-        # time.sleep(0.5)
 
     # ----------------------------------------------------------------------
     # 辅助工具
@@ -288,24 +309,33 @@ class TestCaseProcessor:
 
     def _generate_can_data_from_call(self, func: str, arg: str) -> None:
         """
-        解析“输出”或“采集”函数的参数，生成对应的 CAN 数据帧，并打印合并的报文信息。
-        支持格式：报文ID.信号名,值  例如：4C1.HUD_Mode_Settings_S,2
+        解析“输出”或“采集”函数的参数，生成CAN数据，失败时记录到 current_case_errors
         """
         match = re.search(r'([0-9A-F]+)\.([a-zA-Z0-9_]+)\s*,\s*(\d+)', arg)
         if not match:
-            mylog.warning(self.logger_name, f"      警告：无法解析参数 → {arg}")
+            error_msg = f"无法解析参数 → {arg}"
+            self.current_case_errors.append(f"信号生成失败: {error_msg}")
+            mylog.warning(self.logger_name, f"      警告：{error_msg}")
             return
-    
+
         message_id, signal_name_en, enum_value_str = match.groups()
-        enum_value = int(enum_value_str)
-    
+        try:
+            enum_value = int(enum_value_str)
+        except ValueError:
+            error_msg = f"枚举值非整数 → {enum_value_str}"
+            self.current_case_errors.append(f"信号生成失败: {error_msg}")
+            mylog.warning(self.logger_name, f"      警告：{error_msg}")
+            return
+
         try:
             result = create_can_data_by_signal(message_id, signal_name_en, enum_value)
             if not result["success"]:
-                mylog.warning(self.logger_name, f"          → 信号解析失败: {result['message_id_str']}.{result['signal_name_en']}")
+                error_msg = f"信号解析失败: {result['message_id_str']}.{result['signal_name_en']}"
+                self.current_case_errors.append(f"信号生成失败: {error_msg}")
+                mylog.warning(self.logger_name, f"          → {error_msg}")
                 return
-    
-            # 格式化CAN数据为 [0xXX, 0xXX, ...]
+
+            # 格式化 CAN 数据
             if isinstance(result['can_data'], bytes):
                 data_bytes = list(result['can_data'])
             elif isinstance(result['can_data'], (list, tuple)):
@@ -314,17 +344,16 @@ class TestCaseProcessor:
                 data_bytes = []
             can_data_hex = [f"0x{b:02X}" for b in data_bytes]
             can_data_str = f"[{', '.join(can_data_hex)}]"
-    
-            # 设置报文类型前缀和index
+
+            # 设置 index 和前缀
             if func == "输出":
                 index = self.output_index
                 self.output_index += 1
-                prefix = "输出CAN报文"
             else:
-                index = ""  # 采集不编号，显示为空
-                prefix = "采集CAN报文"
-    
-            # 构建标准格式日志
+                index = "N/A"
+
+            prefix = "输出CAN报文" if func == "输出" else "采集CAN报文"
+
             log_msg = (
                 f"          → {prefix} ID: {result['message_id_str']} | "
                 f"发送类型: {result['message_type']} | "
@@ -333,9 +362,12 @@ class TestCaseProcessor:
                 f"分配index: {index}"
             )
             mylog.info(self.logger_name, log_msg)
-    
+
         except Exception as e:
-            mylog.error(self.logger_name, f"          → 生成CAN数据失败: {e}")
+            # 捕获所有异常，记录为当前用例的错误
+            error_msg = f"生成CAN数据失败: {str(e)}"
+            self.current_case_errors.append(error_msg)
+            mylog.error(self.logger_name, f"          → {error_msg}")
 
 
 
