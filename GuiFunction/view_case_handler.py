@@ -4,7 +4,7 @@ import tkinter.messagebox as tk
 import platform
 import shutil
 
-# 模块功能：以只读的形式打开Excel表格文件
+# 模块功能：开Excel表格文件
 
 class ViewCaseHandler:
     def __init__(self, selected_file, test_case_folder="TestcaseCollection"):
@@ -41,12 +41,12 @@ class ViewCaseHandler:
                     # 如果找不到WPS，尝试查找Excel
                     excel_path = shutil.which('excel')
                     if excel_path:
-                        subprocess.Popen([excel_path, '/r', abs_file_path])
+                        subprocess.Popen([excel_path, abs_file_path])
                     else:
                         tk.showerror("错误", "未找到WPS和Excel程序，请安装WPS或Excel")
                         return
             elif system == 'Linux':
-                subprocess.Popen(['libreoffice', '--view', file_path])
+                subprocess.Popen(['libreoffice', file_path])
             elif system == 'Darwin':
                 subprocess.Popen(['open', file_path])
             else:
