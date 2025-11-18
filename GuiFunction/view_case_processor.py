@@ -3,6 +3,7 @@ import platform
 import subprocess
 import tkinter.messagebox as messagebox
 import shutil
+import threading  # 新增：用于异步执行
 
 # 模块功能：查看对应的测试用例解析出来的日志文件
 
@@ -28,21 +29,32 @@ class LogViewer:
             messagebox.showerror("错误", f"日志文件不存在：\n{log_path}")
             return
 
+        # 在新线程中打开日志文件，避免阻塞 GUI 主线程
+        thread = threading.Thread(target=self._open_log_in_thread, args=(log_path,), daemon=True)
+        thread.start()
+
+    def _open_log_in_thread(self, log_path):
         try:
             system = platform.system()
             if system == "Windows":
                 # 方法1：尝试用记事本打开
                 notepad_path = shutil.which("notepad")
                 if notepad_path:
-                    subprocess.run([notepad_path, log_path], check=True)
+                    # 注意：使用 subprocess.Popen 而不是 run，避免等待
+                    subprocess.Popen([notepad_path, log_path], close_fds=True)
                 else:
-                    # 备用：使用系统默认程序打开
+                    # 备用：使用系统默认程序打开（非阻塞）
                     os.startfile(log_path)
             elif system == "Linux":
-                subprocess.run(['xdg-open', log_path], check=True)
+                subprocess.Popen(['xdg-open', log_path])
             elif system == "Darwin":  # macOS
-                subprocess.run(['open', log_path], check=True)
+                subprocess.Popen(['open', log_path])
             else:
-                messagebox.showerror("错误", f"不支持的系统: {system}")
+                # 通过主线程显示错误（GUI操作必须在主线程）
+                self._show_error(f"不支持的系统: {system}")
         except Exception as e:
-            messagebox.showerror("错误", f"无法打开日志文件：\n{e}")
+            self._show_error(f"无法打开日志文件：\n{e}")
+
+    def _show_error(self, message):
+        # 使用 after 投递到主线程执行 GUI 操作
+        self.selected_file.master.after(0, lambda: messagebox.showerror("错误", message))
