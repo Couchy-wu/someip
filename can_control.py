@@ -904,16 +904,6 @@ def Send_Can_Signal(
 
     return True
 
-import time
-from typing import List, Union
-import mylog
-from collections import deque
-import threading
-
-# 假设已定义
-# received_messages = deque(maxlen=1000)
-# received_messages_lock = threading.Lock()
-
 
 def extract_bits_from_data(data_list: List[int], bit_range: str) -> int:
     """
