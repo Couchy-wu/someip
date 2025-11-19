@@ -991,7 +991,7 @@ def calculate_bit_length(bit_range: str) -> int:
 
 def wait_for_check_signal_by_bit_enum(
     signal_id: Union[int, str],
-    sub_id: Union[int, str],
+    sub_id: str, 
     bit_position: str,
     expected_enum_value: int,
     channel: int,
@@ -1013,9 +1013,20 @@ def wait_for_check_signal_by_bit_enum(
 
     can_id_hex_str = f"0x{can_id_int:X}"
 
-    # 子ID 检查逻辑
+    # 修改 sub_id 处理逻辑：强制为字符串，支持 "No" 或 "0x..."
     check_sub_id = sub_id != "No"
-    expect_sub_id_val = int(sub_id) if check_sub_id else 0
+    expect_sub_id_val = 0
+    if check_sub_id:
+        try:
+            # 支持 0x 或 0X 开头的十六进制字符串
+            if sub_id.lower().startswith("0x"):
+                expect_sub_id_val = int(sub_id, 16)
+            else:
+                # 如果不是 0x 开头，尝试作为十进制解析（可选，也可禁止）
+                expect_sub_id_val = int(sub_id)
+        except ValueError:
+            mylog.error("can", f"无效的 sub_id 格式: {sub_id}，应为 'No' 或 '0x...' 形式")
+            return False
 
     # 计算位长度（日志用）
     signal_length = calculate_bit_length(bit_position)
@@ -1023,7 +1034,7 @@ def wait_for_check_signal_by_bit_enum(
     start_time = time.time()
     end_time = start_time + timeout
 
-    mylog.info("candata", f"开始等待信号: ID={can_id_hex_str}, 子ID={sub_id:#x}, "
+    mylog.info("candata", f"开始等待信号: ID={can_id_hex_str}, 子ID={sub_id}, "
                           f"位域={bit_position}({signal_length}bits), "
                           f"期望值={expected_enum_value}, 通道={channel}, 超时={timeout}s")
 
@@ -1049,7 +1060,7 @@ def wait_for_check_signal_by_bit_enum(
             if not isinstance(data_list, list) or len(data_list) == 0:
                 continue
 
-            # ✅ 检查子ID：对应 data[0]（因为 1.0-1.7 是第1字节）
+            # 检查子ID：对应 data[0]
             if check_sub_id:
                 if len(data_list) <= 0:
                     continue
@@ -1063,7 +1074,7 @@ def wait_for_check_signal_by_bit_enum(
             if actual_value != expected_enum_value:
                 continue
 
-            # ✅ 成功
+            # 成功
             hex_data = " ".join(f"{b:02X}" for b in data_list)
 
             # 日志区分是否检查 sub_id
@@ -1078,7 +1089,7 @@ def wait_for_check_signal_by_bit_enum(
 
         time.sleep(check_interval)
 
-    mylog.warning("candata", f"❌ 等待超时! ID={can_id_hex_str}, 子ID={sub_id:#x}, "
+    mylog.warning("candata", f"❌ 等待超时! ID={can_id_hex_str}, 子ID={sub_id}, "
                              f"位={bit_position}, 期望值={expected_enum_value}")
     return False
 
@@ -1115,7 +1126,7 @@ if __name__ == "__main__":
     input()
     wait_for_check_signal_by_bit_enum(
         signal_id="0x38B",
-        sub_id="No",
+        sub_id="0X2B",
         bit_position="7.2",
         expected_enum_value=0,
         channel=0,

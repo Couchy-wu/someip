@@ -390,8 +390,9 @@ class LogParser:
     def _handle_collect_can_with_context(self, lines, current_index):
         """
         处理 '采集(...)' 指令：
-        - 从下一行提取 '→ 采集CAN报文...' 中的 ID 和 数据
-        - 调用 wait_for_check_signal_received 阻塞等待接收
+        - 从下一行提取 '→ 采集CAN报文...' 中的 ID、子ID、位、枚举值
+        - 子ID 以字符串形式保留，统一为 "No" 或 "0x..." 格式（小写），传给 wait_for_check_signal_by_bit_enum
+        - 不再进行 int 转换，保持 str 模式
         """
         current_line = lines[current_index].strip()
 
@@ -411,24 +412,49 @@ class LogParser:
             mylog.error(LOGGER_NAME, "未解析到CAN ID")
             return False
         try:
-            can_id = int(id_match.group(1), 16)
+            signal_id = int(id_match.group(1), 16)  # 仍需 int 用于传入（支持 int 或 str）
         except ValueError:
             mylog.error(LOGGER_NAME, f"无效的CAN ID: {id_match.group(1)}")
             return False
 
-        # 提取期望数据
-        data_match = re.search(r'生成CAN数据:\s*(\[.*?\])', next_line)
-        if not data_match:
-            mylog.error(LOGGER_NAME, "未解析到期望CAN数据")
+        # 提取 子ID 原始字符串
+        sub_id_match = re.search(r'子ID:\s*([^|]+)', next_line)
+        if not sub_id_match:
+            mylog.error(LOGGER_NAME, "未解析到子ID")
+            return False
+        sub_id_raw = sub_id_match.group(1).strip()
+
+        # 统一格式化为函数期望的字符串格式："No" 或 "0x..."
+        if sub_id_raw.upper() == "NO":
+            sub_id = "No"
+        else:
+            # 尝试解析为十六进制，并转为标准 "0x.." 小写格式
+            try:
+                if sub_id_raw.lower().startswith("0x"):
+                    hex_val = int(sub_id_raw, 16)
+                else:
+                    hex_val = int(sub_id_raw, 16)  # 支持无前缀
+                sub_id = f"0x{hex_val:x}"  # 输出小写，如 0xa → 0xa（不补0）
+            except ValueError:
+                mylog.error(LOGGER_NAME, f"无法将子ID转为十六进制: {sub_id_raw}")
+                return False
+
+        # 提取 位域
+        bit_match = re.search(r'位:\s*([^|]+)', next_line)
+        if not bit_match:
+            mylog.error(LOGGER_NAME, "未解析到位域")
+            return False
+        bit_position = bit_match.group(1).strip()
+
+        # 提取 枚举值
+        enum_match = re.search(r'枚举值:(\d+)', next_line)
+        if not enum_match:
+            mylog.error(LOGGER_NAME, "未解析到期望枚举值")
             return False
         try:
-            data_str = data_match.group(1)
-            expected_data = [int(x.strip(), 16) for x in data_str[1:-1].split(',') if x.strip()]
-            if len(expected_data) < 1 or len(expected_data) > 64:
-                mylog.error(LOGGER_NAME, f"期望数据长度非法: {len(expected_data)} 字节")
-                return False
-        except Exception as e:
-            mylog.error(LOGGER_NAME, f"解析期望数据失败: {e}")
+            expected_enum_value = int(enum_match.group(1))
+        except ValueError:
+            mylog.error(LOGGER_NAME, f"无效的枚举值: {enum_match.group(1)}")
             return False
 
         # 固定通道为 0（可根据实际扩展）
@@ -439,23 +465,24 @@ class LogParser:
             mylog.error(LOGGER_NAME, "CAN设备未初始化，无法接收信号")
             return False
 
-        # 调用接收等待函数
-        mylog.info(LOGGER_NAME, f"RcvWait → 等待 CAN ID: 0x{can_id:X} 数据: {expected_data}")
-        received = can_control.wait_for_check_signal_received(
-            signal_id=can_id,
-            expected_data_list=expected_data,
+        # 调用信号等待函数（sub_id 为字符串："No" 或 "0x..."）
+        mylog.info(LOGGER_NAME, f"RcvWait → 等待 CAN ID: 0x{signal_id:X}, 子ID={sub_id_raw}, 位={bit_position}, 期望枚举值={expected_enum_value}")
+        received = can_control.wait_for_check_signal_by_bit_enum(
+            signal_id=signal_id,
+            sub_id=sub_id,  # 传入标准化字符串："No" 或 "0x..."
+            bit_position=bit_position,
+            expected_enum_value=expected_enum_value,
             channel=channel,
             timeout=3.0,
             check_interval=0.1
         )
 
         if received:
-            mylog.info(LOGGER_NAME, f"RcvOK → 已接收到 CAN ID: 0x{can_id:X}")
+            mylog.info(LOGGER_NAME, f"RcvOK → 已接收到满足条件的 CAN ID: 0x{signal_id:X}, 子ID={sub_id_raw}, 位={bit_position}, 值={expected_enum_value}")
             return True
         else:
-            mylog.error(LOGGER_NAME, f"RcvFail → 未收到预期信号: ID: 0x{can_id:X} 数据: {expected_data}")
+            mylog.error(LOGGER_NAME, f"RcvFail → 未收到预期信号: ID=0x{signal_id:X}, 子ID={sub_id_raw}, 位={bit_position}, 期望枚举值={expected_enum_value}")
             return False
-
 
     def _delay_ms(self, milliseconds):
         """延迟指定毫秒数"""
