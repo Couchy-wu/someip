@@ -1077,15 +1077,17 @@ def wait_for_check_signal_by_bit_enum(
             # 成功
             hex_data = " ".join(f"{b:02X}" for b in data_list)
 
-            # 日志区分是否检查 sub_id
-            if check_sub_id:
-                sub_id_log = f"子ID=0x{data_list[0]:02X}"
+            # 构造子ID日志信息
+            if sub_id == "No":
+                sub_id_log = "子ID=No"
             else:
-                sub_id_log = f"子ID=不检查(data[0]=0x{data_list[0]:02X})"
+                # 此时 check_sub_id 为 True，expect_sub_id_val 已解析为 int
+                sub_id_log = f"子ID=0x{expect_sub_id_val:x}"  # 小写十六进制，如 0xa
 
             mylog.info("candata", f"✅ 条件满足! ID={can_id_hex_str}, 数据=[{hex_data}], "
                                   f"{sub_id_log}, {bit_position}={actual_value}")
             return True
+
 
         time.sleep(check_interval)
 
