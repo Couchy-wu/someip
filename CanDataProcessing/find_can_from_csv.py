@@ -281,6 +281,7 @@ def create_can_data_by_signal(message_id: str, signal_name_en: str, enum_value: 
         cycle_time:       int or float or str or None
         signal_name_en     (str): 信号英文名
         enum_value         (int): 枚举值
+        bit               信号位
     """
     # 获取信号信息
     signal_info = get_signal_info_by_id_and_name(message_id, signal_name_en, csv_file)
@@ -325,23 +326,29 @@ def create_can_data_by_signal(message_id: str, signal_name_en: str, enum_value: 
         "message_type": signal_info['报文发送类型'],
         "cycle_time": signal_info['报文周期时间'],
         "signal_name_en": signal_name_en,
-        "enum_value": enum_value    # 枚举值
+        "enum_value": enum_value,    # 枚举值
+        "bit": bit_range,             # 添加位字段
+        "sub_id_raw": signal_info['子ID'],  # 原始子ID字符串
+        "sub_id_hex": sub_id_hex            # 用于输出生成
     }
 
 
 # 示例调用
 if __name__ == "__main__":
-    data1 = create_can_data_by_signal('38B', 'Smart_Projection_Configuration_Judgment_S', 0)
+    data1 = create_can_data_by_signal('38b', 'Smart_Projection_Configuration_Judgment_S', 1)
     data2 = create_can_data_by_signal('12D', 'BCMPower_Gear_12D_S', 3)
     data3 = create_can_data_by_signal('496', 'Emitting_Function_S', 1)
     data4 = create_can_data_by_signal('144', 'Left_Turn_Indicator_144_S', 1)
 
-    print(data1["can_data"])
-    print(data1["can_data_str"])
-    print(data1["message_id"])
-    print(data1["message_id_str"])
-    print(data1["message_type"])
-    print(data1["cycle_time"])
-    print(data1["signal_name_en"])
-    print(data1["enum_value"])
+    print(data3["can_data"])
+    print(data3["can_data_str"])
+    print(data3["message_id"])
+    print(data3["message_id_str"])
+    print(data3["message_type"])
+    print(data3["cycle_time"])
+    print(data3["signal_name_en"])
+    print(data3["enum_value"])
+    print(data3["bit"])
+    print(data3["sub_id_raw"])
+    print(data3["sub_id_hex"])
 
