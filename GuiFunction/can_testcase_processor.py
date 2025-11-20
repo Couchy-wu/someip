@@ -312,21 +312,20 @@ class TestCaseProcessor:
             message_id_str = result["message_id_str"]
             message_type = result["message_type"]
             cycle_time_raw = result["cycle_time"]
-
-            # 解析周期时间
-            try:
-                if pd.isna(cycle_time_raw):
-                    cycle_time = "未知"
-                else:
-                    cycle_str = str(cycle_time_raw).strip()
-                    if '/' in cycle_str:
-                        cycle_time = cycle_str.split('/')[0]
-                    else:
-                        cycle_time = cycle_str
-                    int(cycle_time)  # 验证是否为数字
-            except:
+    
+            # === 修改重点：智能处理周期时间，保留 CE 类型的双周期格式 ===
+            if pd.isna(cycle_time_raw) or not str(cycle_time_raw).strip():
                 cycle_time = "未知"
-
+            else:
+                cycle_str = str(cycle_time_raw).strip()
+                # 如果是 CE 类型，且包含 '/'，则保留完整格式（如 100/1000）
+                if message_type == "CE" and '/' in cycle_str:
+                    cycle_time = cycle_str
+                else:
+                    # 否则尝试提取第一个数值（兼容原有逻辑）
+                    match_cycle = re.search(r'\d+', cycle_str)
+                    cycle_time = match_cycle.group(0) if match_cycle else "未知"
+    
             # ======================
             # 处理“输出”函数：生成CAN数据
             # ======================
