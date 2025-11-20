@@ -245,14 +245,17 @@ class LogParser:
 
     def _handle_output_can_with_context(self, lines, current_index):
         """
-        处理 '输出(...)' 指令：
-        - 提取 enum_value（仅用于日志或后续扩展，当前不参与逻辑）
-        - 从下一行提取 CAN 参数，尤其是 '分配index: X' 作为发送通道编号
+        处理 `输出(...)` 指令：
+        - 解析枚举值（仅用于日志）
+        - 读取紧随其后的 “→ 输出CAN报文 …” 行
+        - 提取 ID、发送类型、数据、分配 index 以及周期/间隔参数
+        - 调用 `can_control.Send_Can_Signal`
         """
+        # 当前 CAN 设备是否已初始化（仅日志）
         mylog.debug(LOGGER_NAME, f"当前 CAN 设备状态: {self.can_device is not None}")
-        current_line = lines[current_index].strip()
 
-        # === 1. 提取 enum_value（仅用于日志提示，当前不使用）===
+        # 1. 解析枚举值（日志用）
+        current_line = lines[current_index].strip()
         enum_match = re.match(r'^输出\([^,]+,\s*(\d+)\)', current_line)
         if not enum_match:
             mylog.error(LOGGER_NAME, "输出指令格式错误，未匹配到枚举值")
@@ -263,39 +266,34 @@ class LogParser:
             mylog.error(LOGGER_NAME, f"无效的枚举值: {enum_match.group(1)}")
             return
 
-        # === 2. 获取下一行 CAN 报文描述 ===
+        # 2. 读取下一行的 CAN 报文描述
         if current_index + 1 >= len(lines):
             mylog.error(LOGGER_NAME, "缺少CAN报文参数：未找到下一行")
             return
         next_line = lines[current_index + 1].strip()
-
         if not next_line.startswith("→") or "输出CAN报文" not in next_line:
             mylog.error(LOGGER_NAME, "下一行未包含CAN报文参数（应以 → 开头）")
             return
 
-        # === 3. 提取分配index（这才是真正的发送通道编号）===
+        # 3. 提取分配 index（实际发送通道编号）
         index_match = re.search(r'分配index:\s*(\d+)', next_line)
         if not index_match:
             mylog.error(LOGGER_NAME, "未找到 '分配index' 字段，请检查日志格式")
             return
         try:
-            index = int(index_match.group(1))  # 真正的 index
+            index = int(index_match.group(1))
         except ValueError:
             mylog.error(LOGGER_NAME, f"无效的分配index: {index_match.group(1)}")
             return
 
-        # === 4. 提取 CAN ID ===
+        # 4. 提取 CAN ID
         id_match = re.search(r'ID:\s*0x([0-9A-Fa-f]+)', next_line)
         if not id_match:
             mylog.error(LOGGER_NAME, "未解析到CAN ID")
             return
-        try:
-            can_id = int(id_match.group(1), 16)
-        except:
-            mylog.error(LOGGER_NAME, "CAN ID 格式错误")
-            return
+        can_id = int(id_match.group(1), 16)
 
-        # === 5. 提取发送类型 ===
+        # 5. 提取发送类型
         type_match = re.search(r'发送类型:\s*(\w+)', next_line)
         if not type_match:
             mylog.error(LOGGER_NAME, "未解析到发送类型")
@@ -306,68 +304,89 @@ class LogParser:
             mylog.error(LOGGER_NAME, f"不支持的发送类型: {signal_type}")
             return
 
-        # === 6. 提取 CAN 数据 ===
-        data_match = re.search(r'生成CAN数据:\s*(\[.*?\])', next_line)
+        # 6. 提取 CAN 数据
+        data_match = re.search(r'生成CAN数据:\s*(\[[^\]]*\])', next_line)
         if not data_match:
             mylog.error(LOGGER_NAME, "未解析到CAN数据")
             return
         try:
             data_str = data_match.group(1)
             data = [int(x.strip(), 16) for x in data_str[1:-1].split(',') if x.strip()]
-            if len(data) < 1 or len(data) > 64:
+            if not (1 <= len(data) <= 64):
                 mylog.error(LOGGER_NAME, f"CAN数据长度非法: {len(data)} 字节")
                 return
         except Exception as e:
             mylog.error(LOGGER_NAME, f"解析CAN数据失败: {e}")
             return
 
-        # === 7. 处理 cycle_ms ===
+        # 7. 解析周期/间隔参数，生成 `cycle_ms` 供 Send_Can_Signal 使用
         cycle_ms = None
         if signal_type == "CYCLE":
-            cycle_match = re.search(r'周期时间:\s*(\d+)', next_line)
-            if not cycle_match:
-                mylog.error(LOGGER_NAME, "Cycle类型需提供周期时间")
+            period_match = re.search(r'周期(?:时间)?:\s*(\d+)', next_line)
+            if not period_match:
+                mylog.error(LOGGER_NAME, "Cycle 类型需提供周期时间")
                 return
             try:
-                cycle_ms = int(cycle_match.group(1))
+                cycle_ms = int(period_match.group(1))
                 if cycle_ms <= 0:
                     raise ValueError
-            except:
+            except Exception:
                 mylog.error(LOGGER_NAME, "周期时间必须为正整数")
                 return
 
         elif signal_type == "EVENT":
-            event_cycle_match = re.search(r'事件间隔:\s*(\d+)', next_line)
+            ev_match = re.search(r'事件间隔:\s*(\d+)', next_line)
             try:
-                cycle_ms = int(event_cycle_match.group(1)) if event_cycle_match else 100
-            except:
-                cycle_ms = 100
+                cycle_ms = int(ev_match.group(1)) if ev_match else 100
+                if cycle_ms <= 0:
+                    raise ValueError
+            except Exception:
+                cycle_ms = 100   # 使用默认值
 
         elif signal_type == "CE":
-            event_match = re.search(r'事件间隔:\s*(\d+)', next_line)
-            cycle_match = re.search(r'周期:\s*(\d+)', next_line)
-            if not event_match or not cycle_match:
-                mylog.error(LOGGER_NAME, "CE类型必须提供事件间隔和周期")
-                return
-            try:
-                event_ms = int(event_match.group(1))
-                cycle_period_ms = int(cycle_match.group(1))
-                if event_ms <= 0 or cycle_period_ms <= 0:
-                    raise ValueError
-                cycle_ms = f"{event_ms}/{cycle_period_ms}"
-            except:
-                mylog.error(LOGGER_NAME, "CE类型的事件间隔或周期格式错误")
-                return
+            # 支持两种写法：
+            #   1) 周期时间: 100/1000 ms
+            #   2) 事件间隔: 100   周期: 1000
+            ce_match = re.search(r'周期时间:\s*([\d\s/]+)ms?', next_line, re.IGNORECASE)
+            if ce_match:
+                pair_str = ce_match.group(1).replace(' ', '')
+                if '/' not in pair_str:
+                    mylog.error(LOGGER_NAME, "CE 类型的周期时间格式错误，缺少 '/' 分隔符")
+                    return
+                ev_str, per_str = pair_str.split('/', 1)
+                try:
+                    event_ms = int(ev_str)
+                    cycle_period_ms = int(per_str)
+                except Exception:
+                    mylog.error(LOGGER_NAME, "CE 类型的事件间隔或周期不是整数")
+                    return
+            else:
+                ev_match = re.search(r'事件间隔:\s*(\d+)', next_line)
+                per_match = re.search(r'周期:\s*(\d+)', next_line)
+                if not ev_match or not per_match:
+                    mylog.error(LOGGER_NAME, "CE 类型必须提供事件间隔和周期（或使用‘周期时间: a/b’）")
+                    return
+                try:
+                    event_ms = int(ev_match.group(1))
+                    cycle_period_ms = int(per_match.group(1))
+                except Exception:
+                    mylog.error(LOGGER_NAME, "CE 类型的事件间隔或周期不是整数")
+                    return
 
-        # === 8. 获取 CAN 设备句柄 ===
+            # --------- 参数合法性检查 ----------
+            if event_ms <= 0 or cycle_period_ms <= 0:
+                mylog.error(LOGGER_NAME, "CE 类型的事件间隔和周期必须均为正整数")
+                return
+            cycle_ms = f"{event_ms}/{cycle_period_ms}"
+
+        # 获取 CAN 设备句柄
         if not hasattr(self, 'can_device') or self.can_device is None:
             mylog.error(LOGGER_NAME, "CAN设备未初始化，无法发送信号")
             return
-        device_handle, channel_handles, receive_threads = self.can_device
+        device_handle, channel_handles, _ = self.can_device
         chn = 0
         chn_handle = channel_handles[chn]
 
-        # === 9. 发送信号   ===
         result = can_control.Send_Can_Signal(
             device_handle=device_handle,
             chn_handle=chn_handle,
@@ -378,14 +397,20 @@ class LogParser:
             msg_type="canfd",
             signal_type=signal_type,
             cycle_ms=cycle_ms,
-            index=index  
+            index=index
         )
 
-        # === 10. 日志输出 ===
+        # 9. 记录发送结果
         if result is not None:
-            mylog.info(LOGGER_NAME, f"SndOK → 已发送 CAN ID: 0x{can_id:X} (index={index}) [信号枚举值={enum_value}]")
+            mylog.info(
+                LOGGER_NAME,
+                f"SndOK → 已发送 CAN ID: 0x{can_id:X} (index={index}) [信号枚举值={enum_value}]"
+            )
         else:
-            mylog.error(LOGGER_NAME, f"发送失败: CAN ID: 0x{can_id:X} (index={index})")
+            mylog.error(
+                LOGGER_NAME,
+                f"发送失败: CAN ID: 0x{can_id:X} (index={index})"
+            )
 
     def _handle_collect_can_with_context(self, lines, current_index):
         """
