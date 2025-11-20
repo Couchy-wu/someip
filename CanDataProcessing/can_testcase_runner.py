@@ -250,6 +250,7 @@ class LogParser:
         - 读取紧随其后的 “→ 输出CAN报文 …” 行
         - 提取 ID、发送类型、数据、分配 index 以及周期/间隔参数
         - 调用 `can_control.Send_Can_Signal`
+        - 修正：不再以 'result is not None' 作为成功唯一标准，避免周期信号被误判为失败
         """
         # 当前 CAN 设备是否已初始化（仅日志）
         mylog.debug(LOGGER_NAME, f"当前 CAN 设备状态: {self.can_device is not None}")
@@ -344,9 +345,6 @@ class LogParser:
                 cycle_ms = 100   # 使用默认值
 
         elif signal_type == "CE":
-            # 支持两种写法：
-            #   1) 周期时间: 100/1000 ms
-            #   2) 事件间隔: 100   周期: 1000
             ce_match = re.search(r'周期时间:\s*([\d\s/]+)ms?', next_line, re.IGNORECASE)
             if ce_match:
                 pair_str = ce_match.group(1).replace(' ', '')
@@ -373,7 +371,6 @@ class LogParser:
                     mylog.error(LOGGER_NAME, "CE 类型的事件间隔或周期不是整数")
                     return
 
-            # --------- 参数合法性检查 ----------
             if event_ms <= 0 or cycle_period_ms <= 0:
                 mylog.error(LOGGER_NAME, "CE 类型的事件间隔和周期必须均为正整数")
                 return
@@ -387,30 +384,42 @@ class LogParser:
         chn = 0
         chn_handle = channel_handles[chn]
 
-        result = can_control.Send_Can_Signal(
-            device_handle=device_handle,
-            chn_handle=chn_handle,
-            chn=chn,
-            stdorext=0,
-            id=can_id,
-            data=data,
-            msg_type="canfd",
-            signal_type=signal_type,
-            cycle_ms=cycle_ms,
-            index=index
-        )
-
-        # 9. 记录发送结果
-        if result is not None:
-            mylog.info(
-                LOGGER_NAME,
-                f"SndOK → 已发送 CAN ID: 0x{can_id:X} (index={index}) [信号枚举值={enum_value}]"
+        # 调用发送函数
+        try:
+            result = can_control.Send_Can_Signal(
+                device_handle=device_handle,
+                chn_handle=chn_handle,
+                chn=chn,
+                stdorext=0,
+                id=can_id,
+                data=data,
+                msg_type="canfd",
+                signal_type=signal_type,
+                cycle_ms=cycle_ms,
+                index=index
             )
-        else:
+
+            # 成功判断逻辑
+            if result is not False:  # 只要不是明确返回 False，都认为提交成功
+                mylog.info(
+                    LOGGER_NAME,
+                    f"SndOK → 已启动发送 CAN ID: 0x{can_id:X} (index={index}) [信号枚举值={enum_value}]"
+                )
+            else:
+                mylog.error(
+                    LOGGER_NAME,
+                    f"发送任务提交失败: CAN ID: 0x{can_id:X} (index={index})"
+                )
+
+            # 可选：调试用
+            # mylog.debug(LOGGER_NAME, f"Send_Can_Signal 返回值: {result}")
+
+        except Exception as e:
             mylog.error(
                 LOGGER_NAME,
-                f"发送失败: CAN ID: 0x{can_id:X} (index={index})"
+                f"调用 Send_Can_Signal 时发生异常: CAN ID: 0x{can_id:X} (index={index}) 错误: {e}"
             )
+
 
     def _handle_collect_can_with_context(self, lines, current_index):
         """
