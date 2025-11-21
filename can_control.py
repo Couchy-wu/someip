@@ -906,7 +906,6 @@ def Send_Can_Signal(
 
     return True
 
-
 def extract_bits_from_data(data_list: List[int], bit_range: str) -> int:
     """
     从 CAN 数据中提取指定范围的位（支持跨字节）
@@ -963,7 +962,6 @@ def extract_bits_from_data(data_list: List[int], bit_range: str) -> int:
         mylog.error("bit_parse", f"解析位范围失败: {bit_range}, 错误: {e}")
         return -1
 
-
 def calculate_bit_length(bit_range: str) -> int:
     """计算位范围长度"""
     try:
@@ -990,7 +988,7 @@ def calculate_bit_length(bit_range: str) -> int:
         mylog.error("bit_parse", f"计算位长度失败: {bit_range}, 错误: {e}")
         return -1
 
-
+# 等待并检查 CAN 信号
 def wait_for_check_signal_by_bit_enum(
     signal_id: Union[int, str],
     sub_id: str, 

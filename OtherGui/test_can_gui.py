@@ -222,7 +222,7 @@ class CANFDGUI:
             self.root.after(0, lambda: self.send_btn.config(state=tk.NORMAL))
 
 
-    #----------------------OFF档电信号发送---------------------------
+    #----------------------OFF档电信号发送(2s后停止发送)---------------------------
     def start_send_off_signal(self):
         self.off_btn.config(state=tk.DISABLED)
         threading.Thread(target=self.send_can_off_signal, daemon=True).start()
@@ -243,9 +243,12 @@ class CANFDGUI:
                 msg_type='canfd',
                 signal_type='Cycle',
                 cycle_ms=50,
-                index=1
+                index=99
             )
-            print("OFF档电信号发送成功!") 
+            print("OFF档电信号发送成功, 2s后停止发送") 
+            time.sleep(2)
+            can_control.Clear_Send_Task(device_handle, chn)
+            print("已清除通道定时发送任务, OFF信号停止。")
         except Exception as e:
             error_msg = str(e)
             print(f"OFF档电信号发送失败: {error_msg}") 
