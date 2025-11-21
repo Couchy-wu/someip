@@ -20,7 +20,9 @@ mylog.setup_logger(logger_name="candata", log_dir=LOG_PATH, log_prefix="candata"
 thread_flag = True              # 控制接收线程是否继续运行
 print_lock = threading.Lock()   # 线程锁，只是为了打印不冲突
 enable_merge_receive = 0        # 合并接收标识，（默认不使能）
-transmit_type = 2               # 0-正常发送，2-自发自收
+transmit_type = 0               # 0-正常发送，2-自发自收            
+
+# 警告！ 自发自收模式仅限于啥设备也没连接时的自我调试。连了设别必须使用正常发送，否则无法接收到反馈信号，只能接收到“自发”信号
 
 # 初始化ZCAN库
 zcanlib = ZCAN()                # 全局初始化，供所有函数使用
@@ -1118,7 +1120,7 @@ if __name__ == "__main__":
     # Send_Can_Signal(device_handle, channel_handles[0], 0, 0, 0x200, data2, 'canfd', 'Cycle', cycle_ms=200, index = 1)
 
     # 发送事件周期信号：先每100ms发3帧，然后每1000ms持续发送
-    Send_Can_Signal(device_handle, channel_handles[0], 0, 0, 0x38B, data4, 'canfd', 'Cycle', cycle_ms="100", index = 2)
+    Send_Can_Signal(device_handle, channel_handles[0], 0, 0, 0x38B, data4, 'canfd', 'CE', cycle_ms="100/1000", index = 2)
 
 
     # 检查是否收到 ID 为 0x12d，数据为 [0x01, 0x00, 0x00, 0x00] 的帧

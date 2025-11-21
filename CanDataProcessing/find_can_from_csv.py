@@ -5,6 +5,13 @@ from typing import List, Tuple, Optional
 # 比如：create_can_data_by_signal('12D', 'BCMPower_Gear_12D_S', 3)
 # →  [0x00, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00]
 
+# 全局缓存 _CSV_CACHE，在模块导入时读取一次 CSV
+try:
+    _CSV_CACHE = pd.read_csv('CanDataProcessing/outputMatrix.csv')
+except Exception as exc:                     # 若文件不存在或读取出错，保持为 None
+    _CSV_CACHE = None
+    print(f"加载 CSV 失败: {exc}")
+
 # 根据CAN ID 和 信号名称 从csv中找到更多信号信息
 def get_signal_info_by_id_and_name(message_id, signal_name_en, csv_file='CanDataProcessing/outputMatrix.csv'):
     """
@@ -15,7 +22,7 @@ def get_signal_info_by_id_and_name(message_id, signal_name_en, csv_file='CanData
     """
     # 读取CSV文件
     try:
-        df = pd.read_csv(csv_file)
+        df =  _CSV_CACHE if _CSV_CACHE is not None else pd.read_csv(csv_file)
     except FileNotFoundError:
         print(f"错误：找不到文件: {csv_file}")
         return None
@@ -70,53 +77,9 @@ def get_signal_info_by_id_and_name(message_id, signal_name_en, csv_file='CanData
                 print(f"  - 子ID: {row['子ID']}, 报文长度: {row['报文长度']}, 位: {row['位']}, 信号长度: {row['信号长度']}")
             return None
     else:
-        # 唯一匹配
         record = final_match.iloc[0]
 
-    # 构建结果字典（使用原始字段）
-    result_can = {
-        '报文名称': record['报文名称'],
-        '报文类型': record['报文类型'],
-        '报文ID': record['报文ID'],
-        '报文发送类型': record['报文发送类型'],
-        '报文周期时间': record['报文周期时间'],
-        '子ID': record['子ID'],
-        '报文长度': record['报文长度'],
-        '位': record['位'],
-        '信号长度': record['信号长度'],
-        '信号名称(英文)': record['信号名称(英文)'],
-        '信号名称(中文)': record['信号名称(中文)']
-    }
-
-    # 打印结果
-    sub_id = record['子ID']
-    message_id_normalized = record['报文ID']
-    message_type = record['报文发送类型']
-    message_cycle = record['报文周期时间']
-
-    cycle_str = "未知"
-    if pd.notna(message_cycle):
-        cycle_raw = str(message_cycle).strip()
-        if cycle_raw.lower() not in ['nan', '']:
-            if '/' in cycle_raw:
-                try:
-                    first_part = cycle_raw.split('/')[0]
-                    cycle_value = int(first_part)
-                    cycle_str = str(cycle_value)
-                except ValueError:
-                    pass  # 保持 "未知"
-            else:
-                try:
-                    cycle_value = int(cycle_raw)
-                    cycle_str = str(cycle_value)
-                except ValueError:
-                    pass  # 保持 "未知"
-
-    # if pd.notna(sub_id) and str(sub_id).strip().upper() == 'NO':
-    #     print(f"找到信号：{message_id_normalized} {signal_name_en}")
-    # else:
-    #     print(f"找到信号：{message_id_normalized} {sub_id} {signal_name_en}")
-
+    # 构建返回字典（使用原始字段）
     result_can = {
         '报文名称': record['报文名称'],
         '报文类型': record['报文类型'],
