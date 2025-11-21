@@ -135,15 +135,13 @@ def _parse_bit_range(bit_range: str, frame_length: int = 8) -> Tuple[int, int, i
 
 def _calc_signal_length(start_row: int, start_col: int, end_row: int, end_col: int) -> int:
     """计算信号所占的总位数。"""
-    length = 0
-    r, c = start_row, start_col
-    while (r, c) <= (end_row, end_col):
-        length += 1
-        if c < 7:
-            c += 1
-        else:
-            r += 1
-            c = 0
+    if start_row == end_row:
+        return end_col - start_col + 1
+    first_row_remaining = 8 - start_col
+    full_rows_between = max(end_row - start_row - 1, 0)
+    middle = full_rows_between * 8
+    last_row = end_col + 1
+    length = first_row_remaining + middle + last_row
     return length
 
 def generate_can_data(bit_range: str, enum_value: int, sub_id: Optional[str] = None, frame_length: int = 8) -> List[int]:
@@ -170,46 +168,34 @@ def generate_can_data(bit_range: str, enum_value: int, sub_id: Optional[str] = N
         raise ValueError(
             f"enum_value={enum_value} 超出位宽 {signal_len} 能表示的范围"
         )
-
-    # LSB → MSB 的位序列
-    bits = [int(b) for b in reversed(bin(enum_value)[2:].zfill(signal_len))]
-  
-  # 创建帧长度×8 位矩阵，初始化为 0
-    rows = [[0] * 8 for _ in range(frame_length)]
-    
-    # 按行优先顺序写入位
-    i = 0
-    while (start_row, start_col) <= (end_row, end_col) and i < len(bits):
-        # 确保不超出帧范围
-        if start_row <= frame_length and start_col < 8:
-            rows[start_row-1][start_col] = bits[i]
-            i += 1
-        if start_col < 7:
-            start_col += 1
-        else:
-            start_row += 1
-            start_col = 0
-        if start_row > frame_length:
-            break
-    
-    # 转换为字节值（整数列表）
-    data_bytes = []
-    for row_index, row in enumerate(rows):
-        if row_index < frame_length:  # 确保不超出帧长度
-            value = sum(bit << idx for idx, bit in enumerate(row))
-            data_bytes.append(value)
-
-    # 如果 sub_id 存在且是十六进制字符串，替换第一个字节
+    # 初始化数据字节为全0
+    data_bytes = [0] * frame_length
+    # 从 LSB 到 MSB 提取 enum_value 的每一位（共 signal_len 位）
+    bit_index = 0
+    current_byte_idx = start_row - 1
+    current_bit_pos = start_col
+    while bit_index < signal_len:
+        # 获取当前位值（LSB 开始）
+        bit_val = (enum_value >> bit_index) & 1
+        # 写入对应字节的对应位
+        if 0 <= current_byte_idx < frame_length:
+            if bit_val:
+                data_bytes[current_byte_idx] |= (1 << current_bit_pos)
+            else:
+                data_bytes[current_byte_idx] &= ~(1 << current_bit_pos)
+        bit_index += 1
+        # 移动到位指针：列+1，若越界则换行
+        current_bit_pos += 1
+        if current_bit_pos >= 8:
+            current_bit_pos = 0
+            current_byte_idx += 1
+            if current_byte_idx >= frame_length:
+                break
+    # 处理 sub_id 替换
     if sub_id is not None and isinstance(sub_id, str):
         try:
-            # 提取十六进制数（支持 0x02, 0X02, 等）
-            sub_id_clean = sub_id.strip().upper()
-            if '0X' in sub_id_clean:
-                sub_id_decimal = int(sub_id_clean.replace('0X', ''), 16)
-            else:
-                # 尝试直接作为十六进制解析
-                sub_id_decimal = int(sub_id_clean, 16)
-            # 替换第一个字节（如果帧长度至少为1）
+            # 使用标准 int 解析，自动识别 0x 前缀（忽略大小写）
+            sub_id_decimal = int(sub_id.strip(), 16)
             if frame_length > 0:
                 data_bytes[0] = sub_id_decimal
         except ValueError:
