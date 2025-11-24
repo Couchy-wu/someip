@@ -139,7 +139,8 @@ class TestCaseProcessor:
             return
 
         # 重置输出编号
-        self.output_index = 0  # 每个用例的发送信号从 index 0 开始
+        self.output_index = 1  # 每个用例的发送信号从 index 1 开始
+        # index 0 给on电和off电共用，使其两者不能同时发送。
 
         # 按 *类型 查找四类行
         test_case_row = self._find_row_by_type(rows, "*类型", "测试用例")
@@ -338,8 +339,13 @@ class TestCaseProcessor:
                 can_data_hex = [f"0x{b:02X}" for b in data_bytes]
                 can_data_str = f"[{', '.join(can_data_hex)}]"
 
-                index = self.output_index
-                self.output_index += 1
+                # 特殊信号判断：如果 message_id == "12D" 且信号名为 "BCMPower_Gear_12D_S"，index固定为0 ，使其电源档位唯一
+                if message_id == "12D" and signal_name_en == "BCMPower_Gear_12D_S":
+                    index = 0
+                    # 注意：这里不更新 self.output_index，避免干扰正常递增序列
+                else:
+                    index = self.output_index
+                    self.output_index += 1
 
                 log_msg = (
                     f"          → 输出CAN报文 ID: {message_id_str} | "

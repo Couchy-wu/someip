@@ -212,7 +212,7 @@ class CANFDGUI:
                 msg_type='canfd',
                 signal_type='Cycle',
                 cycle_ms=50,
-                index=1
+                index=0
             )
             print("ON档电信号发送成功!") 
         except Exception as e:
@@ -243,7 +243,7 @@ class CANFDGUI:
                 msg_type='canfd',
                 signal_type='Cycle',
                 cycle_ms=50,
-                index=1
+                index=0
             )
             print("OFF档电信号发送成功!") 
         except Exception as e:
