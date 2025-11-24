@@ -109,40 +109,50 @@ class LogParser:
         channel_handles = None
         if self.can_device:
             device_handle, channel_handles, _ = self.can_device
-
         try:
+            total_cases = len(self.test_cases)
             for i, case in enumerate(self.test_cases):
                 case_id = case['id']
                 mylog.info(LOGGER_NAME, "=============================================")
-                mylog.info(LOGGER_NAME, f"正在处理用例: {case_id}")
-
-                # 仅当存在脚本解析结果时才进行重复执行
+                mylog.info(LOGGER_NAME, f"开始处理用例: {case_id}")
+                print(f"▶ 开始处理用例: {case_id}")
+    
+                executed = False  # 标记该用例是否执行了至少一次
+    
                 if self.has_script_result(case['content']):
                     mylog.info(LOGGER_NAME, f"存在脚本解析结果，开始执行测试（共重复 {self.case_repeat_count} 次）")
+                    print(f"开始执行测试（共重复 {self.case_repeat_count} 次）")
 
                     for round_idx in range(1, self.case_repeat_count + 1):
                         mylog.info(LOGGER_NAME, f"第 {round_idx} 次检测开始...")
-
+                        print(f"第 {round_idx} 次检测开始...")
                         self.analyze_script_parts(case['content'])
-
-                        # 每次执行后等待并清理（最后一次也清理）
+                        executed = True
+    
+                        # 每轮重复后等待并清理（最后一次重复内也清理，但不在此处加用例间延迟）
                         if round_idx < self.case_repeat_count:
-                            delay_time = 3
+                            delay_time = 5
                             mylog.info(LOGGER_NAME, f"第 {round_idx} 次检测完成，等待{delay_time}秒后开始下一次...")
+                            print(f"第 {round_idx} 次检测完成，等待{delay_time}秒后开始下一次...")
                             time.sleep(delay_time)
-
-                            # 清理操作：只要 CAN 设备已打开，就执行，不再依赖 ENABLE_AUTO_OPEN_CLOSE_CAN
-                            if self.can_device and device_handle is not None and channel_handles is not None:
-                                self._clear_can_channel(chn=0)
-                        else:
-                            # 最后一次执行后仍进行清理
-                            mylog.info(LOGGER_NAME, f"第 {round_idx} 次检测完成，正在清理...")
-                            if self.can_device and device_handle is not None and channel_handles is not None:
-                                self._clear_can_channel(chn=0)
+                            self._clear_can_channel(chn=0)
+    
+                    # 所有重复执行完后，进行最后一次清理
+                    mylog.info(LOGGER_NAME, f"第 {self.case_repeat_count} 次检测完成，正在清理...")
+                    if self.can_device and device_handle is not None and channel_handles is not None:
+                        self._clear_can_channel(chn=0)
                 else:
                     mylog.info(LOGGER_NAME, "不存在脚本解析结果，跳过该用例")
+                    print("不存在脚本解析结果，跳过该用例")
                     continue
-
+                
+                # 如果不是最后一个用例，并且当前用例已执行，则等待 x 秒再进入下一个用例
+                if executed and (i < total_cases - 1):
+                    inter_case_delay = 5  # 可以定义为配置项或参数
+                    mylog.info(LOGGER_NAME, f"用例 {case_id} 已完成，等待{inter_case_delay}秒后开始下一个用例...")
+                    print(f"用例 {case_id} 已完成，等待{inter_case_delay}秒后开始下一个用例...")
+                    time.sleep(inter_case_delay)
+    
         finally:
             # ========== 关闭 CAN 设备 ==========
             if ENABLE_AUTO_OPEN_CLOSE_CAN and hasattr(self, 'can_device') and self.can_device:
