@@ -43,7 +43,8 @@ class TestCaseProcessor:
         self.logger_name = logger_name
         self.total_cases = 0          # 总用例数
         self.processed_count = 0      # 已处理用例数
-        self.output_index = 0         # 输出CAN报文编号计数器
+        self.total_cases = 0         
+        self.processed_count = 0
 
 
         # 初始化日志器，确保日志目录和配置已就绪
@@ -138,9 +139,9 @@ class TestCaseProcessor:
             mylog.warning(self.logger_name, f"[用例 {case_index}] 行数异常（应为 4 行），跳过...")
             return
 
-        # 重置输出编号
-        self.output_index = 1  # 每个用例的发送信号从 index 1 开始
-        # index 0 给on电和off电共用，使其两者不能同时发送。
+        # --- 重置本用例专用的状态 ---
+        self.signal_to_index: Dict[str, int] = {}        # 缓存：信号唯一键 → index
+        self.next_index = 1                              # 下一个可用 index（从1开始）
 
         # 按 *类型 查找四类行
         test_case_row = self._find_row_by_type(rows, "*类型", "测试用例")
@@ -339,13 +340,20 @@ class TestCaseProcessor:
                 can_data_hex = [f"0x{b:02X}" for b in data_bytes]
                 can_data_str = f"[{', '.join(can_data_hex)}]"
 
-                # 特殊信号判断：如果 message_id == "12D" 且信号名为 "BCMPower_Gear_12D_S"，index固定为0 ，使其电源档位唯一
+                # === 特殊信号：12D.BCMPower_Gear_12D_S → 固定 index = 0 ===
                 if message_id == "12D" and signal_name_en == "BCMPower_Gear_12D_S":
                     index = 0
-                    # 注意：这里不更新 self.output_index，避免干扰正常递增序列
                 else:
-                    index = self.output_index
-                    self.output_index += 1
+                    # 构造唯一键：message_id + signal_name_en
+                    signal_key = f"{message_id}.{signal_name_en}"
+                    if signal_key in self.signal_to_index:
+                        # 已分配过，复用
+                        index = self.signal_to_index[signal_key]
+                    else:
+                        # 新信号，分配当前 next_index
+                        index = self.next_index
+                        self.signal_to_index[signal_key] = index
+                        self.next_index += 1  # 仅新信号递增
 
                 log_msg = (
                     f"          → 输出CAN报文 ID: {message_id_str} | "
