@@ -20,7 +20,7 @@ class TestCaseProcessor:
     # 需要保留的关键字（严格匹配大小写）
     DEFAULT_TARGET_FUNCS = {"采集", "输出", "发送", "等待", "启用", "禁用"}
     # 前缀匹配关键字（支持前缀如 “测试台CAN”、“台架CAN” 等）
-    DEFAULT_PREFIXES = ["测试台CAN", "台架CAN", "CAN"]
+    DEFAULT_PREFIXES = ["测试台CAN", "台架CAN", "CAN","测试台CANID"]
     # --------------------------------------------------
 
     def __init__(
@@ -223,29 +223,42 @@ class TestCaseProcessor:
         使用正则匹配，按行顺序输出解析结果，并对“采集”和“输出”生成 CAN 数据
         """
         rows = [("状态", status_row), ("动作", action_row), ("响应", response_row)]
-        aggregated: List[Tuple[str, List[Tuple[str, str]]]] = []
+        mylog.info(self.logger_name, "  └─ 脚本解析结果：")
 
         for row_type, row in rows:
             script_raw = row.get("测试脚本", "")
             calls = self._extract_target_calls(script_raw, self.target_funcs, self.prefix_patterns)
-            if calls:
-                aggregated.append((row_type, calls))
+            if not calls:
+                continue
 
-        if not aggregated:
-            mylog.info(self.logger_name, "  └─ 脚本抽取结果：未发现目标函数（采集/输出/发送/等待）")
-            return
-
-        mylog.info(self.logger_name, "  └─ 脚本解析结果：")
-        for row_type, calls in aggregated:
             mylog.info(self.logger_name, f"      {row_type}:")
             for func, args in calls:
                 mylog.info(self.logger_name, f"          {func}({args})")
 
-                # 仅对 "输出" 和 "采集" 生成 CAN 数据（如果未来需要保留生成日志，可保留此块）
                 if func in {"输出", "采集"}:
                     self._generate_can_data_from_call(func, args)
 
-            mylog.info(self.logger_name, "")  # 添加空行分隔（日志中用于可读性）
+                elif func == "禁用":
+                    # 立即处理：解析 CAN ID 并查找已分配的 index
+                    match = re.match(r'([0-9A-F]+)\.[^,]*', args.strip())
+                    if match:
+                        can_id = match.group(1)
+                        # 查找所有属于该 CAN ID 的已注册信号的 index
+                        indices = []
+                        for sig_key, idx in self.signal_to_index.items():
+                            msg_id = sig_key.split('.')[0]
+                            if msg_id == can_id:
+                                indices.append(idx)
+                        indices = sorted(set(indices))  # 去重排序
+                        indices_str = ','.join(map(str, indices)) if indices else ""
+
+                        log_msg = f"测试台CANID禁用{can_id}，禁用对应index:{indices_str}"
+                        mylog.info(self.logger_name, f"          {log_msg}")
+                        # print(log_msg)  # 同时输出到控制台
+                    else:
+                        mylog.warning(self.logger_name, "          警告：无法解析禁用参数格式")
+
+            mylog.info(self.logger_name, "")  # 空行分隔
 
     @staticmethod
     def _extract_target_calls(
@@ -340,9 +353,13 @@ class TestCaseProcessor:
                 can_data_hex = [f"0x{b:02X}" for b in data_bytes]
                 can_data_str = f"[{', '.join(can_data_hex)}]"
 
-                # === 特殊信号：12D.BCMPower_Gear_12D_S → 固定 index = 0 ===
+                # === 特殊信号：12D.BCMPower_Gear_12D_S → 固定 index = 0，但必须写入 signal_to_index ===
                 if message_id == "12D" and signal_name_en == "BCMPower_Gear_12D_S":
                     index = 0
+                    signal_key = f"{message_id}.{signal_name_en}"
+                    # 强制写入 signal_to_index，即使 index=0
+                    self.signal_to_index[signal_key] = index
+                    # 注意：不递增 next_index，因为是固定分配
                 else:
                     # 构造唯一键：message_id + signal_name_en
                     signal_key = f"{message_id}.{signal_name_en}"

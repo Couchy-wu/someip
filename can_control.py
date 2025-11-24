@@ -736,6 +736,7 @@ def Remove_Auto_Send_By_Index(device_handle, chn, msg_type, index):
         if ret != ZCAN_STATUS_OK:
             mylog.error("candata", "禁用定时发送 CAN[%d][%d] 失败!" % (chn, index))
             return False
+        mylog.info("candata", "即将禁用index:%d" % index) 
         return True
 
     elif msg_type == "canfd":
@@ -749,6 +750,7 @@ def Remove_Auto_Send_By_Index(device_handle, chn, msg_type, index):
         if ret != ZCAN_STATUS_OK:
             mylog.error("candata", "禁用定时发送 CANFD[%d][%d] 失败!" % (chn, index))
             return False
+        mylog.info("candata", "即将禁用index:%d" % index) 
         return True
 
     else:

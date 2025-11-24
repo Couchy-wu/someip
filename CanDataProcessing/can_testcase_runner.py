@@ -220,7 +220,7 @@ class LogParser:
         return [line for line in lines if line]
 
     def _process_block_lines(self, lines):
-        """处理块内每一行指令，支持上下文感知"""
+        """处理块内每一行指令，支持上下文感知，并新增禁用index自动调用功能"""
         i = 0
         while i < len(lines):
             line = lines[i].strip()
@@ -235,10 +235,10 @@ class LogParser:
                 i += 1
                 continue
 
-            # === 采集CAN信号（新增）===
+            # === 采集CAN信号 ===
             collect_match = re.match(r'^采集\(([^)]+)\)', line)
             if collect_match:
-                result = self._handle_collect_can_with_context(lines, i)
+                self._handle_collect_can_with_context(lines, i)
                 i += 1
                 continue
 
@@ -246,6 +246,27 @@ class LogParser:
             wait_match = re.match(r'^等待\((\d+)\)', line)
             if wait_match:
                 self._delay_ms(int(wait_match.group(1)))
+                i += 1
+                continue
+
+            # === 新增：检测“测试台CANID禁用”并调用禁用函数 ===
+            disable_match = re.match(r'^测试台CANID禁用[0-9A-F]+，禁用对应index:(.+)$', line)
+            if disable_match:
+                indices_str = disable_match.group(1).strip()
+                indices = [int(x.strip()) for x in indices_str.split(',') if x.strip().isdigit()]
+
+                # 获取设备句柄（复用已有资源）
+                device_handle = self.can_device[0] if self.can_device else None
+                if device_handle is not None:
+                    for idx in indices:
+                        can_control.Remove_Auto_Send_By_Index(
+                            device_handle=device_handle,
+                            chn=0,              # 固定通道0
+                            msg_type="canfd",    # 固定类型canfd
+                            index=idx
+                        )
+                        mylog.info(LOGGER_NAME, f"Disable → 禁用定时发送 index: {idx}")
+                        time.sleep(0.2)  # 每次禁用后延迟 200ms，确保设备处理完成
                 i += 1
                 continue
 
