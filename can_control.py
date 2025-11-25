@@ -1096,7 +1096,8 @@ def wait_for_check_signal_by_bit_enum(
 
             mylog.info("candata", f"✅ 条件满足! ID={can_id_hex_str}, 数据=[{hex_data}], "
                                   f"{sub_id_log}, {bit_position}={actual_value}, "
-                                  f"消息时间戳={ts}, 相对延迟={ts - start_device_ts}μs")
+                                  f"消息时间戳={ts}, 相对延迟={(ts - start_device_ts) / 1000.0:.3f}ms")
+            
             return True
 
         time.sleep(check_interval)
