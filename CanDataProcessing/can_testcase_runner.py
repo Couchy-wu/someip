@@ -538,7 +538,7 @@ class LogParser:
             bit_position=bit_position,
             expected_enum_value=expected_enum_value,
             channel=channel,
-            timeout=3.0,
+            timeout=2.0,
             check_interval=0.1
         )
 

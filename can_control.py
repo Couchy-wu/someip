@@ -227,7 +227,7 @@ def wait_for_check_signal_received(
     signal_id: Union[int, str],
     expected_data_list: List[int],
     channel: int,
-    timeout: float = 3.0,
+    timeout: float = 2.0,
     check_interval: float = 0.1
 ) -> bool:
     """
@@ -736,7 +736,7 @@ def Remove_Auto_Send_By_Index(device_handle, chn, msg_type, index):
         if ret != ZCAN_STATUS_OK:
             mylog.error("candata", "禁用定时发送 CAN[%d][%d] 失败!" % (chn, index))
             return False
-        mylog.info("candata", "即将禁用index:%d" % index) 
+        # mylog.info("candata", "即将禁用index:%d" % index) 
         return True
 
     elif msg_type == "canfd":
@@ -750,7 +750,7 @@ def Remove_Auto_Send_By_Index(device_handle, chn, msg_type, index):
         if ret != ZCAN_STATUS_OK:
             mylog.error("candata", "禁用定时发送 CANFD[%d][%d] 失败!" % (chn, index))
             return False
-        mylog.info("candata", "即将禁用index:%d" % index) 
+        # mylog.info("candata", "即将禁用index:%d" % index) 
         return True
 
     else:
@@ -993,15 +993,16 @@ def calculate_bit_length(bit_range: str) -> int:
 # 等待并检查 CAN 信号
 def wait_for_check_signal_by_bit_enum(
     signal_id: Union[int, str],
-    sub_id: str, 
+    sub_id: str,
     bit_position: str,
     expected_enum_value: int,
     channel: int,
-    timeout: float = 3.0,
+    timeout: float = 2.0,
     check_interval: float = 0.1
 ) -> bool:
     """
-    等待并检查 CAN 信号
+    等待并检查 CAN 信号，仅匹配调用开始后接收到的新消息
+    时间基准：使用设备硬件时间戳 msg['timestamp']（如 87006154300），单位：微秒
     """
     # 解析 CAN ID
     if isinstance(signal_id, str):
@@ -1015,16 +1016,14 @@ def wait_for_check_signal_by_bit_enum(
 
     can_id_hex_str = f"0x{can_id_int:X}"
 
-    # 修改 sub_id 处理逻辑：强制为字符串，支持 "No" 或 "0x..."
+    # 处理 sub_id
     check_sub_id = sub_id != "No"
     expect_sub_id_val = 0
     if check_sub_id:
         try:
-            # 支持 0x 或 0X 开头的十六进制字符串
             if sub_id.lower().startswith("0x"):
                 expect_sub_id_val = int(sub_id, 16)
             else:
-                # 如果不是 0x 开头，尝试作为十进制解析（可选，也可禁止）
                 expect_sub_id_val = int(sub_id)
         except ValueError:
             mylog.error("can", f"无效的 sub_id 格式: {sub_id}，应为 'No' 或 '0x...' 形式")
@@ -1033,23 +1032,38 @@ def wait_for_check_signal_by_bit_enum(
     # 计算位长度（日志用）
     signal_length = calculate_bit_length(bit_position)
 
-    start_time = time.time()
-    end_time = start_time + timeout
+    # --- 关键：获取当前最新的设备时间戳作为“起始点” ---
+    start_device_ts = 0
+    with received_messages_lock:
+        if received_messages:
+            # 取最新一条消息的时间戳作为当前设备时间参考
+            start_device_ts = max(msg.get('timestamp', 0) for msg in received_messages)
+        else:
+            start_device_ts = 0  # 没有历史消息，接受所有
 
     mylog.info("candata", f"开始等待信号: ID={can_id_hex_str}, 子ID={sub_id}, "
                           f"位域={bit_position}({signal_length}bits), "
-                          f"期望值={expected_enum_value}, 通道={channel}, 超时={timeout}s")
+                          f"期望值={expected_enum_value}, 通道={channel}, 超时={timeout}s, "
+                          f"起始设备时间戳={start_device_ts}")
+
+    end_time = time.time() + timeout
 
     while time.time() < end_time:
+        matched = False
         current_messages = []
         with received_messages_lock:
+            # 获取所有消息（后续过滤时间）
             current_messages = list(received_messages)
 
         for msg in current_messages:
+            ts = msg.get('timestamp', 0)
+            if ts <= start_device_ts:
+                continue  # 跳过调用前已存在的消息
+
             # CAN ID 匹配
             try:
                 msg_id = int(msg['can_id'], 16)
-            except:
+            except (ValueError, TypeError):
                 continue
             if msg_id != can_id_int:
                 continue
@@ -1062,12 +1076,12 @@ def wait_for_check_signal_by_bit_enum(
             if not isinstance(data_list, list) or len(data_list) == 0:
                 continue
 
-            # 检查子ID：对应 data[0]
+            # 子ID匹配
             if check_sub_id:
                 if len(data_list) <= 0:
                     continue
                 if data_list[0] != expect_sub_id_val:
-                    continue  # data[0] 不匹配
+                    continue
 
             # 提取目标位值
             actual_value = extract_bits_from_data(data_list, bit_position)
@@ -1076,23 +1090,18 @@ def wait_for_check_signal_by_bit_enum(
             if actual_value != expected_enum_value:
                 continue
 
-            # 成功
+            # ✅ 成功匹配：新消息且满足条件
             hex_data = " ".join(f"{b:02X}" for b in data_list)
-
-            # 构造子ID日志信息
-            if sub_id == "No":
-                sub_id_log = "子ID=No"
-            else:
-                # 此时 check_sub_id 为 True，expect_sub_id_val 已解析为 int
-                sub_id_log = f"子ID=0x{expect_sub_id_val:x}"  # 小写十六进制，如 0xa
+            sub_id_log = "子ID=No" if sub_id == "No" else f"子ID=0x{expect_sub_id_val:x}"
 
             mylog.info("candata", f"✅ 条件满足! ID={can_id_hex_str}, 数据=[{hex_data}], "
-                                  f"{sub_id_log}, {bit_position}={actual_value}")
+                                  f"{sub_id_log}, {bit_position}={actual_value}, "
+                                  f"消息时间戳={ts}, 相对延迟={ts - start_device_ts}μs")
             return True
-
 
         time.sleep(check_interval)
 
+    # ❌ 超时
     mylog.warning("candata", f"❌ 等待超时! ID={can_id_hex_str}, 子ID={sub_id}, "
                              f"位={bit_position}, 期望值={expected_enum_value}")
     return False
@@ -1134,7 +1143,7 @@ if __name__ == "__main__":
         bit_position="7.2",
         expected_enum_value=0,
         channel=0,
-        timeout=3.0
+        timeout=2.0
     )
 
 
