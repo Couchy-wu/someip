@@ -18,7 +18,7 @@ class TestCaseProcessor:
 
     # ---------- 默认配置（可在实例化时覆盖） ----------
     # 需要保留的关键字（严格匹配大小写）
-    DEFAULT_TARGET_FUNCS = {"采集", "输出", "发送", "等待", "启用", "禁用"}
+    DEFAULT_TARGET_FUNCS = {"采集", "输出", "发送", "等待", "启用", "测试台CANID禁用"}
     # 前缀匹配关键字（支持前缀如 “测试台CAN”、“台架CAN” 等）
     DEFAULT_PREFIXES = ["测试台CAN", "台架CAN", "CAN","测试台CANID"]
     # --------------------------------------------------
@@ -371,9 +371,9 @@ class TestCaseProcessor:
                     merged = []
                     for i, (c, n) in enumerate(zip(cur, new_frame)):
                         # 检测位冲突（同一位被不同信号写成相反值）
-                        if (c & n) != n and n != 0 and (c & n) != 0:
-                            mylog.warning(self.logger_name,
-                                           f"          注意位冲突: CAN {message_id_str} 第 {i} 字节已有位 {c:08b} → 新位 {n:08b}")
+                        # if (c & n) != n and n != 0 and (c & n) != 0:
+                        #     mylog.warning(self.logger_name,
+                        #                    f"          注意位冲突: CAN {message_id_str} 第 {i} 字节已有位 {c:08b} → 新位 {n:08b}")
                         merged.append(c | n)
                     self._frame_cache[can_id_key] = merged
 
