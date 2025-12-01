@@ -150,50 +150,57 @@ class TestCaseProcessor:
         self._frame_cache.clear()
         self._subid_written.clear()
         self._canid_to_index.clear()
+        self._signal_frame_cache.clear()
 
-        # 按 *类型 查找四类行
-        test_case_row = self._find_row_by_type(rows, "*类型", "测试用例")
-        status_row    = self._find_row_by_type(rows, "*类型", "状态")
-        action_row    = self._find_row_by_type(rows, "*类型", "动作")
-        response_row  = self._find_row_by_type(rows, "*类型", "响应")
+        try:
+            # 按 *类型 查找四类行
+            test_case_row = self._find_row_by_type(rows, "*类型", "测试用例")
+            status_row    = self._find_row_by_type(rows, "*类型", "状态")
+            action_row    = self._find_row_by_type(rows, "*类型", "动作")
+            response_row  = self._find_row_by_type(rows, "*类型", "响应")
 
-        # 检查必要行是否缺失
-        missing = [(name, row) for name, row in
-                   [("测试用例", test_case_row), ("状态", status_row),
-                    ("动作", action_row), ("响应", response_row)]
-                   if row is None]
-        if missing:
-            for name, _ in missing:
-                mylog.warning(self.logger_name, f"[用例 {case_index}] 缺少 【{name}】 行，跳过...")
-            return
+            # 检查必要行是否缺失
+            missing = [(name, row) for name, row in
+                       [("测试用例", test_case_row), ("状态", status_row),
+                        ("动作", action_row), ("响应", response_row)]
+                       if row is None]
+            if missing:
+                for name, _ in missing:
+                    mylog.warning(self.logger_name, f"[用例 {case_index}] 缺少 【{name}】 行，跳过...")
+                return
 
-        # 提取基本信息
-        case_id   = test_case_row.get("*用例编号", "未知")
-        level1    = test_case_row.get("*一级功能", "未知")
-        level2    = test_case_row.get("二级功能", "未知")
-        test_env  = test_case_row.get("*测试环境", "")
+            # 提取基本信息
+            case_id   = test_case_row.get("*用例编号", "未知")
+            level1    = test_case_row.get("*一级功能", "未知")
+            level2    = test_case_row.get("二级功能", "未知")
+            test_env  = test_case_row.get("*测试环境", "")
 
-        print(f"✅ 解析到测试用例 {case_id}")
-        mylog.info(self.logger_name, f"=== 开始处理 用例 {case_id} ===")
-        mylog.info(self.logger_name, f"功能：{level1} - {level2}")
+            print(f"✅ 解析到测试用例 {case_id}")
+            mylog.info(self.logger_name, f"=== 开始处理 用例 {case_id} ===")
+            mylog.info(self.logger_name, f"功能：{level1} - {level2}")
+    
+            # 环境过滤：仅处理包含 “台架” 的用例
+            if "台架" not in test_env:
+                mylog.info(self.logger_name, f"测试环境：{test_env} （不含台架），跳过该用例")
+                mylog.info(self.logger_name, "")  # 添加空行分隔（日志中用于可读性）
+                return
+    
+            mylog.info(self.logger_name, f"测试环境：{test_env} （含台架），继续处理")
 
-        # 环境过滤：仅处理包含 “台架” 的用例
-        if "台架" not in test_env:
-            mylog.info(self.logger_name, f"测试环境：{test_env} （不含台架），跳过该用例")
-            mylog.info(self.logger_name, "")  # 添加空行分隔（日志中用于可读性）
-            return
+            # 输出结构信息并抽取脚本
+            self._print_case_structure(status_row, action_row, response_row)
+            self._extract_and_print_scripts(status_row, action_row, response_row)
 
-        mylog.info(self.logger_name, f"测试环境：{test_env} （含台架），继续处理")
+            # 增加已处理用例计数
+            self.processed_count += 1
 
-        # 输出结构信息并抽取脚本
-        self._print_case_structure(status_row, action_row, response_row)
-        self._extract_and_print_scripts(status_row, action_row, response_row)
-
-        # 增加已处理用例计数
-        self.processed_count += 1
-
-        # 添加延时
-        # time.sleep(0.5)
+        finally:
+            # **无论本用例是否提前返回或抛异常，统一在这里清理缓存**
+            self._frame_cache.clear()
+            self._subid_written.clear()
+            self._canid_to_index.clear()
+            self._signal_frame_cache.clear()
+            self.signal_to_index.clear()
 
     # ----------------------------------------------------------------------
     # 辅助工具
