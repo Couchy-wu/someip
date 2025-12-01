@@ -48,6 +48,7 @@ class TestCaseProcessor:
         self._frame_cache: Dict[str, List[int]] = {}
         self._subid_written: set = set()
         self._canid_to_index: Dict[str, int] = {}
+        self._signal_frame_cache: Dict[str, List[int]] = {}   # 信号唯一键 → 单信号帧
 
         # 初始化日志器，确保日志目录和配置已就绪
         mylog.setup_logger(
@@ -312,9 +313,10 @@ class TestCaseProcessor:
     def _generate_can_data_from_call(self, func: str, arg: str) -> None:
         """
         解析“输出”或“采集”函数的参数，生成对应的 CAN 报文描述信息。
-        - 对于“采集”：不再生成CAN数据字节，而是输出信号的 ID、子ID、位范围、枚举值
-        - 对于“输出”：保留原逻辑，生成并显示完整的 CAN 数据
-        支持格式：报文ID.信号名,值  例如：4C1.HUD_Mode_Settings_S,2
+        - 对于“采集”：只输出信号属性（ID、子ID、位、枚举值），不产生 CAN 数据。
+        - 对于“输出”：同一信号多次出现时覆盖旧位，仅在累计帧层面进行 OR 合并
+          （不同信号仍累计），并输出完整的 CAN 数据及分配的 index。
+        支持格式：报文ID.信号名,值   例如：4C1.HUD_Mode_Settings_S,2
         """
         match = re.search(r'([0-9A-F]+)\.([a-zA-Z0-9_]+)\s*,\s*(\d+)', arg)
         if not match:
@@ -360,29 +362,24 @@ class TestCaseProcessor:
                     # 第一次出现且子 ID 合法 → 已在 generate_can_data 中写入第 0 Byte
                     self._subid_written.add(can_id_key)
 
-                # ---------- 2. 合并帧 ----------
-                new_frame: List[int] = result["can_data"]    # 单信号完整帧
-                if can_id_key not in self._frame_cache:
-                    # 第一次出现该 CAN ID → 直接保存
-                    self._frame_cache[can_id_key] = new_frame.copy()
-                else:
-                    # 已有累计帧 → 位 OR 合并
-                    cur = self._frame_cache[can_id_key]
-                    merged = []
-                    for i, (c, n) in enumerate(zip(cur, new_frame)):
-                        # 检测位冲突（同一位被不同信号写成相反值）
-                        # if (c & n) != n and n != 0 and (c & n) != 0:
-                        #     mylog.warning(self.logger_name,
-                        #                    f"          注意位冲突: CAN {message_id_str} 第 {i} 字节已有位 {c:08b} → 新位 {n:08b}")
-                        merged.append(c | n)
-                    self._frame_cache[can_id_key] = merged
+                # ---------- 2. 保存/覆盖单信号帧 ----------
+                signal_key = f"{message_id_str}.{signal_name_en}"
+                # 直接覆盖同一信号的旧帧
+                self._signal_frame_cache[signal_key] = result["can_data"].copy()
 
-                # ---------- 3. Index 分配 ----------
-                # 12D.BCMPower_Gear_12D_S 为固定 0
+                # ---------- 3. 重新计算累计帧（按 CAN ID OR 合并） ----------
+                # 先清零
+                merged_frame = [0] * len(result["can_data"])
+                for key, frm in self._signal_frame_cache.items():
+                    if key.startswith(f"{message_id_str}."):
+                        merged_frame = [c | n for c, n in zip(merged_frame, frm)]
+                # 保存到累计缓存
+                self._frame_cache[can_id_key] = merged_frame
+
+                # ---------- 4. Index 分配 ----------
                 if message_id == "12D" and signal_name_en == "BCMPower_Gear_12D_S":
                     index = 0
                 else:
-                    # 同一 CAN ID 共享同一 index（若未分配则使用 next_index）
                     if can_id_key in self._canid_to_index:
                         index = self._canid_to_index[can_id_key]
                     else:
@@ -390,12 +387,10 @@ class TestCaseProcessor:
                         self._canid_to_index[can_id_key] = index
                         self.next_index += 1
 
-                # 为兼容 “禁用” 功能，仍然把 signal_key 映射到该 index
-                signal_key = f"{message_id}.{signal_name_en}"
+                # 为 “禁用” 功能保留映射
                 self.signal_to_index[signal_key] = index
 
-                # ---------- 4. 输出日志（使用合并后的帧） ----------
-                merged_frame = self._frame_cache[can_id_key]
+                # ---------- 5. 输出日志（使用累计帧） ----------
                 can_data_hex = [f"0x{b:02X}" for b in merged_frame]
                 can_data_str = f"[{', '.join(can_data_hex)}]"
 
