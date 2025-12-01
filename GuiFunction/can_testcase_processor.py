@@ -43,9 +43,11 @@ class TestCaseProcessor:
         self.logger_name = logger_name
         self.total_cases = 0          # 总用例数
         self.processed_count = 0      # 已处理用例数
-        self.total_cases = 0         
-        self.processed_count = 0
 
+        # 同一 CAN ID 的累计帧缓存 + CAN ID → index 映射
+        self._frame_cache: Dict[str, List[int]] = {}
+        self._subid_written: set = set()
+        self._canid_to_index: Dict[str, int] = {}
 
         # 初始化日志器，确保日志目录和配置已就绪
         mylog.setup_logger(
@@ -142,6 +144,11 @@ class TestCaseProcessor:
         # --- 重置本用例专用的状态 ---
         self.signal_to_index: Dict[str, int] = {}        # 缓存：信号唯一键 → index
         self.next_index = 1                              # 下一个可用 index（从1开始）
+
+        # 清空累计帧、子ID、CAN‑ID→index 映射
+        self._frame_cache.clear()
+        self._subid_written.clear()
+        self._canid_to_index.clear()
 
         # 按 *类型 查找四类行
         test_case_row = self._find_row_by_type(rows, "*类型", "测试用例")
@@ -318,6 +325,7 @@ class TestCaseProcessor:
         enum_value = int(enum_value_str)
 
         try:
+            # 读取信号信息并得到 **单信号** 的完整帧（8 字节）
             result = create_can_data_by_signal(message_id, signal_name_en, enum_value)
             if not result["success"]:
                 mylog.warning(self.logger_name, f"          → 信号解析失败: {message_id}.{signal_name_en}")
@@ -327,8 +335,8 @@ class TestCaseProcessor:
             message_id_str = result["message_id_str"]
             message_type = result["message_type"]
             cycle_time_raw = result["cycle_time"]
-    
-            # === 修改重点：智能处理周期时间，保留 CE 类型的双周期格式 ===
+
+            # === 智能处理周期时间，保留 CE 类型的双周期格式 ===
             if pd.isna(cycle_time_raw) or not str(cycle_time_raw).strip():
                 cycle_time = "未知"
             else:
@@ -345,32 +353,51 @@ class TestCaseProcessor:
             # 处理“输出”函数：生成CAN数据
             # ======================
             if func == "输出":
-                # 格式化 CAN 数据
-                if isinstance(result['can_data'], (bytes, list, tuple)):
-                    data_bytes = list(result['can_data'])
-                else:
-                    data_bytes = []
-                can_data_hex = [f"0x{b:02X}" for b in data_bytes]
-                can_data_str = f"[{', '.join(can_data_hex)}]"
+                # ---------- 1. 子 ID 只写入一次 ----------
+                sub_id_hex = result.get("sub_id_hex")
+                can_id_key = message_id_str.lower()          # 统一小写作字典键
+                if can_id_key not in self._subid_written and sub_id_hex:
+                    # 第一次出现且子 ID 合法 → 已在 generate_can_data 中写入第 0 Byte
+                    self._subid_written.add(can_id_key)
 
-                # === 特殊信号：12D.BCMPower_Gear_12D_S → 固定 index = 0，但必须写入 signal_to_index ===
+                # ---------- 2. 合并帧 ----------
+                new_frame: List[int] = result["can_data"]    # 单信号完整帧
+                if can_id_key not in self._frame_cache:
+                    # 第一次出现该 CAN ID → 直接保存
+                    self._frame_cache[can_id_key] = new_frame.copy()
+                else:
+                    # 已有累计帧 → 位 OR 合并
+                    cur = self._frame_cache[can_id_key]
+                    merged = []
+                    for i, (c, n) in enumerate(zip(cur, new_frame)):
+                        # 检测位冲突（同一位被不同信号写成相反值）
+                        if (c & n) != n and n != 0 and (c & n) != 0:
+                            mylog.warning(self.logger_name,
+                                           f"          注意位冲突: CAN {message_id_str} 第 {i} 字节已有位 {c:08b} → 新位 {n:08b}")
+                        merged.append(c | n)
+                    self._frame_cache[can_id_key] = merged
+
+                # ---------- 3. Index 分配 ----------
+                # 12D.BCMPower_Gear_12D_S 为固定 0
                 if message_id == "12D" and signal_name_en == "BCMPower_Gear_12D_S":
                     index = 0
-                    signal_key = f"{message_id}.{signal_name_en}"
-                    # 强制写入 signal_to_index，即使 index=0
-                    self.signal_to_index[signal_key] = index
-                    # 注意：不递增 next_index，因为是固定分配
                 else:
-                    # 构造唯一键：message_id + signal_name_en
-                    signal_key = f"{message_id}.{signal_name_en}"
-                    if signal_key in self.signal_to_index:
-                        # 已分配过，复用
-                        index = self.signal_to_index[signal_key]
+                    # 同一 CAN ID 共享同一 index（若未分配则使用 next_index）
+                    if can_id_key in self._canid_to_index:
+                        index = self._canid_to_index[can_id_key]
                     else:
-                        # 新信号，分配当前 next_index
                         index = self.next_index
-                        self.signal_to_index[signal_key] = index
-                        self.next_index += 1  # 仅新信号递增
+                        self._canid_to_index[can_id_key] = index
+                        self.next_index += 1
+
+                # 为兼容 “禁用” 功能，仍然把 signal_key 映射到该 index
+                signal_key = f"{message_id}.{signal_name_en}"
+                self.signal_to_index[signal_key] = index
+
+                # ---------- 4. 输出日志（使用合并后的帧） ----------
+                merged_frame = self._frame_cache[can_id_key]
+                can_data_hex = [f"0x{b:02X}" for b in merged_frame]
+                can_data_str = f"[{', '.join(can_data_hex)}]"
 
                 log_msg = (
                     f"          → 输出CAN报文 ID: {message_id_str} | "
