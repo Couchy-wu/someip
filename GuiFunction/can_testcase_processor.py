@@ -329,11 +329,10 @@ class TestCaseProcessor:
 
     def _generate_can_data_from_call(self, func: str, arg: str) -> None:
         """
-        解析“输出”或“采集”函数的参数，生成对应的 CAN 报文描述信息。
-        - 对于“采集”：只输出信号属性（ID、子ID、位、枚举值），不产生 CAN 数据。
-        - 对于“输出”：同一信号多次出现时覆盖旧位，仅在累计帧层面进行 OR 合并
-          （不同信号仍累计），并输出完整的 CAN 数据及分配的 index。
-        支持格式：报文ID.信号名,值   例如：4C1.HUD_Mode_Settings_S,2
+        解析“输出”或“采集”函数参数，生成CAN报文信息。
+        - 采集：输出信号属性（ID/子ID/位/枚举值），不生成CAN数据
+        - 输出：同一信号覆盖旧值，不同信号按ID进行OR合并，输出完整CAN数据及index
+        格式：报文ID.信号名,值，如：4C1.HUD_Mode_Settings_S,2
         """
         match = re.search(r'([0-9A-F]+)\.([a-zA-Z0-9_]+)\s*,\s*(\d+)', arg)
         if not match:
@@ -344,56 +343,49 @@ class TestCaseProcessor:
         enum_value = int(enum_value_str)
 
         try:
-            # 读取信号信息并得到 **单信号** 的完整帧（8 字节）
+            # 获取信号对应的完整CAN帧（8字节）
             result = create_can_data_by_signal(message_id, signal_name_en, enum_value)
             if not result["success"]:
                 mylog.warning(self.logger_name, f"          → 信号解析失败: {message_id}.{signal_name_en}")
                 return
 
-            # 提取公用字段
+            # 提取基础信息
             message_id_str = result["message_id_str"]
             message_type = result["message_type"]
             cycle_time_raw = result["cycle_time"]
 
-            # === 智能处理周期时间，保留 CE 类型的双周期格式 ===
+            # 智能处理周期时间：CE类型保留"100/1000"格式，其他提取首个数值
             if pd.isna(cycle_time_raw) or not str(cycle_time_raw).strip():
                 cycle_time = "未知"
             else:
                 cycle_str = str(cycle_time_raw).strip()
-                # 如果是 CE 类型，且包含 '/'，则保留完整格式（如 100/1000）
                 if message_type == "CE" and '/' in cycle_str:
-                    cycle_time = cycle_str
+                    cycle_time = cycle_str  # 保留双周期格式
                 else:
-                    # 否则尝试提取第一个数值（兼容原有逻辑）
                     match_cycle = re.search(r'\d+', cycle_str)
                     cycle_time = match_cycle.group(0) if match_cycle else "未知"
-    
-            # ======================
-            # 处理“输出”函数：生成CAN数据
-            # ======================
+
+            can_id_key = message_id_str.lower()
+
+            # 处理“输出”：生成并合并CAN数据
             if func == "输出":
-                # ---------- 1. 子 ID 只写入一次 ----------
+                # 记录子ID（仅首次写入）
                 sub_id_hex = result.get("sub_id_hex")
-                can_id_key = message_id_str.lower()          # 统一小写作字典键
                 if can_id_key not in self._subid_written and sub_id_hex:
-                    # 第一次出现且子 ID 合法 → 已在 generate_can_data 中写入第 0 Byte
                     self._subid_written.add(can_id_key)
 
-                # ---------- 2. 保存/覆盖单信号帧 ----------
+                # 缓存当前信号帧（覆盖同信号）
                 signal_key = f"{message_id_str}.{signal_name_en}"
-                # 直接覆盖同一信号的旧帧
                 self._signal_frame_cache[signal_key] = result["can_data"].copy()
 
-                # ---------- 3. 重新计算累计帧（按 CAN ID OR 合并） ----------
-                # 先清零
+                # 合并同一ID下所有信号（按位OR）
                 merged_frame = [0] * len(result["can_data"])
                 for key, frm in self._signal_frame_cache.items():
                     if key.startswith(f"{message_id_str}."):
                         merged_frame = [c | n for c, n in zip(merged_frame, frm)]
-                # 保存到累计缓存
                 self._frame_cache[can_id_key] = merged_frame
 
-                # ---------- 4. Index 分配 ----------
+                # 分配index（12D挡位信号固定为0，其余首次出现递增）
                 if message_id == "12D" and signal_name_en == "BCMPower_Gear_12D_S":
                     index = 0
                 else:
@@ -404,42 +396,37 @@ class TestCaseProcessor:
                         self._canid_to_index[can_id_key] = index
                         self.next_index += 1
 
-                # 为 “禁用” 功能保留映射
+                # 建立信号到index的映射（用于禁用等功能）
                 self.signal_to_index[signal_key] = index
 
-                # ---------- 5. 输出日志（使用累计帧） ----------
+                # 输出日志
                 can_data_hex = [f"0x{b:02X}" for b in merged_frame]
-                can_data_str = f"[{', '.join(can_data_hex)}]"
-
                 log_msg = (
                     f"          → 输出CAN报文 ID: {message_id_str} | "
                     f"发送类型: {message_type} | "
                     f"周期时间: {cycle_time} ms | "
-                    f"生成CAN数据: {can_data_str} | "
+                    f"生成CAN数据: [{', '.join(can_data_hex)}] | "
                     f"分配index: {index}"
                 )
                 mylog.info(self.logger_name, log_msg)
                 return
 
-            # ======================
-            # 处理“采集”函数：仅显示信号属性
-            # ======================
+            # 处理“采集”：仅输出信号属性
             if func == "采集":
-                # 处理子ID显示
+                # 解析子ID显示值
                 sub_id_raw = result.get("sub_id_raw")
                 if pd.isna(sub_id_raw) or str(sub_id_raw).strip().upper() == 'NO':
                     sub_id_display = "No"
                 else:
-                    # 从字符串中提取 0x... 部分（如 子ID:0x20 → 0x20）
                     match_sub = re.search(r'0x[0-9A-F]+', str(sub_id_raw), re.IGNORECASE)
                     sub_id_display = match_sub.group(0).upper() if match_sub else "Unknown"
 
-                # 获取位信息（如 "2.7-3.1"）
+                # 获取位范围
                 bit_position = result.get("bit", "未知")
                 if bit_position == "未知" or bit_position is None:
                     bit_position = "未知"
 
-                # 构建采集日志
+                # 输出采集信息
                 log_msg = (
                     f"          → 采集CAN报文 ID: {message_id_str} | "
                     f"子ID:{sub_id_display} | "
@@ -451,6 +438,7 @@ class TestCaseProcessor:
 
         except Exception as e:
             mylog.error(self.logger_name, f"          → 生成信息时异常: {e}")
+
 
 
 
