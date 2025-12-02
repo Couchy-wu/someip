@@ -291,6 +291,16 @@ class TestCaseProcessor:
         if not script or not isinstance(script, str):
             return []
 
+        # 统一标点
+        script = (script
+            .replace('（', '(')           # 中文左括号 → 英文
+            .replace('）', ')')           # 中文右括号 → 英文
+            .replace('，', ',')           # 中文逗号 → 英文
+            .replace('；', ';')           # 中文分号 → 英文
+            # .replace('　', ' ')           # 全角空格 → 半角
+            .strip()
+        )
+
         # 构建前缀正则
         prefix_regex = ""
         if prefix_patterns:
