@@ -84,6 +84,10 @@ class LogParser:
     def parse_all_cases(self):
         """依次解析所有测试用例，并重复执行指定次数"""
         mylog.debug(LOGGER_NAME, f"使用外部CAN设备资源: device={self.can_device[0]}, chn_handles={self.can_device[1]}, threads={self.can_device[2]}")
+        
+        # 添加中断标志
+        self._stop_event = False
+
         if not self.test_cases:
             mylog.info(LOGGER_NAME, "未检测到任何测试用例，请先调用 split_test_cases() 方法。")
             return
@@ -112,6 +116,11 @@ class LogParser:
         try:
             total_cases = len(self.test_cases)
             for i, case in enumerate(self.test_cases):
+                # 检查是否被中断
+                if getattr(self, '_stop_event', False):
+                    mylog.info(LOGGER_NAME, "收到中断信号，停止执行测试用例。")
+                    break
+
                 case_id = case['id']
                 mylog.info(LOGGER_NAME, "=============================================")
                 mylog.info(LOGGER_NAME, f"开始处理用例: {case_id}")
@@ -124,19 +133,28 @@ class LogParser:
                     print(f"开始执行测试（共重复 {self.case_repeat_count} 次）")
 
                     for round_idx in range(1, self.case_repeat_count + 1):
+                        # 检查中断
+                        if getattr(self, '_stop_event', False):
+                            mylog.info(LOGGER_NAME, f"第 {round_idx} 次检测前收到中断，停止执行。")
+                            break
+
                         mylog.info(LOGGER_NAME, f"第 {round_idx} 次检测开始...")
                         print(f"第 {round_idx} 次检测开始...")
                         self.analyze_script_parts(case['content'])
                         executed = True
-    
-                        # 每轮重复后等待并清理（最后一次重复内也清理，但不在此处加用例间延迟）
+
+                        # 每轮重复后等待并清理
                         if round_idx < self.case_repeat_count:
                             delay_time = 5
                             mylog.info(LOGGER_NAME, f"第 {round_idx} 次检测完成，等待{delay_time}秒后开始下一次...")
                             print(f"第 {round_idx} 次检测完成，等待{delay_time}秒后开始下一次...")
                             time.sleep(delay_time)
                             self._clear_can_channel(chn=0)
-    
+
+                            # 再次检查中断
+                            if getattr(self, '_stop_event', False):
+                                break
+
                     # 所有重复执行完后，进行最后一次清理
                     mylog.info(LOGGER_NAME, f"第 {self.case_repeat_count} 次检测完成，正在清理...")
                     if self.can_device and device_handle is not None and channel_handles is not None:
@@ -151,17 +169,28 @@ class LogParser:
                     inter_case_delay = 5  # 可以定义为配置项或参数
                     mylog.info(LOGGER_NAME, f"用例 {case_id} 已完成，等待{inter_case_delay}秒后开始下一个用例...")
                     print(f"用例 {case_id} 已完成，等待{inter_case_delay}秒后开始下一个用例...")
-                    time.sleep(inter_case_delay)
-    
+                    for _ in range(inter_case_delay):
+                        time.sleep(1)
+                        if getattr(self, '_stop_event', False):
+                            mylog.info(LOGGER_NAME, "等待期间收到中断信号，停止执行。")
+                            break
+                    if getattr(self, '_stop_event', False):
+                        break
+
         finally:
             # ========== 关闭 CAN 设备 ==========
             if ENABLE_AUTO_OPEN_CLOSE_CAN and hasattr(self, 'can_device') and self.can_device:
                 device_handle, channel_handles, receive_threads = self.can_device
                 try:
-                    can_control.Close_Canfd_Device(device_handle, channel_handles, receive_threads)
-                    mylog.info(LOGGER_NAME, "CAN设备已关闭")
+                    # 如果尚未关闭（比如被中断），则主动关闭
+                    if device_handle is not None and channel_handles is not None and receive_threads is not None:
+                        can_control.Close_Canfd_Device(device_handle, channel_handles, receive_threads)
+                        mylog.info(LOGGER_NAME, "CAN设备已关闭（由 close_test 或异常触发）")
                 except Exception as e:
                     mylog.error(LOGGER_NAME, f"CAN设备关闭失败: {e}")
+            # 重置资源
+            self.can_device = (None, None, None)
+
 
 
     def _clear_can_channel(self, chn=0):
@@ -568,14 +597,49 @@ class LogParser:
             raise
 
 
+    def close_test(self):
+        """
+        中断并关闭正在进行的测试
+        调用后会尝试关闭 CAN 设备及所有相关资源
+        """
+        mylog.info(LOGGER_NAME, "收到关闭测试请求，正在停止测试...")
+        print("正在关闭测试...")
+
+        # 清理内部标志，防止重复执行
+        self._stop_event = True  # 假设我们用这个标志控制循环
+
+        # 获取设备资源
+        device_handle, channel_handles, receive_threads = self.can_device
+
+        if device_handle is not None and channel_handles is not None and receive_threads is not None:
+            try:
+                can_control.Close_Canfd_Device(device_handle, channel_handles, receive_threads)
+                mylog.info(LOGGER_NAME, "CAN设备已成功关闭")
+            except Exception as e:
+                mylog.error(LOGGER_NAME, f"关闭CAN设备时发生异常: {e}")
+        else:
+            mylog.warning(LOGGER_NAME, "未检测到有效的CAN设备资源，跳过关闭流程")
+
+        # 可选：重置设备句柄
+        self.can_device = (None, None, None)
+        print("测试已关闭。")
+
+
 # ==================== 使用示例 ====================
 if __name__ == "__main__":
     # 确保 mylog.py 存在于当前路径或可导入路径
     import mylog  # 显式导入（可选，已在上方导入）
 
     # 设置日志文件路径
-    log_file_path = "TestcaseCollection/001_data.log"  # ← 修改为你的实际路径
+    log_file_path = "TestcaseCollection/111_data.log"  # ← 修改为你的实际路径
 
-    # 创建解析器并运行
-    parser = LogParser(log_file_path)
-    parser.run()
+    parser = LogParser(log_file_path)                   # 先创建实例
+
+    import threading
+    threading.Thread(target=parser.run, daemon=True).start()
+
+    # 回车退出
+    input()
+
+    # 稍后调用关闭
+    parser.close_test()
