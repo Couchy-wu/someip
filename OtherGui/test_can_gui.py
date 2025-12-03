@@ -8,6 +8,7 @@ import can_control
 import re
 import time
 import xml.etree.ElementTree as ET
+from CanDataProcessing.can_testcase_runner import LogParser
 
 class CANFDGUI:
     def __init__(self, root, selected_file=None):
@@ -264,8 +265,6 @@ class CANFDGUI:
         """执行自动化测试主逻辑"""
         success = False
         try:
-            from CanDataProcessing.can_testcase_runner import LogParser
-
             if not self.selected_file:
                 raise ValueError("未传入测试用例选择器")
 
@@ -303,8 +302,6 @@ class CANFDGUI:
             self.root.after(0, lambda msg=error_msg: messagebox.showerror("测试错误", f"自动化测试执行失败：\n{msg}"))
         finally:
             self.root.after(0, lambda: self._post_test_finish(success))
-
-
 
     def _post_test_finish(self, success=False):
         """测试结束后的 UI 恢复，并弹出独立提示窗口"""
