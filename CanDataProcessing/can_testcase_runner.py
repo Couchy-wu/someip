@@ -109,10 +109,13 @@ class LogParser:
                     mylog.error(LOGGER_NAME, f"CAN设备开启失败: {e}")
                     return
 
+        # 提取 CAN 设备句柄
         device_handle = None
         channel_handles = None
         if self.can_device:
             device_handle, channel_handles, _ = self.can_device
+
+        # 遍历并处理每个测试用例    
         try:
             total_cases = len(self.test_cases)
             for i, case in enumerate(self.test_cases):
@@ -121,11 +124,13 @@ class LogParser:
                     mylog.info(LOGGER_NAME, "收到中断信号，停止执行测试用例。")
                     break
 
+                # 开始处理单个测试用例
                 case_id = case['id']
                 mylog.info(LOGGER_NAME, "=============================================")
                 mylog.info(LOGGER_NAME, f"开始处理用例: {case_id}")
                 print(f"▶ 开始处理用例: {case_id}")
     
+                # 判断是否有脚本内容可执行
                 executed = False  # 标记该用例是否执行了至少一次
     
                 if self.has_script_result(case['content']):
@@ -627,11 +632,9 @@ class LogParser:
 
 # ==================== 使用示例 ====================
 if __name__ == "__main__":
-    # 确保 mylog.py 存在于当前路径或可导入路径
-    import mylog  # 显式导入（可选，已在上方导入）
 
     # 设置日志文件路径
-    log_file_path = "TestcaseCollection/111_data.log"  # ← 修改为你的实际路径
+    log_file_path = "TestcaseCollection/测试1_data.log"  # ← 修改为你的实际路径
 
     parser = LogParser(log_file_path)                   # 先创建实例
 

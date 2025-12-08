@@ -20,7 +20,7 @@ mylog.setup_logger(logger_name="candata", log_dir=LOG_PATH, log_prefix="candata"
 thread_flag = True              # 控制接收线程是否继续运行
 print_lock = threading.Lock()   # 线程锁，只是为了打印不冲突
 enable_merge_receive = 0        # 合并接收标识，（默认不使能）
-transmit_type = 0               # 0-正常发送，2-自发自收            
+transmit_type = 2               # 0-正常发送，2-自发自收            
 
 # 警告！ 自发自收模式仅限于啥设备也没连接时的自我调试。连了设别必须使用正常发送，否则无法接收到反馈信号，只能接收到“自发”信号
 
@@ -402,7 +402,7 @@ def Send_Canfd(chn_handle, stdorext, id, data, round):
     # with print_lock: mylog.info("candata", "成功发送 %d 条CANFD报文" % ret)
     return ret
 
-# 清除已有的定时发送设置
+# 清除已有的定时发送设置，关闭发送任务
 def Clear_Auto_Can_Send(device_handle, chn):
     """清除指定通道的定时发送列表"""
     ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/clear_auto_send", "0".encode("utf-8"))
@@ -512,13 +512,6 @@ def Auto_Send_Canfd(device_handle, chn, stdorext, id, data, signal_cycle, index=
         mylog.error("candata", "设置定时发送 CANFD%d 失败!" % chn)
         return None
 
-# 关闭发送任务 即关闭定时发送
-def Clear_Send_Task(device_handle,chn):
-    "关闭发送任务 即关闭定时发送"
-    ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/clear_auto_send", "0".encode("utf-8"))
-    if ret != ZCAN_STATUS_OK:
-        mylog.warning("candata", "Clear CH%d AutoSend failed!" % (chn))
-        exit(0)
 
 # CAN设备初始化函数
 def Initialize_Canfd_Device(device_type=ZCAN_USBCANFD_200U, merge_receive=0):
