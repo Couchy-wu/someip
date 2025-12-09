@@ -20,9 +20,10 @@ mylog.setup_logger(logger_name="candata", log_dir=LOG_PATH, log_prefix="candata"
 thread_flag = True              # 控制接收线程是否继续运行
 print_lock = threading.Lock()   # 线程锁，只是为了打印不冲突
 enable_merge_receive = 0        # 合并接收标识，（默认不使能）
-transmit_type = 2               # 0-正常发送，2-自发自收            
+transmit_type = 0               # 0-正常发送，2-自发自收            
 
 # 警告！ 自发自收模式仅限于啥设备也没连接时的自我调试。连了设别必须使用正常发送，否则无法接收到反馈信号，只能接收到“自发”信号
+# 备注： 如果正常发送不行，但是自发自收可以，有没有可能是你电源没开（乐）？
 
 # 初始化ZCAN库
 zcanlib = ZCAN()                # 全局初始化，供所有函数使用

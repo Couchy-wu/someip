@@ -6,10 +6,11 @@ import time
 import can_control
 import mylog
 import logging
+import threading
 
 # 注意！仅调试该文件时打开开关，其他情况请务必关掉该开关，避免重复初始化或意外关闭can设备
 # 其实现在逻辑已经解决了重复初始化，但是没解决意外关闭can设别，后续再修改
-ENABLE_AUTO_OPEN_CLOSE_CAN = False  # 是否自动开关CAN设备
+ENABLE_AUTO_OPEN_CLOSE_CAN = True  # 是否自动开关CAN设备
 
 # 全局 logger 名称
 LOGGER_NAME = "parser"
@@ -30,6 +31,10 @@ class LogParser:
         self.log_content = ""
         self.test_cases = []
         self.can_device = (device_handle, channel_handles, receive_threads)
+
+        self._stop_event = False
+        self._pause_event = threading.Event()  # 初始为 Set（运行状态）
+        self._pause_event.set()  # 默认不暂停，允许执行
 
         # 使用传入值或默认值
         self.case_repeat_count = case_repeat_count if case_repeat_count is not None else CASE_REPEAT_COUNT
@@ -85,8 +90,8 @@ class LogParser:
         """依次解析所有测试用例，并重复执行指定次数"""
         mylog.debug(LOGGER_NAME, f"使用外部CAN设备资源: device={self.can_device[0]}, chn_handles={self.can_device[1]}, threads={self.can_device[2]}")
         
-        # 添加中断标志
-        self._stop_event = False
+        # # 添加中断标志
+        # self._stop_event = False
 
         if not self.test_cases:
             mylog.info(LOGGER_NAME, "未检测到任何测试用例，请先调用 split_test_cases() 方法。")
@@ -254,9 +259,25 @@ class LogParser:
         return [line for line in lines if line]
 
     def _process_block_lines(self, lines):
-        """处理块内每一行指令，支持上下文感知，并新增禁用index自动调用功能"""
+        """处理块内每一行指令，支持上下文感知，并支持暂停"""
         i = 0
         while i < len(lines):
+            # 检查是否被中断
+            if getattr(self, '_stop_event', False):
+                mylog.info(LOGGER_NAME, "收到中断信号，停止处理指令。")
+                break
+
+            # 检查是否暂停：如果未 set（即已 clear），则阻塞等待
+            while not self._pause_event.is_set():
+                mylog.debug(LOGGER_NAME, "处理流程已暂停，等待恢复...")
+                time.sleep(0.1)  # 避免忙等待
+                if getattr(self, '_stop_event', False):
+                    mylog.info(LOGGER_NAME, "暂停期间收到中断信号，停止处理。")
+                    break
+            else:
+                # 只有在未中断且未暂停时才继续处理下一行
+                pass
+
             line = lines[i].strip()
             if not line or line.startswith('-') or line.startswith('→'):
                 i += 1
@@ -283,7 +304,7 @@ class LogParser:
                 i += 1
                 continue
 
-            # === 新增：检测“测试台CANID禁用”并调用禁用函数 ===
+            # === 测试台CANID禁用 ===
             disable_match = re.match(r'^测试台CANID禁用[0-9A-F]+，禁用对应index:(.+)$', line)
             if disable_match:
                 indices_str = disable_match.group(1).strip()
@@ -630,6 +651,28 @@ class LogParser:
         print("测试已关闭。")
 
 
+    def pause_test(self):
+        """暂停测试流程，等待恢复"""
+        if getattr(self, '_pause_event', None) is None:
+            mylog.warning(LOGGER_NAME, "暂停功能未初始化，请检查 _pause_event 是否在 __init__ 中创建。")
+            return
+
+        self._pause_event.clear()  # 进入暂停状态
+        mylog.info(LOGGER_NAME, "测试流程已暂停。调用 resume_test() 可恢复。")
+        print("测试已暂停。")
+
+
+    def resume_test(self):
+        """恢复已暂停的测试流程"""
+        if getattr(self, '_pause_event', None) is None:
+            mylog.warning(LOGGER_NAME, "恢复功能未初始化。")
+            return
+
+        self._pause_event.set()  # 恢复运行
+        mylog.info(LOGGER_NAME, "测试流程已恢复。")
+        print("测试已恢复。")
+
+
 # ==================== 使用示例 ====================
 if __name__ == "__main__":
 
@@ -641,8 +684,14 @@ if __name__ == "__main__":
     import threading
     threading.Thread(target=parser.run, daemon=True).start()
 
+    # 回车暂停
+    input()
+    parser.pause_test()
+
+    # 回车继续
+    input()
+    parser.resume_test()
+
     # 回车退出
     input()
-
-    # 稍后调用关闭
     parser.close_test()
