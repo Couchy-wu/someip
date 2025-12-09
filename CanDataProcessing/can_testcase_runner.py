@@ -15,29 +15,34 @@ ENABLE_AUTO_OPEN_CLOSE_CAN = True  # 是否自动开关CAN设备
 # 全局 logger 名称
 LOGGER_NAME = "parser"
 
-# 每个测试用例重复执行的次数
+# 每个测试用例重复执行的次数（单轮内）
 CASE_REPEAT_COUNT = 1 
 
+# 总共执行多少轮完整测试
+TOTAL_TEST_ROUNDS = 1  
+
 class LogParser:
-    def __init__(self, log_path, device_handle=None, channel_handles=None, receive_threads=None, case_repeat_count=None):
+    def __init__(self, log_path, device_handle=None, channel_handles=None, receive_threads=None, case_repeat_count=None, total_test_rounds=None):
         """
         初始化日志解析器
         :param log_path: 日志文件路径
         :param device_handle: 外部传入的设备句柄（可选）
         :param channel_handles: 外部传入的通道句柄列表（可选）
         :param case_repeat_count: 外部指定的重复次数（可选），优先级高于全局 CASE_REPEAT_COUNT
+        :param total_test_rounds: 总共执行多少轮完整测试（可选）,优先级高级全局 TOTAL_TEST_ROUNDS
         """
         self.log_path = log_path
         self.log_content = ""
         self.test_cases = []
         self.can_device = (device_handle, channel_handles, receive_threads)
 
-        self._stop_event = False
+        self._stop_event = False    # 测试停止标识位
         self._pause_event = threading.Event()  # 初始为 Set（运行状态）
         self._pause_event.set()  # 默认不暂停，允许执行
 
         # 使用传入值或默认值
         self.case_repeat_count = case_repeat_count if case_repeat_count is not None else CASE_REPEAT_COUNT
+        self.total_test_rounds = total_test_rounds if total_test_rounds is not None else TOTAL_TEST_ROUNDS
 
         mylog.setup_logger(
             logger_name=LOGGER_NAME,
@@ -87,11 +92,9 @@ class LogParser:
         return "脚本解析结果：" in case_content
 
     def parse_all_cases(self):
-        """依次解析所有测试用例，并重复执行指定次数"""
+        """依次解析所有测试用例"""
+
         mylog.debug(LOGGER_NAME, f"使用外部CAN设备资源: device={self.can_device[0]}, chn_handles={self.can_device[1]}, threads={self.can_device[2]}")
-        
-        # # 添加中断标志
-        # self._stop_event = False
 
         if not self.test_cases:
             mylog.info(LOGGER_NAME, "未检测到任何测试用例，请先调用 split_test_cases() 方法。")
@@ -99,7 +102,6 @@ class LogParser:
 
         # ========== 启动 CAN 设备 ==========
         if ENABLE_AUTO_OPEN_CLOSE_CAN:
-            # 如果外部已传入设备，则跳过自动初始化
             if self.can_device and self.can_device[0] is not None:
                 mylog.info(LOGGER_NAME, "检测到外部传入的CAN设备，跳过自动初始化")
             else:
@@ -123,63 +125,85 @@ class LogParser:
         # 遍历并处理每个测试用例    
         try:
             total_cases = len(self.test_cases)
-            for i, case in enumerate(self.test_cases):
-                # 检查是否被中断
+
+            # ---------- 外层循环：执行 total_test_rounds 轮完整测试 ----------
+            for round_idx in range(1, self.total_test_rounds + 1):
+                mylog.info(LOGGER_NAME, f"▶▶▶ 开始第 {round_idx} 轮完整测试 ◀◀◀")
+                print(f"▶▶▶ 开始第 {round_idx} 轮完整测试 ◀◀◀", flush=True)
+
                 if getattr(self, '_stop_event', False):
-                    mylog.info(LOGGER_NAME, "收到中断信号，停止执行测试用例。")
+                    mylog.info(LOGGER_NAME, "收到中断信号，停止本轮测试。")
                     break
 
-                # 开始处理单个测试用例
-                case_id = case['id']
-                mylog.info(LOGGER_NAME, "=============================================")
-                mylog.info(LOGGER_NAME, f"开始处理用例: {case_id}")
-                print(f"▶ 开始处理用例: {case_id}")
-    
-                # 判断是否有脚本内容可执行
-                executed = False  # 标记该用例是否执行了至少一次
-    
-                if self.has_script_result(case['content']):
-                    mylog.info(LOGGER_NAME, f"存在脚本解析结果，开始执行测试（共重复 {self.case_repeat_count} 次）")
-                    print(f"开始执行测试（共重复 {self.case_repeat_count} 次）")
+                for i, case in enumerate(self.test_cases):
+                    if getattr(self, '_stop_event', False):
+                        mylog.info(LOGGER_NAME, "收到中断信号，停止执行测试用例。")
+                        break
 
-                    for round_idx in range(1, self.case_repeat_count + 1):
-                        # 检查中断
-                        if getattr(self, '_stop_event', False):
-                            mylog.info(LOGGER_NAME, f"第 {round_idx} 次检测前收到中断，停止执行。")
-                            break
+                    case_id = case['id']
+                    mylog.info(LOGGER_NAME, "=============================================")
+                    mylog.info(LOGGER_NAME, f"开始处理用例: {case_id}")
+                    print(f"▶ 开始处理用例: {case_id}", flush=True)
 
-                        mylog.info(LOGGER_NAME, f"第 {round_idx} 次检测开始...")
-                        print(f"第 {round_idx} 次检测开始...")
-                        self.analyze_script_parts(case['content'])
-                        executed = True
+                    executed = False
+                    if self.has_script_result(case['content']):
+                        mylog.info(LOGGER_NAME, f"存在脚本解析结果，开始执行测试（每个用例重复 {self.case_repeat_count} 次）")
+                        print(f"开始执行测试（每个用例重复 {self.case_repeat_count} 次）", flush=True)
 
-                        # 每轮重复后等待并清理
-                        if round_idx < self.case_repeat_count:
-                            delay_time = 5
-                            mylog.info(LOGGER_NAME, f"第 {round_idx} 次检测完成，等待{delay_time}秒后开始下一次...")
-                            print(f"第 {round_idx} 次检测完成，等待{delay_time}秒后开始下一次...")
-                            time.sleep(delay_time)
-                            self._clear_can_channel(chn=0)
-
-                            # 再次检查中断
+                        for rep in range(1, self.case_repeat_count + 1):
                             if getattr(self, '_stop_event', False):
+                                mylog.info(LOGGER_NAME, f"第 {rep} 次检测前收到中断，停止执行。")
                                 break
 
-                    # 所有重复执行完后，进行最后一次清理
-                    mylog.info(LOGGER_NAME, f"第 {self.case_repeat_count} 次检测完成，正在清理...")
-                    if self.can_device and device_handle is not None and channel_handles is not None:
+                            mylog.info(LOGGER_NAME, f"第 {rep} 次检测开始...")
+                            print(f"第 {rep} 次检测开始...", flush=True)
+                            try:
+                                self.analyze_script_parts(case['content'])
+                            except Exception as e:
+                                mylog.error(LOGGER_NAME, f"第 {rep} 次检测执行异常: {e}")
+                                print(f"第 {rep} 次检测执行异常: {e}", flush=True)
+                            executed = True
+
+                            # 每次重复后等待并清理（最后一次不等待）
+                            if rep < self.case_repeat_count:
+                                delay_time = 5
+                                mylog.info(LOGGER_NAME, f"第 {rep} 次检测完成，等待{delay_time}秒后开始下一次...")
+                                print(f"第 {rep} 次检测完成，等待{delay_time}秒后开始下一次...", flush=True)
+                                time.sleep(delay_time)
+                                self._clear_can_channel(chn=0)
+
+                                if getattr(self, '_stop_event', False):
+                                    break
+
+                        # 补全最后一次检测完成的日志
+                        mylog.info(LOGGER_NAME, f"第 {self.case_repeat_count} 次检测完成，正在清理...")
+                        print(f"第 {self.case_repeat_count} 次检测完成，正在清理...", flush=True)
                         self._clear_can_channel(chn=0)
-                else:
-                    mylog.info(LOGGER_NAME, "不存在脚本解析结果，跳过该用例")
-                    print("不存在脚本解析结果，跳过该用例")
-                    continue
-                
-                # 如果不是最后一个用例，并且当前用例已执行，则等待 x 秒再进入下一个用例
-                if executed and (i < total_cases - 1):
-                    inter_case_delay = 5  # 可以定义为配置项或参数
-                    mylog.info(LOGGER_NAME, f"用例 {case_id} 已完成，等待{inter_case_delay}秒后开始下一个用例...")
-                    print(f"用例 {case_id} 已完成，等待{inter_case_delay}秒后开始下一个用例...")
-                    for _ in range(inter_case_delay):
+
+                    else:
+                        mylog.info(LOGGER_NAME, "不存在脚本解析结果，跳过该用例")
+                        print("不存在脚本解析结果，跳过该用例", flush=True)
+                        continue
+
+                    # 用例间延迟（非最后一个用例）
+                    if executed and (i < total_cases - 1):
+                        inter_case_delay = 5
+                        mylog.info(LOGGER_NAME, f"用例 {case_id} 已完成，等待{inter_case_delay}秒后开始下一个用例...")
+                        print(f"用例 {case_id} 已完成，等待{inter_case_delay}秒后开始下一个用例...", flush=True)
+                        for _ in range(inter_case_delay):
+                            time.sleep(1)
+                            if getattr(self, '_stop_event', False):
+                                mylog.info(LOGGER_NAME, "等待期间收到中断信号，停止执行。")
+                                break
+                        if getattr(self, '_stop_event', False):
+                            break
+
+                # 本轮完成，若非最后一轮则等待
+                if round_idx < self.total_test_rounds:
+                    inter_round_delay = 5
+                    mylog.info(LOGGER_NAME, f"第 {round_idx} 轮测试完成，等待{inter_round_delay}秒后开始下一轮...")
+                    print(f"第 {round_idx} 轮测试完成，等待{inter_round_delay}秒后开始下一轮...", flush=True)
+                    for _ in range(inter_round_delay):
                         time.sleep(1)
                         if getattr(self, '_stop_event', False):
                             mylog.info(LOGGER_NAME, "等待期间收到中断信号，停止执行。")
@@ -192,15 +216,12 @@ class LogParser:
             if ENABLE_AUTO_OPEN_CLOSE_CAN and hasattr(self, 'can_device') and self.can_device:
                 device_handle, channel_handles, receive_threads = self.can_device
                 try:
-                    # 如果尚未关闭（比如被中断），则主动关闭
                     if device_handle is not None and channel_handles is not None and receive_threads is not None:
                         can_control.Close_Canfd_Device(device_handle, channel_handles, receive_threads)
-                        mylog.info(LOGGER_NAME, "CAN设备已关闭（由 close_test 或异常触发）")
+                        mylog.info(LOGGER_NAME, "测试结束, 已自动关闭CAN设备")
                 except Exception as e:
-                    mylog.error(LOGGER_NAME, f"CAN设备关闭失败: {e}")
-            # 重置资源
+                    mylog.error(LOGGER_NAME, f"测试结束, 但自动关闭CAN设备失败: {e}")
             self.can_device = (None, None, None)
-
 
 
     def _clear_can_channel(self, chn=0):
@@ -677,7 +698,7 @@ class LogParser:
 if __name__ == "__main__":
 
     # 设置日志文件路径
-    log_file_path = "TestcaseCollection/测试1_data.log"  # ← 修改为你的实际路径
+    log_file_path = "TestcaseCollection/测试_data.log"  # ← 修改为你的实际路径
 
     parser = LogParser(log_file_path)                   # 先创建实例
 
