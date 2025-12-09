@@ -8,9 +8,15 @@ import mylog
 import logging
 import threading
 
+# 模块功能：基于日志文件驱动的 CAN 总线自动化测试用例执行器
+
 # 注意！仅调试该文件时打开开关，其他情况请务必关掉该开关，避免重复初始化或意外关闭can设备
 # 其实现在逻辑已经解决了重复初始化，但是没解决意外关闭can设别，后续再修改
-ENABLE_AUTO_OPEN_CLOSE_CAN = True  # 是否自动开关CAN设备
+# 是否自动开关CAN设备：根据执行方式智能判断
+if __name__ == "__main__":
+    ENABLE_AUTO_OPEN_CLOSE_CAN = True
+else:
+    ENABLE_AUTO_OPEN_CLOSE_CAN = False
 
 # 全局 logger 名称
 LOGGER_NAME = "parser"
