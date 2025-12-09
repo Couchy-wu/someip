@@ -20,11 +20,12 @@ class CANFDGUI:
 
         # 一些变量
         self.repeat_var = tk.StringVar(value="1")   # 用例重复检测次数
+        self.rounds_var = tk.StringVar(value="1")   # 完整测试执行轮数
 
         # 用来保存初始化返回的句柄、通道列表、线程列表
-        self.device_handle = None            # 设备句柄
-        self.channel_handles = None       # 通道句柄
-        self.receive_threads = None           # 接收线程列表        
+        self.device_handle = None               # 设备句柄
+        self.channel_handles = None             # 通道句柄
+        self.receive_threads = None             # 接收线程列表        
 
         # 按键：设备初始化按键
         self.init_btn = tk.Button(
@@ -116,7 +117,7 @@ class CANFDGUI:
         )
         self.test_btn.grid(row=2, column=0, pady=5, padx=10, sticky='ew')
 
-        # 输入框：用例重复侧测试次数
+        # 输入框：用例重复测试次数
         tk.Label(root, text="用例重复测试次数:", font=("微软雅黑", 10)).grid(row=3, column=0, sticky='w', padx=12, pady=5)
         self.repeat_entry = tk.Entry(
             root,
@@ -126,9 +127,22 @@ class CANFDGUI:
             state=tk.DISABLED  # 初始禁用，等待初始化完成再启用
         )
         self.repeat_entry.grid(row=3, column=1, sticky='w', padx=10, pady=5)
-
-        # 为输入框绑定验证功能
+        # 为输入框绑定验证功能（只允许大于0的整数）
         self.repeat_entry.configure(validate='key', validatecommand=(root.register(self._validate_positive_integer), '%P'))
+
+        # 输入框：用例完整测试轮数
+        tk.Label(root, text="用例完整测试轮数:", font=("微软雅黑", 10)).grid(row=4, column=0, sticky='w', padx=12, pady=5)
+        self.rounds_entry = tk.Entry(
+            root,
+            textvariable=self.rounds_var,
+            width=10,
+            font=("微软雅黑", 10),
+            state=tk.DISABLED  # 初始禁用，等待初始化完成
+        )
+        self.rounds_entry.grid(row=4, column=1, sticky='w', padx=10, pady=5)
+        # 为新输入框绑定验证功能（只允许大于0的整数）
+        self.rounds_entry.configure(validate='key', validatecommand=(root.register(self._validate_positive_integer), '%P'))
+
 
     # --------------------- CAN设备初始化 ---------------------
     def start_init(self):
@@ -258,7 +272,8 @@ class CANFDGUI:
         self.test_btn.config(state=tk.DISABLED)  # 防止重复点击
         self.send_btn.config(state=tk.DISABLED)  # 禁用ON
         self.off_btn.config(state=tk.DISABLED)   # 禁用OFF
-        self.repeat_entry.config(state=tk.DISABLED) # 禁用输入框
+        self.repeat_entry.config(state=tk.DISABLED) # 禁用用例重复测试次数的输入框
+        self.rounds_entry.config(state=tk.DISABLED)  # 禁用完整测试轮数的输入框
         threading.Thread(target=self.run_automation_test, daemon=True).start()
 
     def run_automation_test(self):
@@ -280,11 +295,17 @@ class CANFDGUI:
             if not os.path.exists(log_file_path):
                 raise FileNotFoundError(f"对应的日志文件未找到: {log_file_path}")
 
-            # 获取重复次数
+            # 获取重复测试次数（每个用例内部重复）
             try:
                 repeat_count = int(self.repeat_var.get())
             except Exception:
                 repeat_count = 1
+
+            # 获取完整测试轮数（整个流程执行几轮）
+            try:
+                rounds_count = int(self.rounds_var.get())
+            except Exception:
+                rounds_count = 1
 
             # 创建解析器并运行测试
             parser = LogParser(
@@ -292,7 +313,8 @@ class CANFDGUI:
                 device_handle=self.device_handle,
                 channel_handles=self.channel_handles,
                 receive_threads=self.receive_threads,
-                case_repeat_count=repeat_count
+                case_repeat_count=repeat_count,
+                total_test_rounds=rounds_count
             )
             parser.run()
             success = True  # 标记成功
@@ -369,14 +391,16 @@ class CANFDGUI:
             return False
 
     def _update_repeat_entry_state(self):
-        """根据按钮状态决定是否允许编辑重复次数输入框"""
+        """根据按钮状态决定是否允许编辑重复次数和完整轮数输入框"""
         init_btn_disabled = self.init_btn['state'] == tk.DISABLED
         test_btn_enabled = self.test_btn['state'] == tk.NORMAL
 
         if init_btn_disabled and test_btn_enabled:
             self.repeat_entry.config(state=tk.NORMAL)
+            self.rounds_entry.config(state=tk.NORMAL)
         else:
             self.repeat_entry.config(state=tk.DISABLED)
+            self.rounds_entry.config(state=tk.DISABLED)
 
 
     # --------------------- can设备管理子窗口 ---------------------
