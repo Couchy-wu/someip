@@ -68,9 +68,9 @@ class CANFDGUI:
             height=1,
             command=self.open_subwindow
         )
-        self.sub_btn.grid(row=0, column=3, pady=5, padx=10, sticky='e')  # 修改列位置为3，靠右对齐
-        # 配置列权重，使第3列（设备管理所在列）吸收多余空间，实现右对齐
-        root.grid_columnconfigure(3, weight=1)
+        self.sub_btn.grid(row=0, column=4, pady=5, padx=10, sticky='e')  # 修改列位置为3，靠右对齐
+        # 配置列权重，使（设备管理所在列）吸收多余空间，实现右对齐
+        root.grid_columnconfigure(4, weight=1)
 
         # 按键：ON档电
         self.send_btn = tk.Button(
@@ -116,6 +116,35 @@ class CANFDGUI:
             command=self.start_testing
         )
         self.test_btn.grid(row=2, column=0, pady=5, padx=10, sticky='ew')
+
+        # 按键：暂停/继续测试（合并按钮）
+        self.toggle_pause_resume_btn = tk.Button(
+            root,
+            text="暂停测试",
+            font=("微软雅黑", 12),
+            bg="#F0AD4E",
+            fg="white",
+            activebackground="#EB983A",
+            width=10,
+            height=1,
+            command=self.toggle_pause_resume
+        )
+        self.toggle_pause_resume_btn.grid(row=2, column=1, pady=5, padx=10, sticky='ew')
+
+        # 按键：终止测试
+        self.stop_btn = tk.Button(
+            root,
+            text="强制终止测试",
+            font=("微软雅黑", 12),
+            bg="#D9534F",
+            fg="white",
+            activebackground="#C9302C",
+            width=10,
+            height=1,
+            command=self.stop_testing
+        )
+        self.stop_btn.grid(row=0, column=3, pady=5, padx=10, sticky='ew')
+
 
         # 输入框：用例重复测试次数
         tk.Label(root, text="用例重复测试次数:", font=("微软雅黑", 10)).grid(row=3, column=0, sticky='w', padx=12, pady=5)
@@ -308,7 +337,7 @@ class CANFDGUI:
                 rounds_count = 1
 
             # 创建解析器并运行测试
-            parser = LogParser(
+            self.parser = LogParser(
                 log_path=log_file_path,
                 device_handle=self.device_handle,
                 channel_handles=self.channel_handles,
@@ -316,7 +345,7 @@ class CANFDGUI:
                 case_repeat_count=repeat_count,
                 total_test_rounds=rounds_count
             )
-            parser.run()
+            self.parser.run()
             success = True  # 标记成功
 
         except Exception as e:
@@ -401,6 +430,29 @@ class CANFDGUI:
         else:
             self.repeat_entry.config(state=tk.DISABLED)
             self.rounds_entry.config(state=tk.DISABLED)
+
+    def toggle_pause_resume(self):
+        """切换暂停/继续测试状态，完全基于 _pause_event 当前状态判断，不依赖额外标志"""
+        if not hasattr(self, 'parser') or self.parser is None:
+            return
+    
+        # 核心判断：使用已存在的 _pause_event.is_set() 状态
+        if self.parser._pause_event.is_set():
+            # 当前正在运行 → 执行暂停
+            self.parser.pause_test()
+            self.toggle_pause_resume_btn.config(text="继续测试")
+        else:
+            # 当前已暂停（_pause_event 为 clear）→ 执行继续
+            self.parser.resume_test()
+            self.toggle_pause_resume_btn.config(text="暂停测试")
+
+
+    def stop_testing(self):
+        """终止测试"""
+        if hasattr(self, 'parser') and self.parser is not None:
+            self.parser.close_test()
+        # 无论是否存在 parser，都尝试恢复 UI
+        self._post_test_finish(success=False)
 
 
     # --------------------- can设备管理子窗口 ---------------------
