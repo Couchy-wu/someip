@@ -10,13 +10,23 @@ import time
 import xml.etree.ElementTree as ET
 from CanDataProcessing.can_testcase_runner import LogParser
 
+# 判断是否被 import 调用
+IS_STANDALONE = __name__ == "__main__"
+
 class CANFDGUI:
     def __init__(self, root, selected_file=None):
         self.root = root
         self.root.title("CANFD 设备控制")
         self.root.geometry("500x300")
         self.sub_window = None  # 用于跟踪子窗口是否存在
-        self.selected_file = selected_file  # 保存主窗口的 StringVar
+        
+        # === 修改：安全获取 selected_file ===
+        if selected_file is None:
+            # 独立运行时自己创建
+            self.selected_file = tk.StringVar(value="无文件")
+        else:
+            # 被 main.py 调用时，使用传入的 StringVar
+            self.selected_file = selected_file
 
         # 一些变量
         self.repeat_var = tk.StringVar(value="1")   # 用例重复检测次数
@@ -172,6 +182,8 @@ class CANFDGUI:
         # 为新输入框绑定验证功能（只允许大于0的整数）
         self.rounds_entry.configure(validate='key', validatecommand=(root.register(self._validate_positive_integer), '%P'))
 
+        # 拦截窗口关闭事件：必须先关闭设备
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     # --------------------- CAN设备初始化 ---------------------
     def start_init(self):
@@ -454,6 +466,25 @@ class CANFDGUI:
         # 无论是否存在 parser，都尝试恢复 UI
         self._post_test_finish(success=False)
 
+    def on_closing(self):
+        """
+        安全关闭检查：只有当“关闭设备”按钮不可用时才允许退出。
+        当按钮仍可用时弹出警告并保持窗口在桌面前端。
+        """
+        if self.close_btn.winfo_exists() and str(self.close_btn['state']) == 'normal':
+            import tkinter.messagebox as messagebox
+            messagebox.showwarning(
+                "无法退出",
+                "请先点击【关闭设备】按钮释放CAN资源。",
+                parent=self.root
+            )
+            self.root.lift()
+            self.root.attributes("-topmost", True)
+            self.root.after(0, lambda: self.root.attributes("-topmost", False))
+            return
+            
+        self.root.destroy()
+
 
     # --------------------- can设备管理子窗口 ---------------------
     def open_subwindow(self):
@@ -584,9 +615,6 @@ class CANFDGUI:
     # 加载 XML 配置
     def _local_load_config(self, config_file):
         """本地实现：从 XML 文件读取配置，不依赖 can_control 模块"""
-        import os
-        import xml.etree.ElementTree as ET
-
         if not os.path.exists(config_file):
             return None  # 文件不存在则返回 None，使用默认值
 

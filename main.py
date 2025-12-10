@@ -240,33 +240,56 @@ can_window_instance = None      # 全局变量：用于存储子窗口实例
 def on_can_window_close():
     """子窗口关闭时的回调"""
     global can_window_instance
-    if can_window_instance:
+    if not can_window_instance:
+        return
+
+    # 取得保存在 Toplevel 上的 CANFDGUI 实例
+    gui = getattr(can_window_instance, "can_gui", None)
+
+    if gui and hasattr(gui, "on_closing"):
+        # 交给 GUI 自己的关闭逻辑处理
+        gui.on_closing()
+
+        # 如果 GUI 已经自行销毁了窗口（即 on_closing 调用了 destroy），
+        # winfo_exists() 会返回 False，此时需要清理全局变量并恢复按钮状态
+        if not can_window_instance.winfo_exists():
+            can_window_instance = None
+            can_control_button.config(state=tk.NORMAL)
+    else:
+        # 防御性写法：没有 GUI 实例时直接销毁窗口
         can_window_instance.destroy()
-    can_window_instance = None
-    # 恢复按钮状态
-    can_control_button.config(state=tk.NORMAL)
+        can_window_instance = None
+        can_control_button.config(state=tk.NORMAL)
 
 def open_can_gui():
+    """点击主界面 “can测试” 按钮时打开 CANFD 控制子窗口。"""
     global can_window_instance
-    # 如果窗口已存在，聚焦并返回
+
+    # 已有窗口存在则聚焦并直接返回
     if can_window_instance is not None:
         try:
             if can_window_instance.winfo_exists():
                 can_window_instance.focus()
                 return
         except tk.TclError:
-            can_window_instance = None # 窗口可能被异常销毁
-    # 禁用按钮
+            can_window_instance = None   # 窗口可能已异常销毁
+
+    # 禁用打开按钮，防止重复打开
     can_control_button.config(state=tk.DISABLED)
-    # 创建新窗口
+
+    # 创建子窗口（Toplevel）
     new_window = tk.Toplevel(root)
     new_window.title("CAN信号自动收发程序")
     new_window.geometry("800x600")
-    # 赋值给全局变量，以便关闭时能找到
+
+    # 实例化 CANFD GUI，并把对象挂到 Toplevel 上，供关闭回调使用
+    can_gui = CANFDGUI(new_window, selected_file=selected_file)
+    new_window.can_gui = can_gui   # <-- 关键：保存实例
+
+    # 保存全局引用，以便关闭时能找到窗口
     can_window_instance = new_window
-    # 实例化 GUI，并传入 selected_file
-    CANFDGUI(new_window, selected_file=selected_file)
-    # 设置关闭协议
+
+    # 把关闭协议指向统一的回调
     new_window.protocol("WM_DELETE_WINDOW", on_can_window_close)
 
 can_control_button = tk.Button(
