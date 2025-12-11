@@ -54,7 +54,7 @@ class LogParser:
             logger_name=LOGGER_NAME,
             log_dir="./logs",
             log_prefix="parser",
-            level=logging.INFO,
+            level=logging.DEBUG,
             clear_old=True,           # 自动清理旧日志
             use_timestamp=True,       # 文件名带时间戳
             show_prefix=True          # 显示日志前缀（时间+级别）
@@ -100,10 +100,10 @@ class LogParser:
     def parse_all_cases(self):
         """依次解析所有测试用例"""
 
-        mylog.debug(LOGGER_NAME, f"使用外部CAN设备资源: device={self.can_device[0]}, chn_handles={self.can_device[1]}, threads={self.can_device[2]}")
+        # mylog.debug(LOGGER_NAME, f"使用外部CAN设备资源: device={self.can_device[0]}, chn_handles={self.can_device[1]}, threads={self.can_device[2]}")
 
         if not self.test_cases:
-            mylog.info(LOGGER_NAME, "未检测到任何测试用例，请先调用 split_test_cases() 方法。")
+            mylog.warning(LOGGER_NAME, "未检测到任何测试用例，请先调用 split_test_cases() 方法。")
             return
 
         # ========== 启动 CAN 设备 ==========
@@ -256,19 +256,19 @@ class LogParser:
         self._analyze_response(content)
 
     def _analyze_state(self, content):
-        mylog.info(LOGGER_NAME, "执行“状态”")
+        mylog.debug(LOGGER_NAME, "执行“状态”")
         block = self._extract_block(content, "状态")
         if block:
             self._process_block_lines(block)
 
     def _analyze_action(self, content):
-        mylog.info(LOGGER_NAME, "执行“动作”")
+        mylog.debug(LOGGER_NAME, "执行“动作”")
         block = self._extract_block(content, "动作")
         if block:
             self._process_block_lines(block)
 
     def _analyze_response(self, content):
-        mylog.info(LOGGER_NAME, "执行“响应”")
+        mylog.debug(LOGGER_NAME, "执行“响应”")
         block = self._extract_block(content, "响应")
         if block:
             self._process_block_lines(block)
@@ -278,7 +278,7 @@ class LogParser:
         pattern = rf'{block_name}[:：]\s*\n((?:[ \t]+.+?(?:\n|$))+)'
         match = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
         if not match:
-            mylog.info(LOGGER_NAME, f"未找到 {block_name} 块")
+            mylog.debug(LOGGER_NAME, f"未找到 {block_name} 块")
             return []
 
         block_text = match.group(1)
@@ -296,7 +296,7 @@ class LogParser:
 
             # 检查是否暂停：如果未 set（即已 clear），则阻塞等待
             while not self._pause_event.is_set():
-                mylog.debug(LOGGER_NAME, "处理流程已暂停，等待恢复...")
+                # mylog.debug(LOGGER_NAME, "处理流程已暂停，等待恢复...")
                 time.sleep(0.1)  # 避免忙等待
                 if getattr(self, '_stop_event', False):
                     mylog.info(LOGGER_NAME, "暂停期间收到中断信号，停止处理。")
@@ -347,12 +347,12 @@ class LogParser:
                             msg_type="canfd",    # 固定类型canfd
                             index=idx
                         )
-                        mylog.info(LOGGER_NAME, f"Disable → 禁用定时发送 index: {idx}")
+                        mylog.debug(LOGGER_NAME, f"Disable → 禁用定时发送 index: {idx}")
                         time.sleep(0.2)  # 每次禁用后延迟 200ms，确保设备处理完成
                 i += 1
                 continue
 
-            mylog.info(LOGGER_NAME, f"未识别的指令: {line}")
+            mylog.warning(LOGGER_NAME, f"未识别的指令: {line}")
             i += 1
 
 
@@ -366,7 +366,7 @@ class LogParser:
         - 修正：不再以 'result is not None' 作为成功唯一标准，避免周期信号被误判为失败
         """
         # 当前 CAN 设备是否已初始化（仅日志）
-        mylog.debug(LOGGER_NAME, f"当前 CAN 设备状态: {self.can_device is not None}")
+        # mylog.debug(LOGGER_NAME, f"当前 CAN 设备状态: {self.can_device is not None}")
 
         # 1. 解析枚举值（日志用）
         current_line = lines[current_index].strip()
@@ -514,7 +514,7 @@ class LogParser:
 
             # 成功判断逻辑
             if result is not False:  # 只要不是明确返回 False，都认为提交成功
-                mylog.info(
+                mylog.debug(
                     LOGGER_NAME,
                     f"SndOK → 已启动发送 CAN ID: 0x{can_id:X} (index={index}) [信号枚举值={enum_value}]"
                 )
@@ -613,7 +613,7 @@ class LogParser:
             return False
 
         # 调用信号等待函数（sub_id 为字符串："No" 或 "0x..."）
-        mylog.info(LOGGER_NAME, f"RcvWait → 等待 CAN ID: 0x{signal_id:X}, 子ID={sub_id_raw}, 位={bit_position}, 期望枚举值={expected_enum_value}")
+        mylog.debug(LOGGER_NAME, f"RcvWait → 等待 CAN ID: 0x{signal_id:X}, 子ID={sub_id_raw}, 位={bit_position}, 期望枚举值={expected_enum_value}")
         received = can_control.wait_for_check_signal_by_bit_enum(
             signal_id=signal_id,
             sub_id=sub_id,  # 传入标准化字符串："No" 或 "0x..."
@@ -625,7 +625,7 @@ class LogParser:
         )
 
         if received:
-            mylog.info(LOGGER_NAME, f"RcvOK → 已接收到满足条件的 CAN ID: 0x{signal_id:X}, 子ID={sub_id_raw}, 位={bit_position}, 值={expected_enum_value}")
+            mylog.debug(LOGGER_NAME, f"RcvOK → 已接收到满足条件的 CAN ID: 0x{signal_id:X}, 子ID={sub_id_raw}, 位={bit_position}, 值={expected_enum_value}")
             return True
         else:
             mylog.error(LOGGER_NAME, f"RcvFail → 未收到预期信号: ID=0x{signal_id:X}, 子ID={sub_id_raw}, 位={bit_position}, 期望枚举值={expected_enum_value}")
@@ -634,7 +634,7 @@ class LogParser:
     def _delay_ms(self, milliseconds):
         """延迟指定毫秒数"""
         seconds = milliseconds / 1000.0
-        mylog.info(LOGGER_NAME, f"Wait {milliseconds} ms")
+        mylog.debug(LOGGER_NAME, f"Wait {milliseconds} ms")
         time.sleep(seconds)
 
     def run(self):
