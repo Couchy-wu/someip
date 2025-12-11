@@ -1,0 +1,78 @@
+=== 开始处理 用例 SQ_5_1_003 ===
+功能：仪表显示 - 车速显示
+测试环境：台架+实车 （含台架），继续处理
+  └─ 状态   : ON档电+恢复默认标志位
+  └─ 动作   : ②(0x144,1.0-1.7,值:0x0-0xF0)同步发送
+③“车速单位设置”报文(0x144,2.0-2.1,值:0x1 km/h）
+  └─ 响应   : 1-12km/h
+  └─ 脚本解析结果：
+      状态:
+          输出(12D.BCMPower_Gear_12D_S,3)
+          → 输出CAN报文 ID: 0x12D | 发送类型: Cycle | 周期时间: 50 ms | 生成CAN数据: [0x00, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00] | 分配index: 0
+          等待(200)
+          输出(3E3.ACB_Set_Restore_Default_Logo_S,1)
+          → 输出CAN报文 ID: 0x3E3 | 发送类型: Event | 周期时间: 100 ms | 生成CAN数据: [0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00] | 分配index: 1
+          等待(1000)
+
+      动作:
+          输出(144.Speed_Signal_144_S,1)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          输出(144.Speed_Unit_Setting_144_S,1)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          等待(100)
+          输出(144.Speed_Signal_144_S,2)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x02, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          输出(144.Speed_Unit_Setting_144_S,1)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x02, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          等待(100)
+          输出(144.Speed_Signal_144_S,3)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x03, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          输出(144.Speed_Unit_Setting_144_S,1)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x03, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          等待(100)
+          输出(144.Speed_Signal_144_S,4)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          输出(144.Speed_Unit_Setting_144_S,1)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          等待(100)
+          输出(144.Speed_Signal_144_S,5)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x05, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          输出(144.Speed_Unit_Setting_144_S,1)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x05, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          等待(100)
+          输出(144.Speed_Signal_144_S,6)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x06, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          输出(144.Speed_Unit_Setting_144_S,1)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x06, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          等待(100)
+          输出(144.Speed_Signal_144_S,7)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x07, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          输出(144.Speed_Unit_Setting_144_S,1)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x07, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          等待(100)
+          输出(144.Speed_Signal_144_S,8)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x08, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          输出(144.Speed_Unit_Setting_144_S,1)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x08, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          等待(100)
+          输出(144.Speed_Signal_144_S,9)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x09, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          输出(144.Speed_Unit_Setting_144_S,1)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x09, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          等待(100)
+          输出(144.Speed_Signal_144_S,10)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x0A, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          输出(144.Speed_Unit_Setting_144_S,1)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x0A, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          等待(100)
+          输出(144.Speed_Signal_144_S,11)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x0B, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          输出(144.Speed_Unit_Setting_144_S,1)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x0B, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          等待(100)
+          输出(144.Speed_Signal_144_S,12)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x0C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          输出(144.Speed_Unit_Setting_144_S,1)
+          → 输出CAN报文 ID: 0x144 | 发送类型: Cycle | 周期时间: 10 ms | 生成CAN数据: [0x0C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] | 分配index: 2
+          等待(100)
+
