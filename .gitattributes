@@ -1,1 +1,2 @@
 /PaddleOCR-main/model/pre_train/PP-OCRv5_server_rec_pretrained.pdparams filter=lfs diff=lfs merge=lfs -text
+/ffmpeg/bin/ffplay.exe filter=lfs diff=lfs merge=lfs -text
