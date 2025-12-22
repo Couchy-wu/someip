@@ -2065,7 +2065,10 @@ class Albumentations:
                     bboxes = np.array(new["bboxes"], dtype=np.float32)
                 labels["instances"].update(bboxes=bboxes)
         else:
-            labels["img"] = self.transform(image=labels["img"])["images"]  # transformed
+            out = self.transform(image=labels["img"])
+            labels["img"] = out.get("image", out.get("images"))  # 先尝试 "image"，再兼容旧 "images"
+            # labels["img"] = self.transform(image=labels["img"])["image"]  # transformed
+            # labels["img"] = self.transform(image=labels["img"])["images"]
 
         return labels
 

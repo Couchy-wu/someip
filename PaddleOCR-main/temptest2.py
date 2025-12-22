@@ -22,6 +22,8 @@ ocr = PaddleOCR(
     use_doc_orientation_classify=False,
     use_doc_unwarping=False,
     use_textline_orientation=False,
+    text_det_box_thresh=0.01,
+    text_rec_score_thresh=0.01,
     text_detection_model_dir=DET_MODEL_DIR,  # 指定本地模型路径
     text_recognition_model_dir=REC_MODEL_DIR,  # 识别模型路径
 
