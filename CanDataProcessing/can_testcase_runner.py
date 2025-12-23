@@ -149,12 +149,12 @@ class LogParser:
                     case_id = case['id']
                     mylog.info(LOGGER_NAME, "=============================================")
                     mylog.info(LOGGER_NAME, f"开始处理用例: {case_id}")
-                    print(f"▶ 开始处理用例: {case_id}", flush=True)
+                    print(f"✅ 开始处理用例: {case_id}", flush=True)
 
                     executed = False
                     if self.has_script_result(case['content']):
                         mylog.info(LOGGER_NAME, f"存在脚本解析结果，开始执行测试（每个用例重复 {self.case_repeat_count} 次）")
-                        print(f"开始执行测试（每个用例重复 {self.case_repeat_count} 次）", flush=True)
+                        print(f"存在脚本解析结果，开始执行测试（每个用例重复 {self.case_repeat_count} 次）", flush=True)
 
                         for rep in range(1, self.case_repeat_count + 1):
                             if getattr(self, '_stop_event', False):
@@ -175,7 +175,9 @@ class LogParser:
                                 delay_time = 5
                                 mylog.info(LOGGER_NAME, f"第 {rep} 次检测完成，等待{delay_time}秒后开始下一次...")
                                 print(f"第 {rep} 次检测完成，等待{delay_time}秒后开始下一次...", flush=True)
-                                time.sleep(delay_time)
+
+                                if not self._safe_wait(delay_time):
+                                    break  # 停止或暂停中断等待，直接退出循环
                                 self._clear_can_channel(chn=0)
 
                                 if getattr(self, '_stop_event', False):
@@ -196,26 +198,18 @@ class LogParser:
                         inter_case_delay = 5
                         mylog.info(LOGGER_NAME, f"用例 {case_id} 已完成，等待{inter_case_delay}秒后开始下一个用例...")
                         print(f"用例 {case_id} 已完成，等待{inter_case_delay}秒后开始下一个用例...", flush=True)
-                        for _ in range(inter_case_delay):
-                            time.sleep(1)
-                            if getattr(self, '_stop_event', False):
-                                mylog.info(LOGGER_NAME, "等待期间收到中断信号，停止执行。")
-                                break
-                        if getattr(self, '_stop_event', False):
-                            break
+
+                        if not self._safe_wait(inter_case_delay):
+                            break  # 停止或暂停中断等待
 
                 # 本轮完成，若非最后一轮则等待
                 if round_idx < self.total_test_rounds:
                     inter_round_delay = 5
                     mylog.info(LOGGER_NAME, f"第 {round_idx} 轮测试完成，等待{inter_round_delay}秒后开始下一轮...")
                     print(f"第 {round_idx} 轮测试完成，等待{inter_round_delay}秒后开始下一轮...", flush=True)
-                    for _ in range(inter_round_delay):
-                        time.sleep(1)
-                        if getattr(self, '_stop_event', False):
-                            mylog.info(LOGGER_NAME, "等待期间收到中断信号，停止执行。")
-                            break
-                    if getattr(self, '_stop_event', False):
-                        break
+
+                    if not self._safe_wait(inter_round_delay):
+                        break  # 停止或暂停中断等待
 
         finally:
             # ========== 关闭 CAN 设备 ==========
@@ -632,10 +626,10 @@ class LogParser:
             return False
 
     def _delay_ms(self, milliseconds):
-        """延迟指定毫秒数"""
+        """延迟指定毫秒数，支持暂停和停止"""
         seconds = milliseconds / 1000.0
         mylog.debug(LOGGER_NAME, f"Wait {milliseconds} ms")
-        time.sleep(seconds)
+        self._safe_wait(seconds)
 
     def run(self):
         """一键运行全流程"""
@@ -677,6 +671,26 @@ class LogParser:
         self.can_device = (None, None, None)
         print("测试已关闭。")
 
+    def _safe_wait(self, seconds):
+        """
+        安全等待：支持在等待期间响应暂停和停止信号
+        :param seconds: 等待秒数（可为小数）
+        """
+        total_waited = 0.0
+        step = 0.1  # 每次 sleep 0.1 秒，提高响应速度
+        while total_waited < seconds:
+            if getattr(self, '_stop_event', False):
+                mylog.info(LOGGER_NAME, "等待期间收到停止信号，终止等待。")
+                return False
+            if not self._pause_event.is_set():
+                # 暂停中，不增加等待时间，持续等待恢复
+                time.sleep(0.1)
+                continue
+            # 正常等待
+            time.sleep(step)
+            total_waited += step
+        return True
+
 
     def pause_test(self):
         """暂停测试流程，等待恢复"""
@@ -704,7 +718,7 @@ class LogParser:
 if __name__ == "__main__":
 
     # 设置日志文件路径
-    log_file_path = "TestcaseCollection/测试_data.log"  # ← 修改为你的实际路径
+    log_file_path = "TestcaseCollection/my测试_data.log"  # ← 修改为你的实际路径
 
     parser = LogParser(log_file_path)                   # 先创建实例
 
