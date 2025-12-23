@@ -134,8 +134,8 @@ class LogParser:
 
             # ---------- 外层循环：执行 total_test_rounds 轮完整测试 ----------
             for round_idx in range(1, self.total_test_rounds + 1):
-                mylog.info(LOGGER_NAME, f"▶▶▶ 开始第 {round_idx} 轮完整测试 ◀◀◀")
-                print(f"▶▶▶ 开始第 {round_idx} 轮完整测试 ◀◀◀", flush=True)
+                mylog.info(LOGGER_NAME, f"============开始第 {round_idx} 轮完整测试============")
+                print(f"============开始第 {round_idx} 轮完整测试============", flush=True)
 
                 if getattr(self, '_stop_event', False):
                     mylog.info(LOGGER_NAME, "收到中断信号，停止本轮测试。")
@@ -193,8 +193,8 @@ class LogParser:
                         print("不存在脚本解析结果，跳过该用例", flush=True)
                         continue
 
-                    # 用例间延迟（非最后一个用例）
-                    if executed and (i < total_cases - 1):
+                    # 用例间延迟
+                    if self.test_cases:  # 确保有测试用例
                         inter_case_delay = 5
                         mylog.info(LOGGER_NAME, f"用例 {case_id} 已完成，等待{inter_case_delay}秒后开始下一个用例...")
                         print(f"用例 {case_id} 已完成，等待{inter_case_delay}秒后开始下一个用例...", flush=True)
@@ -204,7 +204,7 @@ class LogParser:
 
                 # 本轮完成，若非最后一轮则等待
                 if round_idx < self.total_test_rounds:
-                    inter_round_delay = 5
+                    inter_round_delay = 2
                     mylog.info(LOGGER_NAME, f"第 {round_idx} 轮测试完成，等待{inter_round_delay}秒后开始下一轮...")
                     print(f"第 {round_idx} 轮测试完成，等待{inter_round_delay}秒后开始下一轮...", flush=True)
 
