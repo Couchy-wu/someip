@@ -55,9 +55,33 @@ video_processor = VideoProcessor(root)  # 传入主窗口
 # 自定义字体
 bold_font = tkfont.Font(family="微软雅黑", size=10, weight="normal")
 
-# 创建右侧文本框
-log_frame = tk.Frame(root)
-log_frame.grid(row=0, column=5, rowspan=5, padx=10, pady=10, sticky="nsew")     # 第row+1行，第column+1列，跨越rowspan行，
+# 创建右侧主容器（包含时间标签 + 日志框）
+log_main_frame = tk.Frame(root)
+log_main_frame.grid(row=0, column=5, rowspan=5, padx=10, pady=10, sticky="nsew")
+
+# 使内部组件可随窗口拉伸
+log_main_frame.grid_rowconfigure(1, weight=1)  # 第1行（日志框）占主要空间
+log_main_frame.grid_columnconfigure(0, weight=1)
+
+# 1. 创建时间显示标签
+time_label = tk.Label(
+    log_main_frame,
+    text="",
+    font=tkfont.Font(family="微软雅黑", size=10, weight="bold"),
+    bg="#F0F0F0",        # 浅灰色背景，美观清晰
+    fg="#000000",        # 黑色文字
+    anchor="w",          # 文字左对齐
+    relief="flat",       # 边框风格（可选）
+    height=1
+)
+time_label.grid(row=0, column=0, sticky="ew", padx=0, pady=(0, 5))
+# sticky="ew" → 水平拉伸；pady=(0,5) → 下方留空，与日志框分离
+
+# 2. 创建日志文本框的容器（frame）
+log_frame = tk.Frame(log_main_frame)
+log_frame.grid(row=1, column=0, sticky="nsew")
+log_frame.grid_rowconfigure(0, weight=1)
+log_frame.grid_columnconfigure(0, weight=1)
 
 # 创建文本框
 log_text = tk.Text(
@@ -70,18 +94,28 @@ log_text = tk.Text(
     height=20,
     width=35
 )
-log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+log_text.grid(row=0, column=0, sticky="nsew")
 
 # 创建垂直滚动条
 scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=log_text.yview)
-scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+scrollbar.grid(row=0, column=1, sticky="ns")
 
 # 关联文本框与滚动条
 log_text.config(yscrollcommand=scrollbar.set)
 
-# 重定向 stdout
+# 重定向 stdout 到文本框
 import sys
 sys.stdout = TextRedirector(log_text)
+
+# ====== 实时更新时间函数 ======
+def update_time():
+    from datetime import datetime
+    current_time = datetime.now().strftime("%H:%M:%S")
+    time_label.config(text=f"当前时间: {current_time}")
+    root.after(1000, update_time)  # 每隔1000毫秒（1秒）调用一次自己
+
+# 启动时间刷新
+update_time()
 
 # 配置行列权重（确保文本框和滚动条随窗口缩放）
 grid_rowconfigure_number = 5
