@@ -385,13 +385,24 @@ class CANFDGUI:
         notify_window.geometry("400x200")
         notify_window.resizable(False, False)
 
-        # 设置窗口图标（可选）
-        # notify_window.iconbitmap("path/to/icon.ico")
+        # 防闪烁居中
+        notify_window.withdraw()  # 1. 创建时隐藏窗口
+        notify_window.update_idletasks()  # 2. 强制更新布局，获取真实尺寸
 
-        # 居中显示
+        # 计算居中位置
+        window_width = notify_window.winfo_width()
+        window_height = notify_window.winfo_height()
+        screen_width = notify_window.winfo_screenwidth()
+        screen_height = notify_window.winfo_screenheight()
+        x = (screen_width // 2) - (window_width // 2)
+        y = (screen_height // 2) - (window_height // 2)
+        notify_window.geometry(f"400x200+{x}+{y}")  # 3. 设置尺寸 + 位置
+        notify_window.deiconify()  # 4. 显示窗口（此时已位于中央）
+        notify_window.focus_force()  # 强制聚焦（可选）
+
+        # 保持原有行为
         notify_window.transient(self.root)  # 置于主窗口上方
-        notify_window.grab_set()            # 可选：点击其他地方不失去焦点（若想完全非模态可注释这行）
-        notify_window.focus_set()
+        notify_window.grab_set()  # 可选：模态行为（点击其他窗口不响应）
 
         # 提示内容
         container = tk.Frame(notify_window)
