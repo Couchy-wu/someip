@@ -10,7 +10,7 @@ import sys
 import traceback
 
 
-# 读取摄像头
+# 读取摄像头，并设置分辨率
 def try_open_camera(indices=(0, 1), target_width=1920, target_height=1080):
     """
     按顺序尝试打开摄像头索引，并尝试设置指定分辨率。
@@ -65,6 +65,38 @@ def get_camera_resolution(cap):
         return w, h
     return None
 
+# 等比缩放并居中填充黑边
+def resize_with_aspect_ratio(frame, target_width, target_height, interpolation=cv2.INTER_AREA):
+    """
+    将图像等比缩放到适合 target_width x target_height 的区域，并居中填充黑边
+    """
+    h, w = frame.shape[:2]
+    target_ratio = target_width / target_height
+    img_ratio = w / h
+
+    # 计算缩放后尺寸
+    if img_ratio > target_ratio:
+        # 图像更“宽”，以宽度为基准
+        new_w = target_width
+        new_h = int(target_width / img_ratio)
+    else:
+        # 图像更“高”，以高度为基准
+        new_h = target_height
+        new_w = int(target_height * img_ratio)
+
+    # 缩放图像
+    resized = cv2.resize(frame, (new_w, new_h), interpolation=interpolation)
+
+    # 创建黑色背景
+    result = np.zeros((target_height, target_width, 3), dtype=np.uint8)
+
+    # 居中粘贴
+    y_offset = (target_height - new_h) // 2
+    x_offset = (target_width - new_w) // 2
+    result[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = resized
+
+    return result
+
 def draw_centered_text(img, text, color=(0, 255, 0),
                       font=cv2.FONT_HERSHEY_SIMPLEX,
                       scale=0.8, thickness=2):
@@ -79,27 +111,27 @@ def main():
     # 摄像头初始化
     cap, cam_index = try_open_camera((0, 1))
 
-    # 设置默认窗口尺寸
-    DEFAULT_W, DEFAULT_H = 640, 480
-
+    # 获取采集分辨率（用于读取帧）
     if cam_index is not None and cap.isOpened():
         # 有摄像头 → 读取真实分辨率
         resolution = get_camera_resolution(cap)
         if resolution is None:
-            print("[WARN] 获取摄像头分辨率失败，使用默认尺寸")
-            width, height = DEFAULT_W, DEFAULT_H
+            print("[WARN] 获取摄像头分辨率失败，使用默认 1080P 图像采集分辨率")
+            CAPTURE_W, CAPTURE_H = 1920, 1080  # 假设我们仍按1080P采集
         else:
-            width, height = resolution
-            print(f"[INFO] 获取摄像头分辨率成功, 使用分辨率：{width}x{height}")
+            CAPTURE_W, CAPTURE_H = resolution
+            print(f"[INFO] 获取摄像头分辨率成功, 图像采集分辨率：{width}x{height}")
     else:
         # 没有摄像头 → 使用默认尺寸
-        width, height = DEFAULT_W, DEFAULT_H
-        print(f"[INFO] 未识别到摄像头, 使用默认窗口尺寸：{width}x{height}")
+        CAPTURE_W, CAPTURE_H = 1920, 1080
+        print(f"[INFO] 未识别到摄像头，使用模拟 1080P 图像采集分辨率")
 
     # 创建窗口
     win_name = "Camera"
+    DISPLAY_W, DISPLAY_H = 640, 360         # 设置显示窗口大小
     cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(win_name, width, height)
+    cv2.resizeWindow(win_name, DISPLAY_W, DISPLAY_H)
+    print(f"[INFO] 显示窗口大小设置为: {DISPLAY_W}x{DISPLAY_H}")
 
     # 主循环（唯一的循环）
     while True:
@@ -107,22 +139,23 @@ def main():
         if cap.isOpened():
             ret, frame = cap.read()
             if not ret:                     # 读取失败 → 用黑帧补位
-                frame = np.zeros((height, width, 3), dtype=np.uint8)
+                frame = np.zeros((CAPTURE_H, CAPTURE_W, 3), dtype=np.uint8)
         else:
             # 没有摄像头 → 直接生成黑帧
-            frame = np.zeros((height, width, 3), dtype=np.uint8)
+            frame = np.zeros((CAPTURE_H, CAPTURE_W, 3), dtype=np.uint8)
 
         # 如果是“无摄像头”模式，在画面中央写提示文字
         if cam_index is None:
-            draw_centered_text(frame, "No Camera")
+            draw_centered_text(frame, "No Camera", color=(0, 255, 0), scale=5, thickness=10)
 
-        # 显示
-        cv2.imshow(win_name, frame)
+        # 等比缩放 + 黑边填充
+        display_frame = resize_with_aspect_ratio(frame, DISPLAY_W, DISPLAY_H)
 
-        # 必须先调用 waitKey，才能让窗口状态更新
+        # 显示缩放后的帧
+        cv2.imshow(win_name, display_frame)
+
+        # 退出检测
         key = cv2.waitKey(1) & 0xFF          # 1ms 超时，几乎不影响帧率
-
-        # 检测窗口是否被关闭
         if cv2.getWindowProperty(win_name, cv2.WND_PROP_VISIBLE) < 1:
             print("[INFO] 检测到窗口关闭，准备退出")
             break
