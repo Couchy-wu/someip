@@ -1,110 +1,122 @@
+# -*- coding: utf-8 -*-
+"""
+template_matching_zncc_fixed_v3_corrected.py
+- ZNCC (TM_CCOEFF_NORMED) 金字塔匹配
+- 正确的坐标/尺度映射（坐标使用乘法）
+- 亚像素细化（抛物线拟合）
+- 完整、无错误的矩形绘制
+"""
+
 import cv2
 import numpy as np
 
-def zncc(img: np.ndarray, tmpl: np.ndarray) -> np.ndarray:
+
+def zncc_opencv(img: np.ndarray, tmpl: np.ndarray) -> np.ndarray:
+    """OpenCV TM_CCOEFF_NORMED → ZNCC，返回 (H‑h+1, W‑w+1) 响应图"""
+    if img.dtype != np.float32:
+        img = img.astype(np.float32)
+    if tmpl.dtype != np.float32:
+        tmpl = tmpl.astype(np.float32)
+    return cv2.matchTemplate(img, tmpl, cv2.TM_CCOEFF_NORMED)
+
+
+def pyramid_match_opencv(img, tmpl, levels=4):
     """
-    Zero‑Mean Normalized Cross‑Correlation (ZNCC) via FFT.
-    返回匹配响应图，值越大表示匹配程度越好。
-    """
-    img_f = np.float32(img)
-    tmpl_f = np.float32(tmpl)
-
-    # 1️⃣ 均值、方差
-    img_mean = cv2.blur(img_f, tmpl.shape[::-1])
-    tmpl_mean = np.mean(tmpl_f)
-
-    img2 = img_f - img_mean
-    tmpl2 = tmpl_f - tmpl_mean
-
-    # 2️⃣ FFT 相关（卷积 = 逆FFT(FFT(A)*FFT(B))）
-    # 为避免循环卷积，先 pad 到足够大
-    dft_size = [cv2.getOptimalDFTSize(s) for s in (img.shape[0] + tmpl.shape[0],
-                                                   img.shape[1] + tmpl.shape[1])]
-
-    # FFT of image and template
-    img_dft = cv2.dft(cv2.copyMakeBorder(img2, 0, dft_size[0]-img.shape[0],
-                                         0, dft_size[1]-img.shape[1],
-                                         cv2.BORDER_CONSTANT, value=0),
-                      flags=cv2.DFT_COMPLEX_OUTPUT)
-    tmpl_dft = cv2.dft(cv2.copyMakeBorder(tmpl2, 0, dft_size[0]-tmpl.shape[0],
-                                          0, dft_size[1]-tmpl.shape[1],
-                                          cv2.BORDER_CONSTANT, value=0),
-                       flags=cv2.DFT_COMPLEX_OUTPUT)
-
-    # 相关（共轭乘积）
-    corr = cv2.mulSpectrums(img_dft, tmpl_dft, 0, conjB=True)
-    corr = cv2.idft(corr, flags=cv2.DFT_SCALE | cv2.DFT_REAL_OUTPUT)
-
-    # 只取有效区域 (H‑h+1, W‑w+1)
-    h, w = tmpl.shape[:2]
-    corr = corr[h-1:img.shape[0], w-1:img.shape[1]]
-
-    # 3️⃣ 归一化分母
-    sq_img = cv2.blur(img_f * img_f, tmpl.shape[::-1]) - img_mean * img_mean
-    sq_tmpl = np.var(tmpl_f) * (tmpl.shape[0] * tmpl.shape[1])
-    denom = np.sqrt(sq_img * sq_tmpl) + 1e-5   # 防止除 0
-
-    zncc_map = corr / denom
-    return zncc_map
-
-
-def pyramid_match(img, tmpl, levels=4, scale=0.5):
-    """
-    金字塔多尺度 ZNCC 匹配 + 亚像素细化。
-    返回最优匹配点 (x, y) 以及对应的尺度 factor。
+    金字塔 + ZNCC + 亚像素细化
+    返回 (x, y) 原图坐标（亚像素）、尺度因子、最高响应值。
     """
     best_val = -np.inf
     best_pt = None
     best_scale = 1.0
 
-    cur_img = img.copy()
-    cur_tmpl = tmpl.copy()
-    factor = 1.0
+    cur_img, cur_tmpl = img.copy(), tmpl.copy()
+    factor = 1.0                     # 当前层相对原图的放大因子（1,2,4,...）
 
+    # ---------- 金字塔遍历 ----------
     for lvl in range(levels):
-        zncc_map = zncc(cur_img, cur_tmpl)
+        zncc_map = zncc_opencv(cur_img, cur_tmpl)
+        _, max_val, _, max_loc = cv2.minMaxLoc(zncc_map)
 
-        # 找最大响应
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(zncc_map)
         if max_val > best_val:
             best_val = max_val
-            best_pt = (max_loc[0] * (1/factor), max_loc[1] * (1/factor))
-            best_scale = factor
+            # **这里改为乘法**，把金字塔层坐标映射回原图
+            best_pt = (max_loc[0] * factor, max_loc[1] * factor)
+            best_scale = factor       # 记录当前层的放大因子，后面绘制时会用到
 
-        # 进入下一层金字塔（下采样）
+        # 进入下一层金字塔（尺寸除以 2）
         cur_img = cv2.pyrDown(cur_img)
         cur_tmpl = cv2.pyrDown(cur_tmpl)
         factor *= 2.0
 
-    # ------- 亚像素细化（二次插值） -------
-    x, y = best_pt
-    ix, iy = int(round(x)), int(round(y))
-    # 取 3×3 窗口（确保不越界）
-    win = zncc_map[iy-1:iy+2, ix-1:ix+2]
-    if win.shape == (3, 3):
-        # 采用二维二次曲面拟合
-        dx = (win[1, 2] - win[1, 0]) / (2 * (2 * win[1, 1] - win[1, 0] - win[1, 2] + 1e-6))
-        dy = (win[2, 1] - win[0, 1]) / (2 * (2 * win[1, 1] - win[0, 1] - win[2, 1] + 1e-6))
-        x += dx
-        y += dy
+    if best_pt is None:
+        raise RuntimeError("未检测到匹配点，请检查模板与图像的相似度。")
 
-    return (x, y), best_scale, best_val
+    # ---------- 亚像素细化 ----------
+    scale_factor = 1.0 / best_scale          # 把原图缩放回匹配时的金字塔层大小
+    img_scaled = cv2.resize(img, (0, 0), fx=scale_factor, fy=scale_factor,
+                           interpolation=cv2.INTER_LINEAR)
+    tmpl_scaled = cv2.resize(tmpl, (0, 0), fx=scale_factor, fy=scale_factor,
+                            interpolation=cv2.INTER_LINEAR)
+
+    final_map = zncc_opencv(img_scaled, tmpl_scaled)
+
+    # 把原图坐标映射到 final_map（缩放后）坐标系
+    ix = int(round(best_pt[0] * scale_factor))
+    iy = int(round(best_pt[1] * scale_factor))
+    h_f, w_f = final_map.shape
+
+    if 1 <= ix < w_f - 1 and 1 <= iy < h_f - 1:
+        win = final_map[iy - 1:iy + 2, ix - 1:ix + 2]
+
+        # 二次抛物线拟合（亚像素）
+        dx = (win[1, 2] - win[1, 0]) / (
+            2 * (2 * win[1, 1] - win[1, 0] - win[1, 2] + 1e-9)
+        )
+        dy = (win[2, 1] - win[0, 1]) / (
+            2 * (2 * win[1, 1] - win[0, 1] - win[2, 1] + 1e-9)
+        )
+        best_pt = (best_pt[0] + dx, best_pt[1] + dy)   # 回到原图坐标系
+
+    return best_pt, best_scale, best_val
 
 
-# ------------------- 示例 -------------------
+# ------------------- 主程序 -------------------
 if __name__ == "__main__":
-    img  = cv2.imread('scene.png', cv2.IMREAD_GRAYSCALE)
-    tmpl = cv2.imread('template.png', cv2.IMREAD_GRAYSCALE)
+    # ------------------- 读取 -------------------
+    img_path = r"image.png"   # 大图
+    tmpl_path = r"find1.png"   # 模板
 
-    (px, py), scale, score = pyramid_match(img, tmpl, levels=5)
-    print(f"匹配位置: ({px:.2f}, {py:.2f})  scale={scale:.2f}  score={score:.4f}")
+    img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+    tmpl = cv2.imread(tmpl_path, cv2.IMREAD_GRAYSCALE)
 
-    # 在原图上画框
-    h, w = tmpl.shape[:2]
-    h = int(h * scale)
-    w = int(w * scale)
-    top_left = (int(px), int(py))
-    bottom_right = (int(px + w), int(py + h))
-    img_vis = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-    cv2.rectangle(img_vis, top_left, bottom_right, (0, 255, 0), 2)
-    cv2.imwrite('matched_result.png', img_vis)
+    if img is None or tmpl is None:
+        raise FileNotFoundError("检查图片路径是否正确，且图片为灰度图。")
+
+    # ------------------- 匹配 -------------------
+    (px, py), scale, score = pyramid_match_opencv(img, tmpl, levels=5)
+
+    print(f"[MATCH] 位置 = ({px:.3f}, {py:.3f})   "
+          f"尺度 = {scale:.2f}   响应 = {score:.4f}")
+
+    # ------------------- 可视化 -------------------
+    tmpl_h, tmpl_w = tmpl.shape[:2]
+
+    # 按匹配到的尺度放大模板尺寸（得到在原图上的宽高）
+    draw_w = int(round(tmpl_w))
+    draw_h = int(round(tmpl_h))
+
+    top_left = (int(round(px)), int(round(py)))          # (x, y) 原图左上角
+    bottom_right = (top_left[0] + draw_w, top_left[1] + draw_h)
+
+    # 调试输出（确保都是整数）
+    print("[DEBUG] top_left    :", top_left,    "type:", type(top_left))
+    print("[DEBUG] bottom_right:", bottom_right, "type:", type(bottom_right))
+    print("[DEBUG] draw_w, draw_h:", draw_w, draw_h)
+
+    # 把灰度图转成 BGR（才能画彩色矩形）
+    vis = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    cv2.rectangle(vis, top_left, bottom_right, (0, 255, 0), thickness=2)
+
+    out_path = "matched_result.png"
+    cv2.imwrite(out_path, vis)
+    print(f"[INFO] 匹配结果已保存至 {out_path}")
