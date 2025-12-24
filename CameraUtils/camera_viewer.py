@@ -120,7 +120,7 @@ def main():
             CAPTURE_W, CAPTURE_H = 1920, 1080  # 假设我们仍按1080P采集
         else:
             CAPTURE_W, CAPTURE_H = resolution
-            print(f"[INFO] 获取摄像头分辨率成功, 图像采集分辨率：{width}x{height}")
+            print(f"[INFO] 获取摄像头分辨率成功, 图像采集分辨率：{CAPTURE_W}x{CAPTURE_H}")
     else:
         # 没有摄像头 → 使用默认尺寸
         CAPTURE_W, CAPTURE_H = 1920, 1080
