@@ -6,10 +6,14 @@ from threading import Thread, Timer
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-class ManualCornerDetector:
+class PerspectiveCalibrator:
     """
-    手动角点检测器：用户在固定大小的图像上点击4个点，
-    程序自动判断并连接为四边形（TL, TR, BL, BR），支持坐标映射回原图。
+    透视校准器：用户在缩放后的图像上点击4个点，
+    程序自动识别为四边形（TL, TR, BL, BR），支持：
+      - 角点保存与热更新
+      - 透视变换校正（拉直）
+      - 变换图像保存
+    适用于文档扫描、投影对齐等场景。
     """
     def __init__(self, image_path, display_width=640, display_height=360):
         self.original_image = cv2.imread(image_path)
@@ -46,9 +50,10 @@ class ManualCornerDetector:
                 cv2.imshow("Manual Corner Detector", self.working_image)
                 # print(f"点击位置 (显示): ({x}, {y}) → 原图: ({real_x}, {real_y})")
                 if len(self.points) == 4:
-                    self._connect_corners()
+                    self._finalize_quad_selection()
 
-    def _connect_corners(self):
+    def _finalize_quad_selection(self):
+        """确认并处理用户选择的四个角点, 完成四边形的构建"""
         # 使用原始坐标判断位置
         pts = np.array(self.real_points, dtype="float32")
         # 按 x 分左右
@@ -90,6 +95,8 @@ class ManualCornerDetector:
             print(f"   {k}: {v}")
         # 自动保存
         self.save_corners()
+        # 执行透视变换
+        self.apply_perspective_transform()
 
     def reset(self):
         """重置所有已选角点，允许重新点击选择"""
@@ -99,6 +106,11 @@ class ManualCornerDetector:
         self.working_image = self.display_image.copy()  # 恢复原始显示图像
         cv2.imshow("Manual Corner Detector", self.working_image)
         print("已重置，可重新选择4个角点...")
+        # 安全关闭 "Warped View" 窗口
+        try:
+            cv2.destroyWindow("Warped View")
+        except cv2.error:
+            pass  # 窗口不存在时忽略错误
 
     def save_corners(self):
         """将当前角点自动保存为 JSON 文件"""
@@ -135,6 +147,7 @@ class ManualCornerDetector:
             self.points = [(int(x / self.scale_x), int(y / self.scale_y)) for x, y in ordered_pts]
             self._redraw_with_corners()
             print(f"已热更新加载角点配置: {self.config_path}")
+            self.apply_perspective_transform()              # 加载后执行透视变换
             return True
         except Exception as e:
             print(f"加载角点配置失败: {e}")
@@ -179,6 +192,7 @@ class ManualCornerDetector:
         print("   - 点击图像选择4个角点（顺序任意）")
         print("   - 选完4个点后将自动保存配置")
         print("   - 'r' 键: 重置选择")
+        print("   - 'w' 键: 保存拉直后的图像")
         print("   - ESC 或任意键退出")
 
         # --- 使用非阻塞循环，支持热更新 ---
@@ -188,8 +202,62 @@ class ManualCornerDetector:
                 break
             elif key == ord('r'):
                 self.reset()
+                try:
+                    cv2.destroyWindow("Warped View")
+                except:
+                    pass  # 忽略窗口不存在的错误
+            elif key == ord('w'):
+                if hasattr(self, 'warped_image') and self.warped_image is not None:
+                    output_path = self.image_path.parent / f"{self.image_path.stem}_warped.jpg"
+                    cv2.imwrite(str(output_path), self.warped_image)
+                    print(f"已保存变换后的图像: {output_path}")
+                else:
+                    print("无变换图像可保存，请先选择四个角点")
         cv2.destroyAllWindows()
         return self.corners if hasattr(self, 'corners') and self.corners else None
+
+    def apply_perspective_transform(self):
+        """根据四个角点进行透视变换，将四边形区域拉直"""
+        if not hasattr(self, 'corners') or not self.corners:
+            print("没有可用的角点数据，无法进行透视变换")
+            return
+
+        # 获取原始图像中的四个角点（顺序：TL, TR, BL, BR）
+        pts_src = np.array([
+            self.corners["top_left_corner"],
+            self.corners["top_right_corner"],
+            self.corners["bottom_right_corner"],
+            self.corners["bottom_left_corner"]
+        ], dtype="float32")
+
+        # 使用 display_width 和 display_height 作为目标尺寸
+        width = self.display_width
+        height = self.display_height
+
+        # 目标矩形的四个点（固定大小）
+        pts_dst = np.array([
+            [0, 0],
+            [width - 1, 0],
+            [width - 1, height - 1],
+            [0, height - 1]
+        ], dtype="float32")
+
+        # 计算变换矩阵
+        matrix = cv2.getPerspectiveTransform(pts_src, pts_dst)
+
+        # 执行透视变换，输出固定尺寸图像
+        self.warped_image = cv2.warpPerspective(
+            self.original_image, 
+            matrix, 
+            (width, height),  # 输出尺寸
+            flags=cv2.INTER_LINEAR
+        )
+
+        # 显示变换后的图像
+        cv2.namedWindow("Warped View", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("Warped View", width, height)
+        cv2.imshow("Warped View", self.warped_image)
+        print(f"透视变换完成")
 
     # 内部类：文件监听器
     class ConfigFileWatcher:
@@ -233,12 +301,12 @@ class ManualCornerDetector:
 
 # 使用示例
 if __name__ == "__main__":
-    image_path = "CameraUtils/test_image2.jpg"  # 替换为你的图像路径
+    image_path = "CameraUtils/test_image1.jpg"  # 替换为你的图像路径
     # --- 可选：检查图像是否存在 ---
     if not Path(image_path).exists():
         print(f"图像文件不存在: {image_path}")
     else:
-        detector = ManualCornerDetector(image_path, display_width=960, display_height=540)
+        detector = PerspectiveCalibrator(image_path, display_width=960, display_height=540)
         corners = detector.run()
 
     # (640, 360),   # nHD
