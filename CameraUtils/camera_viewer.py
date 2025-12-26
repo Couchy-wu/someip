@@ -3,7 +3,7 @@
 """
 摄像头打开程序
 """
-
+import os
 import cv2
 import numpy as np
 import sys
@@ -107,6 +107,40 @@ def draw_centered_text(img, text, color=(0, 255, 0),
     y = (H + h) // 2               # 左下角的 y（垂直居中）
     cv2.putText(img, text, (x, y), font, scale, color, thickness, cv2.LINE_AA)
 
+def take_screenshot(frame, save_path="Resources/Picture"):
+    """
+    将传入的图像帧保存为截图，保存分辨率为原始摄像头分辨率。
+    图片命名按文件夹中已有最大序号递增，从1开始。
+
+    参数:
+        frame       - 要保存的图像帧 (numpy array)
+        save_path   - 保存路径，默认为 Resources/Picture
+    """
+    # 确保保存目录存在
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+    # 获取当前目录下所有以数字命名的png文件，如 screenshot_1.png
+    existing_files = [f for f in os.listdir(save_path) if f.startswith("screenshot_") and f.endswith(".png")]
+    # 提取序号
+    numbers = []
+    for f in existing_files:
+        try:
+            num = int(f.replace("screenshot_", "").replace(".png", ""))
+            numbers.append(num)
+        except ValueError:
+            continue  # 忽略无法解析的文件名
+    # 计算下一个序号
+    next_num = max(numbers) + 1 if numbers else 1
+    # 构造文件名
+    filename = f"screenshot_{next_num}.png"
+    filepath = os.path.join(save_path, filename)
+    # 保存图像
+    success = cv2.imwrite(filepath, frame)
+    if success:
+        print(f"[INFO] 截图已保存: {filepath}")
+    else:
+        print(f"[WARN] 截图保存失败: {filepath}")
+
 def main():
     # 摄像头初始化
     cap, cam_index = try_open_camera((0, 1))
@@ -159,7 +193,9 @@ def main():
         if cv2.getWindowProperty(win_name, cv2.WND_PROP_VISIBLE) < 1:
             print("[INFO] 检测到窗口关闭，准备退出")
             break
-
+        # 按下 's' 键截图
+        if key == ord('s'):
+            take_screenshot(frame)  # 保存原始分辨率图像
         # 兼容键盘退出（可选）
         # if key == 27: 
         #     print("[INFO] 按下 ESC 键，准备退出")
