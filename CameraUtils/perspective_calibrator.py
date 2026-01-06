@@ -15,7 +15,7 @@ class PerspectiveCalibrator:
       - 变换图像保存
     适用于文档扫描、投影对齐等场景。
     """
-    def __init__(self, image_path, display_width=640, display_height=360):
+    def __init__(self, image_path, display_width=960, display_height=540):
         self.original_image = cv2.imread(image_path)
         if self.original_image is None:
             raise FileNotFoundError(f"无法加载图像: {image_path}")
@@ -229,12 +229,12 @@ class PerspectiveCalibrator:
             self.corners["bottom_right_corner"],
             self.corners["bottom_left_corner"]
         ], dtype="float32")
-
-        # 使用 display_width 和 display_height 作为目标尺寸
-        width = self.display_width
-        height = self.display_height
-
-        # 目标矩形的四个点（固定大小）
+        
+        # 使用原始图像尺寸作为目标尺寸
+        width = self.orig_width
+        height = self.orig_height
+        
+        # 目标矩形的四个点（原始图像大小）
         pts_dst = np.array([
             [0, 0],
             [width - 1, 0],
@@ -245,20 +245,23 @@ class PerspectiveCalibrator:
         # 计算变换矩阵
         matrix = cv2.getPerspectiveTransform(pts_src, pts_dst)
 
-        # 执行透视变换，输出固定尺寸图像
+        # 执行透视变换，输出原始尺寸图像
         self.warped_image = cv2.warpPerspective(
             self.original_image, 
             matrix, 
             (width, height),  # 输出尺寸
             flags=cv2.INTER_LINEAR
         )
-
-        # 显示变换后的图像
+        
+        # 创建显示用的缩小版本
+        display_warped = cv2.resize(self.warped_image, (self.display_width, self.display_height))
+        
+        # 显示变换后的图像（显示尺寸）
         cv2.namedWindow("Warped View", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("Warped View", width, height)
-        cv2.imshow("Warped View", self.warped_image)
+        cv2.resizeWindow("Warped View", self.display_width, self.display_height)
+        cv2.imshow("Warped View", display_warped)
         print(f"透视变换完成")
-
+    
     # 内部类：文件监听器
     class ConfigFileWatcher:
         """监听配置文件变化，实现热更新（带防抖）"""
@@ -301,12 +304,13 @@ class PerspectiveCalibrator:
 
 # 使用示例
 if __name__ == "__main__":
-    image_path = "CameraUtils/test_image1.jpg"  # 替换为你的图像路径
+    image_path = "CameraUtils/NEW.jpg"  # 替换为你的图像路径
     # --- 可选：检查图像是否存在 ---
     if not Path(image_path).exists():
         print(f"图像文件不存在: {image_path}")
     else:
-        detector = PerspectiveCalibrator(image_path, display_width=960, display_height=540)
+        # 使用默认 960×540 显示尺寸，校正后图像保持原始尺寸
+        detector = PerspectiveCalibrator(image_path)
         corners = detector.run()
 
     # (640, 360),   # nHD
