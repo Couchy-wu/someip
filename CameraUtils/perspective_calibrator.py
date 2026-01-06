@@ -13,6 +13,7 @@ class PerspectiveCalibrator:
       - 角点保存与热更新
       - 透视变换校正（拉直）
       - 变换图像保存
+      - 四边形等比例缩放（z: +10%, x: -10%, e: 重置缩放比例）
     适用于文档扫描、投影对齐等场景。
     """
     def __init__(self, image_path, display_width=960, display_height=540):
@@ -33,6 +34,11 @@ class PerspectiveCalibrator:
         # 配置文件路径
         self.image_path = Path(image_path)
         self.config_path = self.image_path.parent / "fixed_corners.json"
+        
+        # 新增：保存原始角点和当前缩放比例
+        self.original_corners = None  # 原始检测到的角点
+        self.current_scale = 1.0      # 当前缩放比例
+        
         # 启动配置文件监听（热更新）
         self.watcher = self.ConfigFileWatcher(self, self.config_path)
         self.watcher.start()
@@ -90,6 +96,11 @@ class PerspectiveCalibrator:
             "bottom_left_corner": tuple(map(int, bl)),
             "bottom_right_corner": tuple(map(int, br))
         }
+        
+        # 保存原始角点作为缩放基准
+        self.original_corners = self.corners.copy()
+        self.current_scale = 1.0
+        
         print("原始图像中检测到的角点坐标：")
         for k, v in self.corners.items():
             print(f"   {k}: {v}")
@@ -98,12 +109,88 @@ class PerspectiveCalibrator:
         # 执行透视变换
         self.apply_perspective_transform()
 
+    def scale_quad(self, scale_factor):
+        """
+        对检测到的四边形进行等比例缩放，保持中心点不变
+        scale_factor: 缩放因子，>1 为扩大，<1 为缩小
+        """
+        if self.original_corners is None:
+            print("请先完成四个角点的检测")
+            return
+        
+        # 计算新的缩放比例
+        new_scale = self.current_scale * scale_factor
+        
+        # 检查缩放限制
+        if new_scale < 0.3 or new_scale > 2.0:
+            print(f"缩放比例超出限制 (当前: {self.current_scale:.0%}, 操作后: {new_scale:.0%})")
+            print("允许范围: 30% - 200%")
+            return
+        
+        self.current_scale = new_scale
+        print(f"应用缩放: {scale_factor:.0f} → 当前缩放比例: {self.current_scale:.0%}")
+        
+        # 计算原始角点的中心点
+        pts = np.array([
+            self.original_corners["top_left_corner"],
+            self.original_corners["top_right_corner"],
+            self.original_corners["bottom_left_corner"],
+            self.original_corners["bottom_right_corner"]
+        ], dtype="float32")
+        
+        center = np.mean(pts, axis=0)
+        
+        # 计算缩放后的新角点
+        scaled_pts = center + (pts - center) * self.current_scale
+        
+        # 更新当前角点
+        self.corners = {
+            "top_left_corner": tuple(map(int, scaled_pts[0])),
+            "top_right_corner": tuple(map(int, scaled_pts[1])),
+            "bottom_left_corner": tuple(map(int, scaled_pts[2])),
+            "bottom_right_corner": tuple(map(int, scaled_pts[3]))
+        }
+        
+        # 更新 real_points 和 points
+        self.real_points = [tuple(map(int, pt)) for pt in scaled_pts]
+        self.points = [(int(x / self.scale_x), int(y / self.scale_y)) for x, y in self.real_points]
+        
+        # 重绘图像
+        self._redraw_with_corners()
+        
+        # 自动保存并更新透视变换
+        self.save_corners()
+        self.apply_perspective_transform()
+
+    def reset_scale(self):
+        """重置缩放比例至100%"""
+        if self.original_corners is None:
+            print("请先完成四个角点的检测")
+            return
+        
+        self.current_scale = 1.0
+        self.corners = self.original_corners.copy()
+        self.real_points = [
+            self.original_corners["top_left_corner"],
+            self.original_corners["top_right_corner"],
+            self.original_corners["bottom_left_corner"],
+            self.original_corners["bottom_right_corner"]
+        ]
+        self.points = [(int(x / self.scale_x), int(y / self.scale_y)) for x, y in self.real_points]
+        
+        self._redraw_with_corners()
+        self.save_corners()
+        self.apply_perspective_transform()
+        print("已重置至原始大小 (100%)")
+
     def reset(self):
         """重置所有已选角点，允许重新点击选择"""
         self.points = []
         self.real_points = []
         self.corners = None
-        self.working_image = self.display_image.copy()  # 恢复原始显示图像
+        self.original_corners = None
+        self.current_scale = 1.0
+        self.working_image = self.display_image.copy()
         cv2.imshow("Manual Corner Detector", self.working_image)
         print("已重置，可重新选择4个角点...")
         # 安全关闭 "Warped View" 窗口
@@ -145,6 +232,12 @@ class PerspectiveCalibrator:
             ]
             self.real_points = ordered_pts
             self.points = [(int(x / self.scale_x), int(y / self.scale_y)) for x, y in ordered_pts]
+            
+            # 如果是首次加载，将其设为原始角点
+            if self.original_corners is None:
+                self.original_corners = self.corners.copy()
+                self.current_scale = 1.0
+            
             self._redraw_with_corners()
             print(f"已热更新加载角点配置: {self.config_path}")
             self.apply_perspective_transform()              # 加载后执行透视变换
@@ -192,27 +285,37 @@ class PerspectiveCalibrator:
         print("   - 点击图像选择4个角点（顺序任意）")
         print("   - 选完4个点后将自动保存配置")
         print("   - 'r' 键: 重置选择")
+        print("   - 'e' 键: 重置缩放比例至100%")
+        print("   - 'z' 键: 扩大10%")
+        print("   - 'x' 键: 缩小10%")
         print("   - 'w' 键: 保存拉直后的图像")
-        print("   - ESC 或任意键退出")
-
+        print("   - ESC 键: 退出程序")
+        
         # --- 使用非阻塞循环，支持热更新 ---
         while True:
             key = cv2.waitKey(10) & 0xFF  # 每10ms检查一次
             if key == 27:  # ESC
                 break
-            elif key == ord('r'):
+            elif key == ord('r'):  # 小写r重置选择
                 self.reset()
                 try:
                     cv2.destroyWindow("Warped View")
                 except:
-                    pass  # 忽略窗口不存在的错误
-            elif key == ord('w'):
+                    pass
+            elif key == ord('e'):  # e键重置缩放比例至100%
+                self.reset_scale()
+            elif key == ord('z'):  # 扩大10%
+                self.scale_quad(1.1)
+            elif key == ord('x'):  # 缩小10%
+                self.scale_quad(0.9)
+            elif key == ord('w'):  # 保存变换后的图像
                 if hasattr(self, 'warped_image') and self.warped_image is not None:
                     output_path = self.image_path.parent / f"{self.image_path.stem}_warped.jpg"
                     cv2.imwrite(str(output_path), self.warped_image)
                     print(f"已保存变换后的图像: {output_path}")
                 else:
                     print("无变换图像可保存，请先选择四个角点")
+        
         cv2.destroyAllWindows()
         return self.corners if hasattr(self, 'corners') and self.corners else None
 
