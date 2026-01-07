@@ -1,52 +1,85 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""
-流程（带开关）：
-1️⃣ （可选）导向滤波 → 2️⃣ （可选）边缘恢复
-3️⃣ 迭代中位数阈值 → 低亮度压缩 → 直方图拉伸
-4️⃣ （可选）锐化
-5️⃣ （可选）二值化（单阈值）
-6️⃣ 合并 U、V → BGR
-7️⃣ 保存所有关键结果（不产生二值图、轮廓图或可视化窗口）
-"""
+# --------------------------------------------------------------
+# --------------------------------------------------------------
+# 1️⃣ 读取图像并分离 YUV
+# 2️⃣ 导向滤波 + 边缘恢复
+# 3️⃣ 自适应中位数阈值迭代 → 低亮度压缩
+# 4️⃣ 亮度增强（Fast‑Retinex + 分段伽马）或直接使用原始 Y 通道
+# 5️⃣ 锐化（可选）
+# 6️⃣ Otsu 二值化 + 小面积噪声去除
+# 7️⃣ 彩色图合成
+# 8️⃣ 保存所有阶段结果
+# --------------------------------------------------------------
+
 import cv2
 import numpy as np
 from pathlib import Path
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Any
+import time   # ← 用于时间统计
 
 # ============================= 参数 ============================= #
-# ----------- 开关 ----------
-ENABLE_GUIDED_FILTER = True      # 导向滤波开关
-ENABLE_EDGE_RESTORE  = True      # 边缘恢复开关
-ENABLE_SHARPEN       = True      # 锐化开关
-ENABLE_BINARY        = True      # 二值化开关（新增）
+# ---------- 开关 ----------
+ENABLE_FAST_RETINEX = False    # True → 使用 Fast‑Retinex + 分段伽马；False → 直接使用原始 Y 通道（仅压缩暗部）
+ENABLE_GUIDED_FILTER         = True   # 是否在亮度通道上执行导向滤波（保留结构细节，同时平滑噪声）
+ENABLE_EDGE_RESTORE          = True   # 导向滤波后是否把原始的强边缘（Canny）恢复回去，避免过度平滑
+ENABLE_SHARPEN               = False  # 是否在亮度增强后执行锐化（Unsharp‑Mask）
+ENABLE_BINARY                = True   # 是否对最终亮度图做 Otsu 自动阈值二值化（用于掩码生成）
 
-# ----------- 路径 ----------
-INPUT_PATH   = "CameraUtils/test_warped_1080.jpg"   # ← 改成自己的路径
-OUTPUT_DIR   = Path("./output")                     # 结果保存目录
+# ---------- Fast‑Retinex ----------
+FAST_RETINEX_SIGMA = 80          # 高斯模糊的标准差（尺度），越大平滑范围越广
+FAST_RETINEX_GAIN  = 128.0       # 增益系数，用于放大对数差分的幅度
+FAST_RETINEX_OFFSET = 0.0        # 偏置，可在需要时微调整体亮度
 
-# ----------- 处理流程 ----------
-ITERATIONS   = 5            # 中位数阈值迭代次数 N
+# ---------- 分段伽马 ----------
+HIGH_LIGHT_THRESH = 200          # 伽马分段阈值：<= 此值使用 gamma_high，> 此值使用 gamma_low
+GAMMA_LOW  = 0.6                 # 对高亮区使用的 gamma（<1 ⇒ 亮度提升）
+GAMMA_HIGH = 1.2                 # 对暗部使用的 gamma（>1 ⇒ 亮度压暗）
 
-# ----------- 导向滤波 ----------
-GUIDED_RADIUS = 12
-GUIDED_EPS    = 1e-3
+# ---------- 路径 ----------
+INPUT_PATH   = "CameraUtils/test_warped_1080.jpg"   # 待处理的原始图像路径
+OUTPUT_DIR   = Path("./output")                     # 所有阶段结果的保存目录
 
-# ----------- 边缘恢复 ----------
-CANNY_LOW          = 50
-CANNY_HIGH         = 150
-DILATE_KERNEL_SIZE = 2   # 0 → 不进行膨胀
-DILATE_ITERATIONS  = 1
-
-# ----------- 锐化 ----------
-SHARPEN_AMOUNT = 2.5         # 细节放大系数
-SHARPEN_KERNEL_SIZE = 5       # 高斯模糊核大小（奇数）
-SHARPEN_SIGMA = 0.0           # 0 → 自动计算
-
-# ----------- 二值化 ----------
-BINARY_THRESHOLD = 100      # 单阈值二值化阈值（0~255）
+# ---------- 其余处理 ----------
+ITERATIONS   = 10               # 自适应中位数阈值的最大迭代次数
+GUIDED_RADIUS = 12              # 导向滤波的局部窗口半径（越大越平滑）
+GUIDED_EPS    = 1e-3            # 导向滤波的正则化项，控制平滑强度
+CANNY_LOW          = 50        # Canny 边缘检测的低阈值
+CANNY_HIGH         = 150       # Canny 边缘检测的高阈值
+DILATE_KERNEL_SIZE = 2         # 边缘膨胀的结构元素尺寸（用于扩大恢复的边缘）
+DILATE_ITERATIONS  = 1         # 边缘膨胀的迭代次数
+SHARPEN_AMOUNT = 1             # 锐化时高频分量的加权系数
+SHARPEN_KERNEL_SIZE = 3        # 锐化时高斯模糊的核大小（必须为奇数）
+SHARPEN_SIGMA = 0.0            # 锐化时高斯模糊的 sigma（0 ⇒ 自动计算）
+BINARY_THRESHOLD = 210         # （保留）手动阈值，当前不直接使用（预留）
+HIGH_BRIGHTNESS_OFFSET = 30    # （保留）亮度偏移量，若后续需要可用于后处理
 # =========================================================== #
 
+# ------------------- 时间统计工具 ------------------- #
+_step_times: Dict[str, float] = {}
+
+def _time_it(step_name: str) -> Any:
+    """上下文管理器：记录 step_name 对应代码块的耗时（毫秒）。"""
+    class _Timer:
+        def __enter__(self):
+            self.t0 = time.perf_counter()
+            return None
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            elapsed = (time.perf_counter() - self.t0) * 1000.0
+            _step_times[step_name] = elapsed
+            print(f"[TIME] {step_name:<30} {elapsed:8.2f} ms")
+    return _Timer()
+
+def print_time_summary() -> None:
+    """统一输出所有步骤的耗时表。"""
+    print("\n===== 运行时间统计 =====")
+    total = sum(_step_times.values())
+    for name, ms in _step_times.items():
+        print(f"{name:<30} {ms:8.2f} ms")
+    print(f"{'TOTAL':<30} {total:8.2f} ms")
+    print("=========================\n")
+
+# ------------------- 基础工具 ------------------- #
 def ensure_dir(p: Path) -> None:
     p.mkdir(parents=True, exist_ok=True)
 
@@ -61,37 +94,85 @@ def rgb2yuv(img: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     yuv = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
     return yuv[:, :, 0], yuv[:, :, 1], yuv[:, :, 2]
 
-def iterative_median_threshold(y: np.ndarray, n_iter: int) -> List[int]:
-    """迭代求中位数阈值：A → B → C … (返回阈值列表)。"""
-    thresholds = []
-    mask = np.ones_like(y, dtype=bool)   # 初始保留全部像素
-    for i in range(n_iter):
-        vals = y[mask]
-        median = int(np.median(vals)) if vals.size else 255
-        thresholds.append(median)
-        mask = mask & (y >= median)      # 只保留 >= 当前 median 的像素
-        print(f"[DEBUG] 迭代 {i+1}/{n_iter} → median = {median}, 剩余像素数 = {mask.sum()}")
-    return thresholds
+# ------------------- Fast‑Retinex ------------------- #
+def fast_retinex(y: np.ndarray,
+                 sigma: int = FAST_RETINEX_SIGMA,
+                 gain: float = FAST_RETINEX_GAIN,
+                 offset: float = FAST_RETINEX_OFFSET) -> np.ndarray:
+    img = y.astype(np.float32) + 1.0
+    log_img = np.log10(img)
+    blur = cv2.GaussianBlur(img, (0, 0), sigmaX=sigma, sigmaY=sigma)
+    log_blur = np.log10(blur + 1.0)
+    ret = log_img - log_blur
+    ret = gain * (ret + offset)
+    ret = cv2.normalize(ret, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
+    return ret.astype(np.uint8)
+
+# ------------------- 分段伽马 ------------------- #
+def piecewise_gamma(y: np.ndarray,
+                    high_thresh: int = HIGH_LIGHT_THRESH,
+                    gamma_low: float = GAMMA_LOW,
+                    gamma_high: float = GAMMA_HIGH) -> np.ndarray:
+    y_norm = y.astype(np.float32) / 255.0
+    low_mask  = y <= high_thresh
+    high_mask = ~low_mask
+    out = np.empty_like(y_norm)
+    out[low_mask]  = np.power(y_norm[low_mask], gamma_high)
+    out[high_mask] = np.power(y_norm[high_mask], gamma_low)
+    out = np.clip(out * 255.0, 0, 255).astype(np.uint8)
+    return out
+
+# ------------------- 自适应迭代中位数阈值 ------------------- #
+def adaptive_median_threshold(y: np.ndarray,
+                             max_iter: int = ITERATIONS,
+                             stop_median: int = HIGH_LIGHT_THRESH) -> Tuple[List[int], int]:
+    flat_sorted = np.sort(y.ravel())[::-1]
+    n = flat_sorted.size
+    thresholds: List[int] = []
+    cur_len = n
+    for i in range(max_iter):
+        if cur_len == 0:
+            break
+        median_idx = (cur_len - 1) // 2
+        median_val = int(flat_sorted[median_idx])
+        thresholds.append(median_val)
+        if median_val > stop_median:
+            break
+        cur_len = median_idx + 1
+    best_iter = 1
+    if len(thresholds) > 1:
+        diffs = [abs(thresholds[i] - thresholds[i - 1]) for i in range(1, len(thresholds))]
+        min_diff_idx = int(np.argmin(diffs))
+        best_iter = min_diff_idx + 2
+    print(f"[INFO] 迭代阈值 (A,B,…,Tₙ) = {thresholds}")
+    print(f"[INFO] 最佳迭代轮数 = 第 {best_iter} 次 → 阈值 = {thresholds[best_iter-1]}")
+    return thresholds, best_iter
 
 def compress_low_levels(y: np.ndarray, thr: int) -> np.ndarray:
-    """把所有 < thr 的像素提升为 thr（即把 [0,thr) → thr）。"""
     yc = y.copy()
     yc[yc < thr] = thr
     return yc
 
-def stretch_histogram(y: np.ndarray, low: int) -> np.ndarray:
-    """把区间 [low,255] 线性映射到 [0,255]。"""
-    scale = 255.0 / max(1, 255 - low)
-    yst = ((y.astype(np.float32) - low) * scale).clip(0, 255)
-    return yst.astype(np.uint8)
+# ------------------- 锐化 ------------------- #
+def sharpen_unsharp_mask(gray: np.ndarray,
+                        amount: float = SHARPEN_AMOUNT,
+                        ksize: int = SHARPEN_KERNEL_SIZE,
+                        sigma: float = SHARPEN_SIGMA) -> np.ndarray:
+    blurred = cv2.GaussianBlur(gray, (ksize, ksize), sigmaX=sigma, sigmaY=sigma)
+    high_freq = cv2.subtract(gray, blurred)
+    sharpened = cv2.addWeighted(gray, 1.0, high_freq, amount, 0)
+    return sharpened
 
+# ------------------- Otsu 二值化 ------------------- #
+def otsu_binary(gray: np.ndarray) -> np.ndarray:
+    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    print(f"[INFO] Otsu 自动阈值 = {_:.2f}")
+    return binary
+
+# ------------------- 导向滤波 ------------------- #
 def apply_edge_preserving_smooth(gray_uint8: np.ndarray,
                                  radius: int = GUIDED_RADIUS,
                                  eps: float = GUIDED_EPS) -> np.ndarray:
-    """
-    Edge‑Preserving Guided Filter（若无 ximgproc 则回退）。
-    返回 uint8 图像。
-    """
     try:
         if hasattr(cv2.ximgproc, "createFastGuidedFilter"):
             I = gray_uint8.astype(np.float32) / 255.0
@@ -102,156 +183,158 @@ def apply_edge_preserving_smooth(gray_uint8: np.ndarray,
             I = gray_uint8.astype(np.float32) / 255.0
             out = cv2.ximgproc.guidedFilter(I, I, radius, eps)
             return (out * 255).astype(np.uint8)
-        # fallback: OpenCV 自带的 edgePreservingFilter
+        # fallback
         return cv2.edgePreservingFilter(gray_uint8, flags=1, sigma_s=60, sigma_r=0.4)
     except Exception as e:
         print(f"[WARN] 导向滤波失效，回退至 bilateralFilter，原因: {e}")
         return cv2.bilateralFilter(gray_uint8, d=9, sigmaColor=75, sigmaSpace=75)
 
+# ------------------- 边缘恢复 ------------------- #
 def edge_restore_on_y(original_y: np.ndarray,
                      processed_y: np.ndarray,
                      low: int = CANNY_LOW,
                      high: int = CANNY_HIGH,
                      dilate_k: int = DILATE_KERNEL_SIZE,
                      iterations: int = DILATE_ITERATIONS) -> np.ndarray:
-    """
-    用原始 Y 的强 Canny 边缘把已经平滑的 Y 中被抹掉的细节恢复回来。
-    """
     edges = cv2.Canny(original_y, low, high)
     if dilate_k > 0:
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
-                                           (dilate_k, dilate_k))
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilate_k, dilate_k))
         edges = cv2.dilate(edges, kernel, iterations=iterations)
     mask = edges != 0
     out = processed_y.copy()
     out[mask] = original_y[mask]
     return out
 
-def sharpen_unsharp_mask(gray: np.ndarray,
-                        amount: float = SHARPEN_AMOUNT,
-                        ksize: int = SHARPEN_KERNEL_SIZE,
-                        sigma: float = SHARPEN_SIGMA) -> np.ndarray:
-    """Unsharp‑Mask 锐化：gray + amount * (gray - blur(gray))"""
-    blurred = cv2.GaussianBlur(gray, (ksize, ksize), sigmaX=sigma, sigmaY=sigma)
-    high_freq = cv2.subtract(gray, blurred)
-    sharpened = cv2.addWeighted(gray, 1.0, high_freq, amount, 0)
-    return sharpened
+# ------------------- 统计信息 ------------------- #
+def calculate_y_median(y_channel: np.ndarray, name: str = "Y通道") -> float:
+    median = float(np.median(y_channel))
+    print(f"\n📊 {name} 中位数 = {median:.2f}")
+    return median
 
-def simple_binary_threshold(gray: np.ndarray,
-                            thresh: int = BINARY_THRESHOLD,
-                            maxval: int = 255) -> np.ndarray:
-    """
-    单阈值二值化（阈值为 `thresh`），返回 0 / `maxval` 的 uint8 图像。
-    若后期想尝试 Otsu，只需把 `cv2.threshold(..., cv2.THRESH_OTSU)` 替换进去。
-    """
-    _, binary = cv2.threshold(gray, thresh, maxval, cv2.THRESH_BINARY)
-    return binary
+# ------------------- 保存帮助函数 ------------------- #
+def save_stage(name: str, img: np.ndarray) -> None:
+    path = OUTPUT_DIR / f"{name}.png"
+    cv2.imwrite(str(path), img)
+    print(f"[INFO] 已保存: {path}")
 
-def calculate_y_stats(y_channel: np.ndarray, name: str = "Y通道") -> Dict[str, float]:
-    stats = {
-        "平均值": float(np.mean(y_channel)),
-        "中位数": float(np.median(y_channel)),
-        "标准差": float(np.std(y_channel)),
-        "最小值": int(np.min(y_channel)),
-        "最大值": int(np.max(y_channel)),
-    }
-    print(f"\n📊 {name} 统计信息:")
-    for k, v in stats.items():
-        print(f"  {k}: {v:.2f}")
-    return stats
+# ✅ 小面积噪声去除（连通域分析） ----------
+def remove_small_noise_regions(binary_mask: np.ndarray,
+                               min_area: int = 150) -> np.ndarray:
+    """
+    移除二值图像中面积小于 min_area 的白色连通区域，保留大区域。
+    """
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary_mask,
+                                                                  connectivity=8)
+    clean_mask = np.zeros_like(binary_mask)
+    for label in range(1, num_labels):          # 跳过背景 (label 0)
+        area = stats[label, cv2.CC_STAT_AREA]
+        if area >= min_area:
+            clean_mask[labels == label] = 255
+    return clean_mask
 
 # ============================= 主流程 ============================= #
 def main() -> None:
     ensure_dir(OUTPUT_DIR)
 
-    # -------------------------------------------------
-    # 1️⃣ 读取图像并分离 YUV
-    # -------------------------------------------------
-    img_bgr = load_image(INPUT_PATH)
-    Y_orig, U, V = rgb2yuv(img_bgr)
+    # ------------------- 1️⃣ 读取图像并分离 YUV ------------------- #
+    with _time_it("load_image & split YUV"):
+        img_bgr = load_image(INPUT_PATH)
+        Y_orig, U, V = rgb2yuv(img_bgr)
+        save_stage("Y_original", Y_orig)
 
-    # -------------------------------------------------
-    # 2️⃣ （可选）导向滤波
-    # -------------------------------------------------
-    if ENABLE_GUIDED_FILTER:
-        Y_tmp = apply_edge_preserving_smooth(Y_orig,
-                                             radius=GUIDED_RADIUS,
-                                             eps=GUIDED_EPS)
-        print("[INFO] 导向滤波已启用")
-        cv2.imwrite(str(OUTPUT_DIR / "Y_guided.png"), Y_tmp)
-    else:
+    # ------------------- 2️⃣ 导向滤波 + 边缘恢复 ------------------- #
+    with _time_it("guided filter + edge restore"):
         Y_tmp = Y_orig.copy()
-        print("[INFO] 导向滤波已关闭（使用原始 Y）")
+        if ENABLE_GUIDED_FILTER:
+            Y_tmp = apply_edge_preserving_smooth(Y_tmp,
+                                                 radius=GUIDED_RADIUS,
+                                                 eps=GUIDED_EPS)
+            print("[INFO] 导向滤波已启用")
+        if ENABLE_EDGE_RESTORE:
+            Y_tmp = edge_restore_on_y(Y_orig, Y_tmp,
+                                      low=CANNY_LOW, high=CANNY_HIGH,
+                                      dilate_k=DILATE_KERNEL_SIZE,
+                                      iterations=DILATE_ITERATIONS)
+            print("[INFO] 边缘恢复已启用")
+        save_stage("Y_guided_edge", Y_tmp)
 
-    # -------------------------------------------------
-    # 3️⃣ （可选）边缘恢复
-    # -------------------------------------------------
-    if ENABLE_EDGE_RESTORE:
-        Y_tmp = edge_restore_on_y(Y_orig, Y_tmp,
-                                 low=CANNY_LOW,
-                                 high=CANNY_HIGH,
-                                 dilate_k=DILATE_KERNEL_SIZE,
-                                 iterations=DILATE_ITERATIONS)
-        print("[INFO] 边缘恢复已启用")
-        cv2.imwrite(str(OUTPUT_DIR / "Y_edge_restored.png"), Y_tmp)
-    else:
-        print("[INFO] 边缘恢复已关闭")
+    # ------------------- 3️⃣ 自适应中位数阈值 & 低亮度压缩 ------------------- #
+    with _time_it("adaptive median threshold"):
+        thresholds, best_iter = adaptive_median_threshold(
+            Y_tmp, max_iter=ITERATIONS, stop_median=HIGH_LIGHT_THRESH)
+        best_thr = thresholds[best_iter - 1]
 
-    # -------------------------------------------------
-    # 4️⃣ 迭代中位数阈值 → 低亮度压缩 → 直方图拉伸
-    # -------------------------------------------------
-    thresholds = iterative_median_threshold(Y_tmp, ITERATIONS)
-    final_thr = thresholds[-1]
-    print(f"[INFO] 迭代阈值 (A,B,…,Tₙ) = {thresholds}")
+    with _time_it("compress low levels"):
+        Y_compressed = compress_low_levels(Y_tmp, best_thr)
+        Y_denoised = Y_compressed   # 预留位置，后续若加入其它去噪可直接在此修改
+        save_stage("Y_compressed_denoised", Y_denoised)
 
-    Y_compressed = compress_low_levels(Y_tmp, final_thr)
-    Y_stretched  = stretch_histogram(Y_compressed, final_thr)
+    # ------------------- 4️⃣ 亮度增强（Fast‑Retinex + 分段伽马）或原始 Y ------------------- #
+    with _time_it("brightness enhancement"):
+        if ENABLE_FAST_RETINEX:
+            Y_enhanced = fast_retinex(Y_denoised)
+            print("[INFO] 使用 Fast‑Retinex 进行亮度增强")
+            # Fast‑Retinex 之后必做分段伽马
+            Y_enhanced = piecewise_gamma(Y_enhanced)
+        else:
+            Y_enhanced = Y_denoised.copy()
+            print("[INFO] 直接使用原始 Y 通道（已完成低亮度压缩），不做伽马校正")
+        save_stage("Y_brightness_gamma", Y_enhanced)
 
-    cv2.imwrite(str(OUTPUT_DIR / "Y_compressed.png"), Y_compressed)
-    cv2.imwrite(str(OUTPUT_DIR / "Y_stretched.png"), Y_stretched)
+    # ------------------- 5️⃣ 锐化 ------------------- #
+    with _time_it("sharpen"):
+        if ENABLE_SHARPEN:
+            Y_sharpened = sharpen_unsharp_mask(Y_enhanced,
+                                               amount=SHARPEN_AMOUNT,
+                                               ksize=SHARPEN_KERNEL_SIZE,
+                                               sigma=SHARPEN_SIGMA)
+            print("[INFO] 锐化已启用")
+        else:
+            Y_sharpened = Y_enhanced.copy()
+        save_stage("Y_sharpened", Y_sharpened)
 
-    # -------------------------------------------------
-    # 5️⃣ （可选）锐化（在拉伸后的图上执行）
-    # -------------------------------------------------
-    if ENABLE_SHARPEN:
-        Y_final = sharpen_unsharp_mask(Y_stretched,
-                                       amount=SHARPEN_AMOUNT,
-                                       ksize=SHARPEN_KERNEL_SIZE,
-                                       sigma=SHARPEN_SIGMA)
-        print("[INFO] 锐化已启用")
-        cv2.imwrite(str(OUTPUT_DIR / "Y_sharpened.png"), Y_final)
-    else:
-        Y_final = Y_stretched
-        print("[INFO] 锐化已关闭")
-
-    # -------------------------------------------------
-    # 6️⃣ （可选）二值化（单阈值）   ← **新增步骤**
-    # -------------------------------------------------
+    # ------------------- 6️⃣ 二值化 + 小噪声去除 ------------------- #
     if ENABLE_BINARY:
-        Y_binary = simple_binary_threshold(Y_final, thresh=BINARY_THRESHOLD)
-        print("[INFO] 二值化已启用 (阈值 = %d)" % BINARY_THRESHOLD)
-        cv2.imwrite(str(OUTPUT_DIR / "Y_binary.png"), Y_binary)
+        with _time_it("otsu binary"):
+            Y_binary = otsu_binary(Y_sharpened)
+            save_stage("Y_binary", Y_binary)
+            print("[INFO] Otsu 二值化已完成")
+        with _time_it("remove small noise"):
+            MIN_AREA_THRESHOLD = 150
+            Y_binary_clean = remove_small_noise_regions(Y_binary,
+                                                        min_area=MIN_AREA_THRESHOLD)
+            save_stage("Y_binary_cleaned", Y_binary_clean)
+            print(f"[INFO] 已移除面积 < {MIN_AREA_THRESHOLD} 的噪声区域")
     else:
-        Y_binary = None
+        Y_binary_clean = None
         print("[INFO] 二值化已关闭")
 
-    # -------------------------------------------------
-    # 7️⃣ 合并 U、V → BGR（得到最终彩色图）
-    # -------------------------------------------------
-    yuv_final = cv2.merge([Y_final, U, V])
-    final_color = cv2.cvtColor(yuv_final, cv2.COLOR_YUV2BGR)
+    # ------------------- 7️⃣ 合成最终彩色图 ------------------- #
+    with _time_it("reconstruct final color"):
+        if Y_binary_clean is not None:
+            mask_white = Y_binary_clean == 255
+            Y_final = np.zeros_like(Y_sharpened)
+            U_final = np.full_like(U, 128)
+            V_final = np.full_like(V, 128)
+            Y_final[mask_white] = Y_orig[mask_white]
+            U_final[mask_white] = U[mask_white]
+            V_final[mask_white] = V[mask_white]
+        else:
+            Y_final = Y_sharpened
+            U_final = U
+            V_final = V
 
-    # -------------------------------------------------
-    # 8️⃣ 保存全部关键结果（全部 PNG，保持无损）
-    # -------------------------------------------------
-    cv2.imwrite(str(OUTPUT_DIR / "orig_bgr.png"), img_bgr)      # 原始彩色
-    cv2.imwrite(str(OUTPUT_DIR / "Y_original.png"), Y_orig)    # 原始 Y
-    # 已保存的中间文件：Y_guided.png、Y_edge_restored.png、Y_compressed.png、
-    #                     Y_stretched.png、Y_sharpened.png（若开启）
-    #                     Y_binary.png（若开启）
-    cv2.imwrite(str(OUTPUT_DIR / "final_color.png"), final_color)  # 最终彩色（含所有处理）
+        yuv_final = cv2.merge([Y_final, U_final, V_final])
+        final_color = cv2.cvtColor(yuv_final, cv2.COLOR_YUV2BGR)
+        save_stage("final_color", final_color)
 
-    print(f"[INFO] 所有结果已保存至: {OUTPUT_DIR}")
+    # ------------------- 8️⃣ 保存原始图（便于对比） ------------------- #
+    with _time_it("save original BGR"):
+        save_stage("orig_bgr", img_bgr)
+
+    # ------------------- 统计时间 ------------------- #
+    print_time_summary()
+    print(f"\n[INFO] 所有结果已保存至: {OUTPUT_DIR.resolve()}\n")
 
 if __name__ == "__main__":
     main()
