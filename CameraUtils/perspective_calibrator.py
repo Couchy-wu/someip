@@ -14,9 +14,10 @@ class PerspectiveCalibrator:
       - 透视变换校正（拉直）
       - 变换图像保存
       - 四边形等比例缩放（z: +10%, x: -10%, e: 重置缩放比例）
+      - 输出分辨率预设（在初始化时设置）
     适用于文档扫描、投影对齐等场景。
     """
-    def __init__(self, image_path, display_width=960, display_height=540):
+    def __init__(self, image_path, display_width=960, display_height=540, output_resolution="original"):
         self.original_image = cv2.imread(image_path)
         if self.original_image is None:
             raise FileNotFoundError(f"无法加载图像: {image_path}")
@@ -31,6 +32,10 @@ class PerspectiveCalibrator:
         self.working_image = self.display_image.copy()
         self.points = []        # 存储显示坐标 (x, y)
         self.real_points = []   # 存储原始图像坐标
+        
+        # 输出分辨率设置（在代码中硬编码设置）
+        self.output_resolution = output_resolution  # "720p", "1080p", "original"
+        
         # 配置文件路径
         self.image_path = Path(image_path)
         self.config_path = self.image_path.parent / "fixed_corners.json"
@@ -280,7 +285,15 @@ class PerspectiveCalibrator:
         cv2.resizeWindow("Manual Corner Detector", self.display_width, self.display_height)
         cv2.imshow("Manual Corner Detector", self.working_image)
         cv2.setMouseCallback("Manual Corner Detector", self.click_event)
-
+        
+        # 显示当前分辨率设置
+        resolution_names = {
+            "720p": "720P (1280x720)",
+            "1080p": "1080P (1920x1080)",
+            "original": f"原始尺寸 ({self.orig_width}x{self.orig_height})"
+        }
+        current_res_name = resolution_names.get(self.output_resolution, "未知")
+        
         print("\n📌 操作说明:")
         print("   - 点击图像选择4个角点（顺序任意）")
         print("   - 选完4个点后将自动保存配置")
@@ -289,6 +302,7 @@ class PerspectiveCalibrator:
         print("   - 'z' 键: 扩大10%")
         print("   - 'x' 键: 缩小10%")
         print("   - 'w' 键: 保存拉直后的图像")
+        print(f"   - 当前输出分辨率: {current_res_name}")
         print("   - ESC 键: 退出程序")
         
         # --- 使用非阻塞循环，支持热更新 ---
@@ -333,11 +347,15 @@ class PerspectiveCalibrator:
             self.corners["bottom_left_corner"]
         ], dtype="float32")
         
-        # 使用原始图像尺寸作为目标尺寸
-        width = self.orig_width
-        height = self.orig_height
+        # 根据分辨率设置计算目标尺寸
+        if self.output_resolution == "720p":
+            width, height = 1280, 720
+        elif self.output_resolution == "1080p":
+            width, height = 1920, 1080
+        else:  # original
+            width, height = self.orig_width, self.orig_height
         
-        # 目标矩形的四个点（原始图像大小）
+        # 目标矩形的四个点
         pts_dst = np.array([
             [0, 0],
             [width - 1, 0],
@@ -359,11 +377,17 @@ class PerspectiveCalibrator:
         # 创建显示用的缩小版本
         display_warped = cv2.resize(self.warped_image, (self.display_width, self.display_height))
         
-        # 显示变换后的图像（显示尺寸）
+        # 显示变换后的图像
         cv2.namedWindow("Warped View", cv2.WINDOW_NORMAL)
         cv2.resizeWindow("Warped View", self.display_width, self.display_height)
         cv2.imshow("Warped View", display_warped)
-        print(f"透视变换完成")
+        
+        resolution_names = {
+            "720p": "720P (1280x720)",
+            "1080p": "1080P (1920x1080)",
+            "original": f"原始尺寸 ({self.orig_width}x{self.orig_height})"
+        }
+        print(f"透视变换完成 → 输出分辨率: {resolution_names[self.output_resolution]}")
     
     # 内部类：文件监听器
     class ConfigFileWatcher:
@@ -408,12 +432,22 @@ class PerspectiveCalibrator:
 # 使用示例
 if __name__ == "__main__":
     image_path = "CameraUtils/NEW.jpg"  # 替换为你的图像路径
+    
+    # --- 快速设置输出分辨率（在此修改）---
+    # 可选值："720p" | "1080p" | "original"
+    OUTPUT_RESOLUTION = "720p"  # ←←← 在这里修改输出分辨率
+    
     # --- 可选：检查图像是否存在 ---
     if not Path(image_path).exists():
         print(f"图像文件不存在: {image_path}")
     else:
-        # 使用默认 960×540 显示尺寸，校正后图像保持原始尺寸
-        detector = PerspectiveCalibrator(image_path)
+        # 创建校准器实例，使用预设的输出分辨率
+        detector = PerspectiveCalibrator(
+            image_path, 
+            display_width=960,
+            display_height=540,
+            output_resolution=OUTPUT_RESOLUTION  # 应用预设分辨率
+        )
         corners = detector.run()
 
     # (640, 360),   # nHD
