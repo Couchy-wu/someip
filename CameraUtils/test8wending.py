@@ -6,7 +6,7 @@
 # 3️⃣ 自适应中位数阈值迭代 → 低亮度压缩
 # 4️⃣ 亮度增强（Fast‑Retinex + 全局 γ）或仅使用原始 Y 通道
 # 5️⃣ 锐化（可选）
-# 6️⃣ Otsu 二值化 + 小面积噪声去除
+# 6️⃣ Otsu 二值化 + 小面积噪声去除（新增开关控制）
 # 7️⃣ 彩色图合成
 # 8️⃣ 只保存最终彩色图（final_color.png）
 # --------------------------------------------------------------
@@ -22,6 +22,7 @@ ENABLE_GUIDED_FILTER = False   # 是否在亮度通道上执行导向滤波
 ENABLE_EDGE_RESTORE  = False   # 导向滤波后是否把原始强边缘恢复回去
 ENABLE_SHARPEN       = False   # 是否在亮度增强后执行锐化
 ENABLE_BINARY        = True    # 是否对最终亮度图做 Otsu 二值化
+ENABLE_SMALL_NOISE_REMOVE = True  # 是否启用小面积噪声去除（新增开关）
 # ---------- Fast‑Retinex ----------
 FAST_RETINEX_SIGMA = 80          # 高斯模糊的标准差（尺度），越大平滑范围越广
 FAST_RETINEX_GAIN  = 128.0       # 增益系数，用于放大对数差分的幅度
@@ -29,7 +30,7 @@ FAST_RETINEX_OFFSET = 0.0        # 偏置，可在需要时微调整体亮度
 # ---------- 全局伽马 ----------
 GLOBAL_GAMMA = 0.8               # <1 ⇒ 提亮整体；>1 ⇒ 整体变暗
 # ---------- 路径 ----------
-INPUT_PATH   = "CameraUtils/enhanced_result.jpg"   # 待处理的原始图像路径
+INPUT_PATH   = "CameraUtils/NEW_warped.jpg"   # 待处理的原始图像路径
 OUTPUT_DIR   = Path("./output")               # 只保存 final_color.png
 # ---------- 其余处理 ----------
 ITERATIONS   = 10               # 自适应中位数阈值的最大迭代次数
@@ -44,7 +45,7 @@ SHARPEN_KERNEL_SIZE = 3        # 锐化时高斯模糊的核大小（必须为�
 SHARPEN_SIGMA = 0.0            # 锐化时高斯模糊的 sigma（0 ⇒ 自动计算）
 # ---------- 全局参数 ----------
 GUIDED_DOWNSAMPLE_SCALE = 1   # 导向滤波的降采样倍率（1 = 不降采样）
-MIN_AREA_THRESHOLD = 50      # 小面积噪声去除阈值（像素）
+MIN_AREA_THRESHOLD = 30      # 小面积噪声去除阈值（像素）
 # ---------- Fast‑Retinex 加速选项 ----------
 RETINEX_DOWNSAMPLE_SCALE = 2          # 1 → 不降采样；2 → 1/2 分辨率；4 → 1/4 分辨率 …
 RETINEX_USE_BOXFILTER   = True       # True → 用积分图实现的 boxFilter（近似高斯，极快）
@@ -337,11 +338,17 @@ def main() -> None:
     if ENABLE_BINARY:
         with _time_it("otsu binary"):
             Y_binary = otsu_binary(Y_tmp)
-        with _time_it("remove small noise"):
-            Y_binary_clean = remove_small_noise_regions(
-                Y_binary, min_area=MIN_AREA_THRESHOLD
-            )
-        print("[INFO] 二值化 + 小噪声去除已完成")
+        
+        # 新增开关控制小面积噪声去除
+        if ENABLE_SMALL_NOISE_REMOVE:
+            with _time_it("remove small noise"):
+                Y_binary_clean = remove_small_noise_regions(
+                    Y_binary, min_area=MIN_AREA_THRESHOLD
+                )
+            print(f"[INFO] 二值化 + 小噪声去除已完成（阈值={MIN_AREA_THRESHOLD}）")
+        else:
+            Y_binary_clean = Y_binary.copy()
+            print("[INFO] 小噪声去除已关闭，仅执行二值化")
     else:
         print("[INFO] 二值化已关闭")
 
