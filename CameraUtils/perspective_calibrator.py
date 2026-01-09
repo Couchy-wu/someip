@@ -33,6 +33,12 @@ class PerspectiveCalibrator:
         self.points = []        # 存储显示坐标 (x, y)
         self.real_points = []   # 存储原始图像坐标
         
+        # ---------- 新增用于拖拽的状态 ----------
+        self.dragging = False          # 是否正在拖拽
+        self.drag_point_idx = None     # 正在拖拽的点在 self.points 中的下标
+        self.point_order = []          # 角点键的顺序，例如 ["top_left_corner", ...]
+        # -----------------------------------------
+
         # 输出分辨率设置（在代码中硬编码设置）
         self.output_resolution = output_resolution  # "720p", "1080p", "original"
         
@@ -47,11 +53,11 @@ class PerspectiveCalibrator:
         # 启动配置文件监听（热更新）
         self.watcher = self.ConfigFileWatcher(self, self.config_path)
         self.watcher.start()
-
     def click_event(self, event, x, y, flags, param):
-        """鼠标点击，手动选择图像中的四个角点"""
-        if event == cv2.EVENT_LBUTTONDOWN:      # 判断鼠标左键点击事件
-            if len(self.points) < 4:
+        """鼠标点击，手动选择图像中的四个角点或拖拽已选角点"""
+        # ---------- 1️⃣ 仍在收集 4 个点 ----------
+        if len(self.points) < 4:
+            if event == cv2.EVENT_LBUTTONDOWN:      # 判断鼠标左键点击事件
                 self.points.append((x, y))
                 real_x = int(x * self.scale_x)
                 real_y = int(y * self.scale_y)
@@ -59,9 +65,48 @@ class PerspectiveCalibrator:
                 # 在图像上标记
                 cv2.circle(self.working_image, (x, y), 5, (0, 255, 0), -1)
                 cv2.imshow("Manual Corner Detector", self.working_image)
-                # print(f"点击位置 (显示): ({x}, {y}) → 原图: ({real_x}, {real_y})")
                 if len(self.points) == 4:
                     self._finalize_quad_selection()
+            return
+
+        # ---------- 2️⃣ 已有 4 点 → 进入拖拽模式 ----------
+        # 2.1 鼠标按下 → 判断是否点在某个角点附近
+        if event == cv2.EVENT_LBUTTONDOWN:
+            for i, pt in enumerate(self.points):
+                # 设定“点击半径”阈值 10 像素
+                if (x - pt[0]) ** 2 + (y - pt[1]) ** 2 <= 10 ** 2:
+                    self.dragging = True
+                    self.drag_point_idx = i
+                    break
+
+        # 2.2 鼠标移动且处于拖拽状态 → 实时更新坐标并重绘
+        elif event == cv2.EVENT_MOUSEMOVE and self.dragging:
+            idx = self.drag_point_idx
+            # 更新显示坐标
+            self.points[idx] = (x, y)
+            # 更新原图坐标
+            real_x = int(x * self.scale_x)
+            real_y = int(y * self.scale_y)
+            self.real_points[idx] = (real_x, real_y)
+
+            # 同步到 corners 字典（利用 point_order 保存的键名）
+            corner_key = self.point_order[idx]
+            self.corners[corner_key] = (real_x, real_y)
+
+            # 重新绘制四边形
+            self._redraw_with_corners()
+
+        # 2.3 鼠标左键弹起 → 结束拖拽，保存并重新做透视变换
+        elif event == cv2.EVENT_LBUTTONUP and self.dragging:
+            self.dragging = False
+            self.drag_point_idx = None
+
+            # 将当前拖拽后的结果设为新的“原始”角点，便于后续缩放基准
+            self.original_corners = self.corners.copy()
+            self.current_scale = 1.0
+
+            self.save_corners()
+            self.apply_perspective_transform()
 
     def _finalize_quad_selection(self):
         """确认并处理用户选择的四个角点, 完成四边形的构建"""
@@ -101,7 +146,15 @@ class PerspectiveCalibrator:
             "bottom_left_corner": tuple(map(int, bl)),
             "bottom_right_corner": tuple(map(int, br))
         }
-        
+
+        # 记录角点顺序
+        self.point_order = [
+            "top_left_corner",
+            "top_right_corner",
+            "bottom_left_corner",
+            "bottom_right_corner"
+        ]
+
         # 保存原始角点作为缩放基准
         self.original_corners = self.corners.copy()
         self.current_scale = 1.0
@@ -444,8 +497,8 @@ if __name__ == "__main__":
         # 创建校准器实例，使用预设的输出分辨率
         detector = PerspectiveCalibrator(
             image_path, 
-            display_width=960,
-            display_height=540,
+            display_width=640,
+            display_height=360,
             output_resolution=OUTPUT_RESOLUTION  # 应用预设分辨率
         )
         corners = detector.run()
