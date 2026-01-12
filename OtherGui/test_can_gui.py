@@ -9,6 +9,9 @@ import re
 import time
 import xml.etree.ElementTree as ET
 from CanDataProcessing.can_testcase_runner import LogParser
+from PIL import Image, ImageTk
+from CameraUtils import camera_viewer
+
 
 # 判断是否被 import 调用
 IS_STANDALONE = __name__ == "__main__"
@@ -28,6 +31,10 @@ class CANFDGUI:
             # 被 main.py 调用时，使用传入的 StringVar
             self.selected_file = selected_file
 
+        # ---------- 线程控制 ----------
+        self._stop_camera_thread = False          # 用来在关闭窗口时让摄像头回调提前退出
+        self._after_id = None                     # 用来保存 after 的 id
+
         # 一些变量
         self.repeat_var = tk.StringVar(value="1")   # 用例重复检测次数
         self.rounds_var = tk.StringVar(value="1")   # 完整测试执行轮数
@@ -36,6 +43,25 @@ class CANFDGUI:
         self.device_handle = None               # 设备句柄
         self.channel_handles = None             # 通道句柄
         self.receive_threads = None             # 接收线程列表        
+
+        # ---------- 右上角摄像头显示区域 ----------
+        # 用一个固定大小的 Label 充当画布（640×360）
+        self.video_label = tk.Label(root, bg="black")
+        self.video_label.grid(row=0, column=4, rowspan=3,
+                             padx=10, pady=5, sticky='n')
+        # 预先准备一张黑色占位图（640×360）
+        self._black_placeholder = ImageTk.PhotoImage(
+            Image.new('RGB', (640, 360), (0, 0, 0))
+        )
+        self.video_label.configure(image=self._black_placeholder)
+        self.video_label.image = self._black_placeholder   # 防止被 GC
+
+        # 启动摄像头采集线程（始终运行，内部回调自行判断是否显示）
+        self._camera_thread = threading.Thread(
+            target=self._run_camera_viewer, daemon=True
+        )
+        self._camera_thread.start()
+
 
         # 图像测试勾选框状态
         self.image_test_var = tk.IntVar(value=0)   # 默认开关项 0 – 关闭， 1 – 开启
@@ -204,6 +230,55 @@ class CANFDGUI:
 
         # 拦截窗口关闭事件：必须先关闭设备
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+    # --------------------- 摄像头线程入口 ---------------------
+    def _run_camera_viewer(self):
+        """
+        在子线程中调用 camera_viewer.main，使用回调拿到每帧 RGB 数据。
+        camera_viewer.main 在 callback 模式下会一直循环读取摄像头，
+        这里不需要关心退出，只要主程序结束线程会随进程一起结束。
+        """
+        try:
+            camera_viewer.main(display_callback=self._camera_frame_callback)
+        except Exception as e:
+            # 若摄像头初始化失败，保持黑屏并打印错误
+            print(f"[WARN] camera_viewer 运行异常: {e}")
+
+    def _camera_frame_callback(self, frame_rgb):
+        """
+        camera_viewer 通过此回调把每帧 RGB 的 numpy 数组送进来。
+        - 当 “是否开启图像测试” 为 1 时显示真实画面；
+        - 否则用全黑图像覆盖。
+        """
+        # ----------- 若窗口已请求关闭，则直接返回 ----------
+        if getattr(self, "_stop_camera_thread", False):
+            return
+        try:
+            if self.image_test_var.get() == 1:
+                # 正常显示摄像头画面
+                img = Image.fromarray(frame_rgb)
+            else:
+                # 开关关闭 → 用黑屏占位
+                img = Image.new('RGB', (frame_rgb.shape[1], frame_rgb.shape[0]), (0, 0, 0))
+            # 缩放到 640×360（对应 OUTPUT_WIDTH / OUTPUT_HEIGHT）
+            img = img.resize((640, 360), Image.LANCZOS)
+            photo = ImageTk.PhotoImage(img)
+            # 在主线程中更新 UI（Tk 只能在主线程操作）
+            self._after_id = self.root.after(0, self._update_video_label, photo)
+        except Exception as err:
+            print(f"[ERROR] 摄像头回调异常: {err}")
+
+    def _update_video_label(self, photo_image):
+        """把生成好的 PhotoImage 放到 video_label 上（只能在主线程调用）"""
+        # ---------- 如果标签已经被销毁，直接返回 ----------
+        if not getattr(self, "video_label", None) or not self.video_label.winfo_exists():
+            return
+        try:
+            self.video_label.configure(image=photo_image)
+            self.video_label.image = photo_image   # 防止被垃圾回收
+        except tk.TclError:
+            # 可能在窗口销毁的瞬间被调用，安全忽略
+            pass
 
     # --------------------- CAN设备初始化 ---------------------
     def start_init(self):
@@ -500,7 +575,7 @@ class CANFDGUI:
     def on_closing(self):
         """
         安全关闭检查：只有当“关闭设备”按钮不可用时才允许退出。
-        当按钮仍可用时弹出警告并保持窗口在桌面前端。
+        同时显式结束摄像头线程，防止已排好的 after 回调触发错误
         """
         if self.close_btn.winfo_exists() and str(self.close_btn['state']) == 'normal':
             import tkinter.messagebox as messagebox
@@ -513,7 +588,20 @@ class CANFDGUI:
             self.root.attributes("-topmost", True)
             self.root.after(0, lambda: self.root.attributes("-topmost", False))
             return
-            
+
+        # 让摄像头线程退出
+        self._stop_camera_thread = True
+        # 取消可能已经排好的 after
+        if getattr(self, "_after_id", None):
+            try:
+                self.root.after_cancel(self._after_id)
+            except Exception:
+                pass
+            self._after_id = None
+        # 等待线程自行结束
+        if hasattr(self, "_camera_thread") and self._camera_thread.is_alive():
+            self._camera_thread.join(timeout=1.0)   # 最多等 1 秒
+        # 最后销毁窗口
         self.root.destroy()
 
 

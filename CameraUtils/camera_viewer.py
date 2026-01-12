@@ -146,71 +146,94 @@ def take_screenshot(frame, save_path="Resources/Picture"):
     else:
         print(f"[WARN] 截图保存失败: {filepath}")
 
-def main():
-    # 摄像头初始化
-    cap, cam_index = try_open_camera((0, 1))
+def main(display_callback=None):
+    """
+    摄像头主函数（无全局变量，配置写死，支持回调嵌入）
 
-    # 获取采集分辨率（用于读取帧）
+    参数:
+        display_callback: 接收处理后的 RGB 帧（numpy array），用于嵌入 GUI
+                          若为 None，则以独立窗口模式运行（原逻辑）
+    """
+    import time  # 局部导入，避免污染
+
+    # === 写死配置项 ===
+    CAMERA_INDICES = (0, 1)
+    CAPTURE_TARGET_WIDTH = 1280
+    CAPTURE_TARGET_HEIGHT = 720
+    DISPLAY_WINDOW_WIDTH = 640   # 独立运行时窗口大小
+    DISPLAY_WINDOW_HEIGHT = 360
+    OUTPUT_WIDTH = 640           # 嵌入模式输出尺寸（横屏 16:9）
+    OUTPUT_HEIGHT = 360
+    TARGET_FPS = 30
+    FRAME_DELAY_MS = 1000 // TARGET_FPS
+
+    # === 摄像头初始化 ===
+    cap, cam_index = try_open_camera(
+        indices=CAMERA_INDICES,
+        target_width=CAPTURE_TARGET_WIDTH,
+        target_height=CAPTURE_TARGET_HEIGHT,
+        target_fps=TARGET_FPS
+    )
+
+    # === 获取采集分辨率 ===
     if cam_index is not None and cap.isOpened():
-        # 有摄像头 → 读取真实分辨率
         resolution = get_camera_resolution(cap)
         if resolution is None:
-            print("[WARN] 获取摄像头分辨率失败，使用默认 720P 图像采集分辨率")
-            CAPTURE_W, CAPTURE_H = 1280, 720  # 假设我们仍按720P采集
+            capture_w, capture_h = 1280, 720
         else:
-            CAPTURE_W, CAPTURE_H = resolution
-            print(f"[INFO] 获取摄像头分辨率成功, 图像采集分辨率：{CAPTURE_W}x{CAPTURE_H}")
+            capture_w, capture_h = resolution
     else:
-        # 没有摄像头 → 使用默认尺寸
-        CAPTURE_W, CAPTURE_H = 1280, 720
-        print(f"[INFO] 未识别到摄像头，使用模拟 720P 图像采集分辨率")
-    # 创建窗口
+        capture_w, capture_h = 1280, 720
+
+    # === 独立模式：创建 OpenCV 窗口 ===
     win_name = "Camera"
-    DISPLAY_W, DISPLAY_H = 640, 360         # 设置显示窗口大小    # (640, 360),   # (960, 540), 
-    cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(win_name, DISPLAY_W, DISPLAY_H)
-    print(f"[INFO] 显示窗口大小设置为: {DISPLAY_W}x{DISPLAY_H}")
+    if display_callback is None:
+        cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(win_name, DISPLAY_WINDOW_WIDTH, DISPLAY_WINDOW_HEIGHT)
+        print(f"[INFO] 显示窗口大小设置为: {DISPLAY_WINDOW_WIDTH}x{DISPLAY_WINDOW_HEIGHT}")
 
-    # 主循环（唯一的循环）
-    while True:
-        # 读取帧
-        if cap.isOpened():
-            ret, frame = cap.read()
-            if not ret:                     # 读取失败 → 用黑帧补位
-                frame = np.zeros((CAPTURE_H, CAPTURE_W, 3), dtype=np.uint8)
-        else:
-            # 没有摄像头 → 直接生成黑帧
-            frame = np.zeros((CAPTURE_H, CAPTURE_W, 3), dtype=np.uint8)
+    # === 主循环 ===
+    try:
+        while True:
+            # --- 读取帧 ---
+            if cap.isOpened():
+                ret, frame = cap.read()
+                if not ret:
+                    frame = np.zeros((capture_h, capture_w, 3), dtype=np.uint8)
+            else:
+                frame = np.zeros((capture_h, capture_w, 3), dtype=np.uint8)
 
-        # 如果是“无摄像头”模式，在画面中央写提示文字
-        if cam_index is None:
-            draw_centered_text(frame, "Camera Not Found", color=(0, 255, 0), scale=3, thickness=7)
+            # --- 无摄像头时绘制提示文字 ---
+            if cam_index is None:
+                draw_centered_text(frame, "Camera Not Found", color=(0, 255, 0), scale=3, thickness=7)
 
-        # 等比缩放 + 黑边填充
-        display_frame = resize_with_aspect_ratio(frame, DISPLAY_W, DISPLAY_H)
+            # --- 等比缩放 + 黑边填充 ---
+            display_frame = resize_with_aspect_ratio(
+                frame,
+                OUTPUT_WIDTH if display_callback else DISPLAY_WINDOW_WIDTH,
+                OUTPUT_HEIGHT if display_callback else DISPLAY_WINDOW_HEIGHT
+            )
 
-        # 显示缩放后的帧
-        cv2.imshow(win_name, display_frame)
+            # --- 分发模式 ---
+            if display_callback is None:
+                # 独立模式：使用 OpenCV 显示
+                cv2.imshow(win_name, display_frame)
+                key = cv2.waitKey(FRAME_DELAY_MS) & 0xFF
+                if cv2.getWindowProperty(win_name, cv2.WND_PROP_VISIBLE) < 1 or key == 27:
+                    break
+            else:
+                # 嵌入模式：转为 RGB 并回调
+                display_frame_rgb = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
+                display_callback(display_frame_rgb)
 
-        # 退出检测
-        target_fps = 30
-        delay_ms   = int(1000 / target_fps)   # 33 ms
-        key = cv2.waitKey(delay_ms) & 0xFF     
+            # 控制帧率
+            time.sleep(1 / TARGET_FPS)
 
-        if cv2.getWindowProperty(win_name, cv2.WND_PROP_VISIBLE) < 1:
-            print("[INFO] 检测到窗口关闭，准备退出")
-            break
-        # 按下 'p' 键截图
-        # if key == ord('p'):
-        #     take_screenshot(frame)  # 保存原始分辨率图像
-        # # 兼容键盘退出（可选）
-        # if key == 27: 
-        #     print("[INFO] 按下 ESC 键，准备退出")
-        #     break
+    finally:
+        cap.release()
+        if display_callback is None:
+            cv2.destroyAllWindows()
 
-    # 资源释放
-    cap.release()
-    cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
