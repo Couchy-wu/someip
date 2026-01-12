@@ -11,7 +11,7 @@ import traceback
 
 
 # 读取摄像头，并设置分辨率
-def try_open_camera(indices=(0, 1), target_width=1920, target_height=1080):
+def try_open_camera(indices=(0, 1), target_width=1280, target_height=720, target_fps=30):
     """
     按顺序尝试打开摄像头索引，并尝试设置指定分辨率。
     
@@ -33,6 +33,11 @@ def try_open_camera(indices=(0, 1), target_width=1920, target_height=1080):
             # === 尝试设置目标分辨率 ===
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, target_width)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, target_height)
+
+            # ---- 帧率----
+            cap.set(cv2.CAP_PROP_FPS, target_fps)
+            actual_fps = cap.get(cv2.CAP_PROP_FPS)
+            print(f"[INFO] 目标帧率: {target_fps} FPS, 实际帧率: {actual_fps:.2f} FPS")
 
             # 再次获取，确认是否设置成功
             w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -150,19 +155,18 @@ def main():
         # 有摄像头 → 读取真实分辨率
         resolution = get_camera_resolution(cap)
         if resolution is None:
-            print("[WARN] 获取摄像头分辨率失败，使用默认 1080P 图像采集分辨率")
-            CAPTURE_W, CAPTURE_H = 1920, 1080  # 假设我们仍按1080P采集
+            print("[WARN] 获取摄像头分辨率失败，使用默认 720P 图像采集分辨率")
+            CAPTURE_W, CAPTURE_H = 1280, 720  # 假设我们仍按720P采集
         else:
             CAPTURE_W, CAPTURE_H = resolution
             print(f"[INFO] 获取摄像头分辨率成功, 图像采集分辨率：{CAPTURE_W}x{CAPTURE_H}")
     else:
         # 没有摄像头 → 使用默认尺寸
-        CAPTURE_W, CAPTURE_H = 1920, 1080
-        print(f"[INFO] 未识别到摄像头，使用模拟 1080P 图像采集分辨率")
-
+        CAPTURE_W, CAPTURE_H = 1280, 720
+        print(f"[INFO] 未识别到摄像头，使用模拟 720P 图像采集分辨率")
     # 创建窗口
     win_name = "Camera"
-    DISPLAY_W, DISPLAY_H = 640, 360         # 设置显示窗口大小
+    DISPLAY_W, DISPLAY_H = 640, 360         # 设置显示窗口大小    # (640, 360),   # (960, 540), 
     cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(win_name, DISPLAY_W, DISPLAY_H)
     print(f"[INFO] 显示窗口大小设置为: {DISPLAY_W}x{DISPLAY_H}")
@@ -180,7 +184,7 @@ def main():
 
         # 如果是“无摄像头”模式，在画面中央写提示文字
         if cam_index is None:
-            draw_centered_text(frame, "No Camera", color=(0, 255, 0), scale=5, thickness=10)
+            draw_centered_text(frame, "Camera Not Found", color=(0, 255, 0), scale=3, thickness=7)
 
         # 等比缩放 + 黑边填充
         display_frame = resize_with_aspect_ratio(frame, DISPLAY_W, DISPLAY_H)
@@ -193,10 +197,10 @@ def main():
         if cv2.getWindowProperty(win_name, cv2.WND_PROP_VISIBLE) < 1:
             print("[INFO] 检测到窗口关闭，准备退出")
             break
-        # 按下 's' 键截图
-        if key == ord('s'):
-            take_screenshot(frame)  # 保存原始分辨率图像
-        # 兼容键盘退出（可选）
+        # 按下 'p' 键截图
+        # if key == ord('p'):
+        #     take_screenshot(frame)  # 保存原始分辨率图像
+        # # 兼容键盘退出（可选）
         # if key == 27: 
         #     print("[INFO] 按下 ESC 键，准备退出")
         #     break
