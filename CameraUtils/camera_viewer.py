@@ -193,7 +193,10 @@ def main():
         cv2.imshow(win_name, display_frame)
 
         # 退出检测
-        key = cv2.waitKey(1) & 0xFF          # 1ms 超时，几乎不影响帧率
+        target_fps = 30
+        delay_ms   = int(1000 / target_fps)   # 33 ms
+        key = cv2.waitKey(delay_ms) & 0xFF     
+
         if cv2.getWindowProperty(win_name, cv2.WND_PROP_VISIBLE) < 1:
             print("[INFO] 检测到窗口关闭，准备退出")
             break
