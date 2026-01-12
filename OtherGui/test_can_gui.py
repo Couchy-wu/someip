@@ -17,7 +17,7 @@ class CANFDGUI:
     def __init__(self, root, selected_file=None):
         self.root = root
         self.root.title("CANFD 设备控制")
-        self.root.geometry("500x300")
+        self.root.geometry("1200x800")
         self.sub_window = None  # 用于跟踪子窗口是否存在
         
         # === 修改：安全获取 selected_file ===
@@ -36,6 +36,25 @@ class CANFDGUI:
         self.device_handle = None               # 设备句柄
         self.channel_handles = None             # 通道句柄
         self.receive_threads = None             # 接收线程列表        
+
+        # 图像测试勾选框状态
+        self.image_test_var = tk.IntVar(value=0)   # 默认开关项 0 – 关闭， 1 – 开启
+
+        # 是否开启图像测试（勾选框）
+        # 文字说明
+        tk.Label(root, text="是否开启图像测试:", font=("微软雅黑", 10)).grid(
+            row=5, column=0, sticky='w', padx=12, pady=5)
+
+        # 勾选框，勾选即开启
+        tk.Checkbutton(
+            root,
+            text="开启",
+            variable=self.image_test_var,   # 绑定到上面声明的 IntVar
+            onvalue=1,                     # 勾选时的取值
+            offvalue=0,                    # 未勾选时的取值
+            font=("微软雅黑", 10)
+        ).grid(row=5, column=1, sticky='w', padx=5)
+
 
         # 按键：设备初始化按键
         self.init_btn = tk.Button(
@@ -78,9 +97,10 @@ class CANFDGUI:
             height=1,
             command=self.open_subwindow
         )
-        self.sub_btn.grid(row=0, column=4, pady=5, padx=10, sticky='e')  # 修改列位置为3，靠右对齐
+        # self.sub_btn.grid(row=0, column=4, pady=5, padx=10, sticky='e')  # 修改列位置为3，靠右对齐
+        self.sub_btn.grid(row=1, column=3, pady=5, padx=10, sticky='ew')  # 修改列位置为3，靠右对齐
         # 配置列权重，使（设备管理所在列）吸收多余空间，实现右对齐
-        root.grid_columnconfigure(4, weight=1)
+        # root.grid_columnconfigure(4, weight=1)
 
         # 按键：ON档电
         self.send_btn = tk.Button(
