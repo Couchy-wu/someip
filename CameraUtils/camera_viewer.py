@@ -8,6 +8,8 @@ import cv2
 import numpy as np
 import sys
 import traceback
+import threading          # <-- 新增
+import time               # <-- 新增（统一使用）
 
 
 # 读取摄像头，并设置分辨率
@@ -146,95 +148,160 @@ def take_screenshot(frame, save_path="Resources/Picture"):
     else:
         print(f"[WARN] 截图保存失败: {filepath}")
 
+
+# 线程化摄像头封装类
+class CameraViewer:
+    """
+    将原来的摄像头主循环封装为可在后台线程运行的对象。
+    - start()   → 在 daemon 线程中启动循环（若已在跑则直接返回）
+    - stop()    → 立刻请求退出并安全释放资源
+    - run()     → 兼容原来的直接调用方式（阻塞式运行）
+    """
+    def __init__(self, display_callback=None):
+        self.display_callback = display_callback
+
+        # ---------- 与原 main 中硬编码的配置保持一致 ----------
+        self.CAMERA_INDICES = (0, 1)
+        self.CAPTURE_TARGET_WIDTH = 1280
+        self.CAPTURE_TARGET_HEIGHT = 720
+        self.DISPLAY_WINDOW_WIDTH = 640    # 独立运行时窗口大小
+        self.DISPLAY_WINDOW_HEIGHT = 360
+        self.OUTPUT_WIDTH = 640             # 嵌入模式输出尺寸（横屏 16:9）
+        self.OUTPUT_HEIGHT = 360
+        self.TARGET_FPS = 30
+        self.FRAME_DELAY_MS = 1000 // self.TARGET_FPS
+
+        # ---------- 运行控制 ----------
+        self._stop_event = threading.Event()
+        self._thread = None
+        self.cap = None
+        self.cam_index = None
+
+    # --------------------------------------------------------------
+    # 初始化摄像头（把返回值保存为成员变量）
+    # --------------------------------------------------------------
+    def _init_camera(self):
+        self.cap, self.cam_index = try_open_camera(
+            indices=self.CAMERA_INDICES,
+            target_width=self.CAPTURE_TARGET_WIDTH,
+            target_height=self.CAPTURE_TARGET_HEIGHT,
+            target_fps=self.TARGET_FPS,
+        )
+        # 读取实际采集分辨率
+        if self.cam_index is not None and self.cap.isOpened():
+            resolution = get_camera_resolution(self.cap)
+            if resolution is None:
+                self.capture_w, self.capture_h = 1280, 720
+            else:
+                self.capture_w, self.capture_h = resolution
+        else:
+            self.capture_w, self.capture_h = 1280, 720
+
+    # --------------------------------------------------------------
+    # 主循环（原来 while True 循环搬进这里，加入 stop 标识）
+    # --------------------------------------------------------------
+    def _run_loop(self):
+        win_name = "Camera"
+        if self.display_callback is None:
+            cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
+            cv2.resizeWindow(win_name,
+                            self.DISPLAY_WINDOW_WIDTH,
+                            self.DISPLAY_WINDOW_HEIGHT)
+
+        try:
+            while not self._stop_event.is_set():
+                # ---------- 读取帧 ----------
+                if self.cap.isOpened():
+                    ret, frame = self.cap.read()
+                    if not ret:
+                        frame = np.zeros((self.capture_h,
+                                         self.capture_w, 3), dtype=np.uint8)
+                else:
+                    frame = np.zeros((self.capture_h,
+                                     self.capture_w, 3), dtype=np.uint8)
+
+                # ---------- 无摄像头提示 ----------
+                if self.cam_index is None:
+                    draw_centered_text(frame,
+                                       "Camera Not Found",
+                                       color=(0, 255, 0),
+                                       scale=3,
+                                       thickness=7)
+
+                # ---------- 等比缩放 + 黑边填充 ----------
+                display_frame = resize_with_aspect_ratio(
+                    frame,
+                    self.OUTPUT_WIDTH if self.display_callback else self.DISPLAY_WINDOW_WIDTH,
+                    self.OUTPUT_HEIGHT if self.display_callback else self.DISPLAY_WINDOW_HEIGHT,
+                )
+
+                # ---------- 分发 ----------
+                if self.display_callback is None:
+                    cv2.imshow(win_name, display_frame)
+                    key = cv2.waitKey(self.FRAME_DELAY_MS) & 0xFF
+                    if (cv2.getWindowProperty(win_name,
+                                              cv2.WND_PROP_VISIBLE) < 1
+                            or key == 27):
+                        break
+                else:
+                    rgb = cv2.cvtColor(display_frame,
+                                       cv2.COLOR_BGR2RGB)
+                    self.display_callback(rgb)
+
+                # ---------- 控制帧率 ----------
+                time.sleep(1.0 / self.TARGET_FPS)
+        finally:
+            # 确保资源一定被释放
+            if self.cap is not None:
+                self.cap.release()
+            if self.display_callback is None:
+                cv2.destroyAllWindows()
+
+    # --------------------------------------------------------------
+    # 对外启动 / 关闭接口
+    # --------------------------------------------------------------
+    def start(self):
+        """在后台 daemon 线程中启动摄像头循环（若已在跑则直接返回）。"""
+        if self._thread and self._thread.is_alive():
+            return
+        self._stop_event.clear()
+        self._init_camera()
+        self._thread = threading.Thread(target=self._run_loop,
+                                        daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        """请求结束循环并等待线程退出（子窗口关闭时调用）。"""
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join(timeout=2.0)   # 防止死锁
+        self._thread = None
+
+    def run(self):
+        """
+        保持与旧的 `if __name__ == "__main__": main()` 调用方式兼容。
+        直接在当前线程里运行（相当于原来的行为），
+        仍然可以通过 `stop()` 中断。
+        """
+        self.start()
+        if self._thread:
+            self._thread.join()
+
+
+# ----------------------------------------------------------------------
+# 6️⃣ 兼容原来的入口函数
+# ----------------------------------------------------------------------
 def main(display_callback=None):
     """
-    摄像头主函数（无全局变量，配置写死，支持回调嵌入）
-
-    参数:
-        display_callback: 接收处理后的 RGB 帧（numpy array），用于嵌入 GUI
-                          若为 None，则以独立窗口模式运行（原逻辑）
+    摄像头主函数（保持向后兼容）。
+    现在内部会实例化 ``CameraViewer`` 并调用 ``run()``。
     """
-    import time  # 局部导入，避免污染
-
-    # === 写死配置项 ===
-    CAMERA_INDICES = (0, 1)
-    CAPTURE_TARGET_WIDTH = 1280
-    CAPTURE_TARGET_HEIGHT = 720
-    DISPLAY_WINDOW_WIDTH = 640   # 独立运行时窗口大小
-    DISPLAY_WINDOW_HEIGHT = 360
-    OUTPUT_WIDTH = 640           # 嵌入模式输出尺寸（横屏 16:9）
-    OUTPUT_HEIGHT = 360
-    TARGET_FPS = 30
-    FRAME_DELAY_MS = 1000 // TARGET_FPS
-
-    # === 摄像头初始化 ===
-    cap, cam_index = try_open_camera(
-        indices=CAMERA_INDICES,
-        target_width=CAPTURE_TARGET_WIDTH,
-        target_height=CAPTURE_TARGET_HEIGHT,
-        target_fps=TARGET_FPS
-    )
-
-    # === 获取采集分辨率 ===
-    if cam_index is not None and cap.isOpened():
-        resolution = get_camera_resolution(cap)
-        if resolution is None:
-            capture_w, capture_h = 1280, 720
-        else:
-            capture_w, capture_h = resolution
-    else:
-        capture_w, capture_h = 1280, 720
-
-    # === 独立模式：创建 OpenCV 窗口 ===
-    win_name = "Camera"
-    if display_callback is None:
-        cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(win_name, DISPLAY_WINDOW_WIDTH, DISPLAY_WINDOW_HEIGHT)
-        print(f"[INFO] 显示窗口大小设置为: {DISPLAY_WINDOW_WIDTH}x{DISPLAY_WINDOW_HEIGHT}")
-
-    # === 主循环 ===
-    try:
-        while True:
-            # --- 读取帧 ---
-            if cap.isOpened():
-                ret, frame = cap.read()
-                if not ret:
-                    frame = np.zeros((capture_h, capture_w, 3), dtype=np.uint8)
-            else:
-                frame = np.zeros((capture_h, capture_w, 3), dtype=np.uint8)
-
-            # --- 无摄像头时绘制提示文字 ---
-            if cam_index is None:
-                draw_centered_text(frame, "Camera Not Found", color=(0, 255, 0), scale=3, thickness=7)
-
-            # --- 等比缩放 + 黑边填充 ---
-            display_frame = resize_with_aspect_ratio(
-                frame,
-                OUTPUT_WIDTH if display_callback else DISPLAY_WINDOW_WIDTH,
-                OUTPUT_HEIGHT if display_callback else DISPLAY_WINDOW_HEIGHT
-            )
-
-            # --- 分发模式 ---
-            if display_callback is None:
-                # 独立模式：使用 OpenCV 显示
-                cv2.imshow(win_name, display_frame)
-                key = cv2.waitKey(FRAME_DELAY_MS) & 0xFF
-                if cv2.getWindowProperty(win_name, cv2.WND_PROP_VISIBLE) < 1 or key == 27:
-                    break
-            else:
-                # 嵌入模式：转为 RGB 并回调
-                display_frame_rgb = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
-                display_callback(display_frame_rgb)
-
-            # 控制帧率
-            time.sleep(1 / TARGET_FPS)
-
-    finally:
-        cap.release()
-        if display_callback is None:
-            cv2.destroyAllWindows()
+    viewer = CameraViewer(display_callback=display_callback)
+    viewer.run()          # 阻塞，直到窗口关闭或外部调用 viewer.stop()
 
 
-
+# ----------------------------------------------------------------------
+# 7️⃣ 直接运行时的入口
+# ----------------------------------------------------------------------
 if __name__ == "__main__":
     main()

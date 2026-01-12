@@ -10,7 +10,7 @@ import time
 import xml.etree.ElementTree as ET
 from CanDataProcessing.can_testcase_runner import LogParser
 from PIL import Image, ImageTk
-from CameraUtils import camera_viewer
+from CameraUtils.camera_viewer import CameraViewer
 
 
 # 判断是否被 import 调用
@@ -47,8 +47,9 @@ class CANFDGUI:
         # ---------- 右上角摄像头显示区域 ----------
         # 用一个固定大小的 Label 充当画布（640×360）
         self.video_label = tk.Label(root, bg="black")
-        self.video_label.grid(row=0, column=4, rowspan=3,
-                             padx=10, pady=5, sticky='n')
+        self.video_label.grid(row=0, column=4, rowspan=5, padx=10, pady=5, sticky='e')
+        root.grid_columnconfigure(4, weight=1)
+
         # 预先准备一张黑色占位图（640×360）
         self._black_placeholder = ImageTk.PhotoImage(
             Image.new('RGB', (640, 360), (0, 0, 0))
@@ -234,15 +235,19 @@ class CANFDGUI:
     # --------------------- 摄像头线程入口 ---------------------
     def _run_camera_viewer(self):
         """
-        在子线程中调用 camera_viewer.main，使用回调拿到每帧 RGB 数据。
-        camera_viewer.main 在 callback 模式下会一直循环读取摄像头，
-        这里不需要关心退出，只要主程序结束线程会随进程一起结束。
+        在子线程中启动 CameraViewer（而不是直接调用 camera_viewer.main）。
+        CameraViewer 会在内部循环读取摄像头并通过回调把每帧 RGB 送进来。
+        当窗口关闭时，外部会调用 self._camera_viewer.stop() 来终止循环。
         """
         try:
-            camera_viewer.main(display_callback=self._camera_frame_callback)
+            # 创建并启动可自行停止的摄像头实例
+            self._camera_viewer = CameraViewer(display_callback=self._camera_frame_callback)
+            self._camera_viewer.start()          # 在后台 daemon 线程里运行
+            while not getattr(self, "_stop_camera_thread", False):
+                time.sleep(0.1)
         except Exception as e:
             # 若摄像头初始化失败，保持黑屏并打印错误
-            print(f"[WARN] camera_viewer 运行异常: {e}")
+            print(f"[WARN] CameraViewer 运行异常: {e}")
 
     def _camera_frame_callback(self, frame_rgb):
         """
@@ -575,7 +580,7 @@ class CANFDGUI:
     def on_closing(self):
         """
         安全关闭检查：只有当“关闭设备”按钮不可用时才允许退出。
-        同时显式结束摄像头线程，防止已排好的 after 回调触发错误
+        这里会显式结束摄像头线程，防止 after 回调触发错误或卡顿。
         """
         if self.close_btn.winfo_exists() and str(self.close_btn['state']) == 'normal':
             import tkinter.messagebox as messagebox
@@ -589,18 +594,24 @@ class CANFDGUI:
             self.root.after(0, lambda: self.root.attributes("-topmost", False))
             return
 
-        # 让摄像头线程退出
+        # 让摄像头线程自行退出，标记回调函数不再处理新帧
         self._stop_camera_thread = True
-        # 取消可能已经排好的 after
+        # 若已经创建了 CameraViewer 实例，调用它的 stop()
+        if hasattr(self, "_camera_viewer") and self._camera_viewer is not None:
+            try:
+                self._camera_viewer.stop()
+            except Exception as e:
+                print(f"[WARN] 停止 CameraViewer 时异常: {e}")
+        # 取消可能已经排好的 after 回调
         if getattr(self, "_after_id", None):
             try:
                 self.root.after_cancel(self._after_id)
             except Exception:
                 pass
             self._after_id = None
-        # 等待线程自行结束
+        # 等待摄像头子线程自行结束（最多 1 秒）
         if hasattr(self, "_camera_thread") and self._camera_thread.is_alive():
-            self._camera_thread.join(timeout=1.0)   # 最多等 1 秒
+            self._camera_thread.join(timeout=1.0)
         # 最后销毁窗口
         self.root.destroy()
 
