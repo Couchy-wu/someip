@@ -10,7 +10,7 @@ import time
 import xml.etree.ElementTree as ET
 from CanDataProcessing.can_testcase_runner import LogParser
 from PIL import Image, ImageTk
-from CameraUtils.camera_viewer import CameraViewer
+from CameraUtils.camera_viewer import CameraViewer, rotate_image_180
 
 
 # 判断是否被 import 调用
@@ -66,9 +66,7 @@ class CANFDGUI:
 
         # 图像测试勾选框状态
         self.image_test_var = tk.IntVar(value=0)   # 默认开关项 0 – 关闭， 1 – 开启
-
         # 是否开启图像测试（勾选框）
-        # 文字说明
         tk.Label(root, text="是否开启图像测试:", font=("微软雅黑", 10)).grid(
             row=5, column=0, sticky='w', padx=12, pady=5)
 
@@ -81,6 +79,21 @@ class CANFDGUI:
             offvalue=0,                    # 未勾选时的取值
             font=("微软雅黑", 10)
         ).grid(row=5, column=1, sticky='w', padx=5)
+
+        # 记录图像是否需要旋转
+        self.rotate_flag = False
+        #  “图像旋转” 按键 
+        self.rotate_btn = tk.Button(
+            root,
+            text="图像旋转",                 
+            font=("微软雅黑", 12),
+            bg="#5BC0DE",
+            fg="white",
+            activebackground="#31B0D5",
+            command=self.toggle_rotate,           # 切换标记
+        )
+        # 放在已有按钮右侧（示例放在第 2 行第 2 列）
+        self.rotate_btn.grid(row=2, column=2, pady=5, padx=10, sticky='ew')
 
 
         # 按键：设备初始化按键
@@ -125,7 +138,7 @@ class CANFDGUI:
             command=self.open_subwindow
         )
         # self.sub_btn.grid(row=0, column=4, pady=5, padx=10, sticky='e')  # 修改列位置为3，靠右对齐
-        self.sub_btn.grid(row=1, column=3, pady=5, padx=10, sticky='ew')  # 修改列位置为3，靠右对齐
+        self.sub_btn.grid(row=1, column=2, pady=5, padx=10, sticky='ew')  # 修改列位置为3，靠右对齐
         # 配置列权重，使（设备管理所在列）吸收多余空间，实现右对齐
         # root.grid_columnconfigure(4, weight=1)
 
@@ -200,7 +213,7 @@ class CANFDGUI:
             height=1,
             command=self.stop_testing
         )
-        self.stop_btn.grid(row=0, column=3, pady=5, padx=10, sticky='ew')
+        self.stop_btn.grid(row=0, column=2, pady=5, padx=10, sticky='ew')
 
 
         # 输入框：用例重复测试次数
@@ -249,6 +262,10 @@ class CANFDGUI:
             # 若摄像头初始化失败，保持黑屏并打印错误
             print(f"[WARN] CameraViewer 运行异常: {e}")
 
+    # 切换是否在显示前旋转图像的标记。
+    def toggle_rotate(self):
+        self.rotate_flag = not self.rotate_flag
+
     def _camera_frame_callback(self, frame_rgb):
         """
         camera_viewer 通过此回调把每帧 RGB 的 numpy 数组送进来。
@@ -260,15 +277,20 @@ class CANFDGUI:
             return
         try:
             if self.image_test_var.get() == 1:
-                # 正常显示摄像头画面
-                img = Image.fromarray(frame_rgb)
+                # 读取原始帧
+                img_arr = frame_rgb
+                # 按需旋转 180°
+                if self.rotate_flag:                     
+                    img_arr = rotate_image_180(img_arr)
+                # 转为 PIL Image 供后续处理
+                img = Image.fromarray(img_arr)                
             else:
                 # 开关关闭 → 用黑屏占位
                 img = Image.new('RGB', (frame_rgb.shape[1], frame_rgb.shape[0]), (0, 0, 0))
             # 缩放到 640×360（对应 OUTPUT_WIDTH / OUTPUT_HEIGHT）
             img = img.resize((640, 360), Image.LANCZOS)
-            photo = ImageTk.PhotoImage(img)
             # 在主线程中更新 UI（Tk 只能在主线程操作）
+            photo = ImageTk.PhotoImage(img)
             self._after_id = self.root.after(0, self._update_video_label, photo)
         except Exception as err:
             print(f"[ERROR] 摄像头回调异常: {err}")

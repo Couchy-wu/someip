@@ -104,6 +104,13 @@ def resize_with_aspect_ratio(frame, target_width, target_height, interpolation=c
 
     return result
 
+def rotate_image_180(frame: np.ndarray) -> np.ndarray:
+    """
+    将图像顺时针旋转 180°（等价于逆时针 180°）。
+    使用 OpenCV 原生实现，零拷贝、毫秒级耗时，不会引入额外延迟。
+    """
+    return cv2.rotate(frame, cv2.ROTATE_180)
+
 def draw_centered_text(img, text, color=(0, 255, 0),
                       font=cv2.FONT_HERSHEY_SIMPLEX,
                       scale=0.8, thickness=2):
