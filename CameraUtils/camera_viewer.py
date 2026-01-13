@@ -230,10 +230,10 @@ class CameraViewer:
                 # ---------- 无摄像头提示 ----------
                 if self.cam_index is None:
                     draw_centered_text(frame,
-                                       "Camera Not Found",
-                                       color=(0, 255, 0),
-                                       scale=3,
-                                       thickness=7)
+                                       "Camera is Not Found",
+                                       color=(0, 0, 255),
+                                       scale=2,
+                                       thickness=6)
 
                 # ---------- 等比缩放 + 黑边填充 ----------
                 display_frame = resize_with_aspect_ratio(

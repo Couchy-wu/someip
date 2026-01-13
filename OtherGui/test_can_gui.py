@@ -307,7 +307,7 @@ class CANFDGUI:
             # 可能在窗口销毁的瞬间被调用，安全忽略
             pass
 
-    def _make_no_camera_image(self, width=640, height=360, text="Camera is not open"):
+    def _make_no_camera_image(self, width=640, height=360, text="Camera is Not Open"):
         """
         生成一张 640×360（默认）黑底并在中心写文字的 PIL.Image。
         只在需要时调用，避免每帧都重新创建字体对象。
