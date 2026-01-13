@@ -9,7 +9,7 @@ import re
 import time
 import xml.etree.ElementTree as ET
 from CanDataProcessing.can_testcase_runner import LogParser
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageDraw, ImageFont
 from CameraUtils.camera_viewer import CameraViewer, rotate_image_180
 
 
@@ -50,12 +50,11 @@ class CANFDGUI:
         self.video_label.grid(row=0, column=4, rowspan=5, padx=10, pady=5, sticky='e')
         root.grid_columnconfigure(4, weight=1)
 
-        # 预先准备一张黑色占位图（640×360）
-        self._black_placeholder = ImageTk.PhotoImage(
-            Image.new('RGB', (640, 360), (0, 0, 0))
-        )
-        self.video_label.configure(image=self._black_placeholder)
-        self.video_label.image = self._black_placeholder   # 防止被 GC
+        # 立即显示 “Camera is not open” 的占位图（避免首次出现纯黑屏）
+        no_cam_img = self._make_no_camera_image()
+        self._no_cam_placeholder = ImageTk.PhotoImage(no_cam_img)
+        self.video_label.configure(image=self._no_cam_placeholder)
+        self.video_label.image = self._no_cam_placeholder   # 防止被 GC
 
         # 启动摄像头采集线程（始终运行，内部回调自行判断是否显示）
         self._camera_thread = threading.Thread(
@@ -269,13 +268,14 @@ class CANFDGUI:
     def _camera_frame_callback(self, frame_rgb):
         """
         camera_viewer 通过此回调把每帧 RGB 的 numpy 数组送进来。
-        - 当 “是否开启图像测试” 为 1 时显示真实画面；
-        - 否则用全黑图像覆盖。
+        - 若 “是否开启图像测试” 为 1，显示实时画面（可选 180° 旋转）
+        - 若未开启图像测试，则直接显示 “Camera is not open”。
         """
         # ----------- 若窗口已请求关闭，则直接返回 ----------
         if getattr(self, "_stop_camera_thread", False):
             return
         try:
+            # 1) 正常显示摄像头画面（并可选 180° 旋转）
             if self.image_test_var.get() == 1:
                 # 读取原始帧
                 img_arr = frame_rgb
@@ -283,10 +283,10 @@ class CANFDGUI:
                 if self.rotate_flag:                     
                     img_arr = rotate_image_180(img_arr)
                 # 转为 PIL Image 供后续处理
-                img = Image.fromarray(img_arr)                
-            else:
-                # 开关关闭 → 用黑屏占位
-                img = Image.new('RGB', (frame_rgb.shape[1], frame_rgb.shape[0]), (0, 0, 0))
+                img = Image.fromarray(img_arr)  
+            # 2) 开关关闭 → 用黑屏 + 文字提示 占位              
+            else: 
+                img = self._make_no_camera_image()     # 已封装的文字图
             # 缩放到 640×360（对应 OUTPUT_WIDTH / OUTPUT_HEIGHT）
             img = img.resize((640, 360), Image.LANCZOS)
             # 在主线程中更新 UI（Tk 只能在主线程操作）
@@ -306,6 +306,29 @@ class CANFDGUI:
         except tk.TclError:
             # 可能在窗口销毁的瞬间被调用，安全忽略
             pass
+
+    def _make_no_camera_image(self, width=640, height=360, text="Camera is not open"):
+        """
+        生成一张 640×360（默认）黑底并在中心写文字的 PIL.Image。
+        只在需要时调用，避免每帧都重新创建字体对象。
+        """
+        # ① 创建黑色背景
+        img = Image.new('RGB', (width, height), (0, 0, 0))
+        # ② 绘制文字
+        draw = ImageDraw.Draw(img)
+        try:
+            # 常见的系统字体，若不存在会回退到默认
+            font = ImageFont.truetype("arial.ttf", 32)
+        except Exception:
+            font = ImageFont.load_default()
+        # Pillow ≥10 推荐使用 getbbox 来获取文字尺寸
+        bbox = font.getbbox(text)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+        x = (width - text_w) // 2
+        y = (height - text_h) // 2
+        draw.text((x, y), text, font=font, fill=(0, 255, 0))
+        return img
 
     # --------------------- CAN设备初始化 ---------------------
     def start_init(self):
