@@ -298,8 +298,9 @@ class CANFDGUI:
     def _camera_frame_callback(self, frame_rgb):
         """
         camera_viewer 通过此回调把每帧 RGB 的 numpy 数组送进来。
-        - 若 “是否开启图像测试” 为 1，显示实时画面（可选 180° 旋转）
-        - 若未开启图像测试，则直接显示 “Camera is not open”。
+        1️⃣ 首先根据 “是否开启图像测试” 与 “图像旋转” 标记生成 **第一块**画面；
+        2️⃣ 再把 **已经旋转（如果有）的同一帧** 交给变换函数，生成 **第二块**画面；
+        3️⃣ 两块画面统一缩放、转成 PhotoImage、交给主线程 via after。
         """
         # ----------- 若窗口已请求关闭，则直接返回 ----------
         if getattr(self, "_stop_camera_thread", False):
@@ -313,10 +314,12 @@ class CANFDGUI:
                 img = Image.fromarray(img_arr)                # 转为 PIL Image 供后续处理
             else: 
                 img = self._make_no_camera_image(text="Camera is Not Open")     # 开关关闭 → 用黑屏 + 文字提示 占位，用已封装的文字图
+                img_arr = None                               # 下面的变换不使用
+                
             # 2) 变换后的画面
-            if self.transform_enable_var.get() == 1 and self.image_test_var.get() == 1:
+            if (self.transform_enable_var.get() == 1 and self.image_test_var.get() == 1 and img_arr is not None):
                 # 这里调用占位的变换函数；实际项目中换成真正的算法
-                img2 = self._apply_transform(frame_rgb)
+                img2 = self._apply_transform(img_arr)
             else:
                 img2 = self._make_no_camera_image(text="Not activated transformation")
             
