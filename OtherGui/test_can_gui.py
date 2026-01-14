@@ -78,19 +78,15 @@ class CANFDGUI:
 
         # 图像测试勾选框状态
         self.image_test_var = tk.IntVar(value=0)   # 默认开关项 0 – 关闭， 1 – 开启
-        # 是否开启图像测试（勾选框）
-        tk.Label(root, text="是否开启图像测试:", font=("微软雅黑", 10)).grid(
-            row=5, column=0, sticky='w', padx=12, pady=5)
-
         # 勾选框，勾选即开启
         tk.Checkbutton(
             root,
-            text="开启",
+            text="开启图像测试",
             variable=self.image_test_var,   # 绑定到上面声明的 IntVar
             onvalue=1,                     # 勾选时的取值
             offvalue=0,                    # 未勾选时的取值
             font=("微软雅黑", 10)
-        ).grid(row=5, column=1, sticky='w', padx=5)
+        ).grid(row=5, column=0, sticky='w', padx=5)
 
         # 记录图像是否需要旋转
         self.rotate_flag = False
@@ -111,12 +107,12 @@ class CANFDGUI:
         # 勾选框：是否启用变换
         tk.Checkbutton(
             root,
-            text="开启变换",
+            text="开启图像变换",
             variable=self.transform_enable_var,
             onvalue=1,
             offvalue=0,
             font=("微软雅黑", 10)
-        ).grid(row=3, column=2, pady=5, padx=10, sticky='w')
+        ).grid(row=6, column=0, pady=5, padx=10, sticky='w')
 
         # 下拉框：变换类型（A/B，后续可继续添加）
         ttk.Combobox(
@@ -126,7 +122,7 @@ class CANFDGUI:
             state="readonly",
             width=12,
             font=("微软雅黑", 10)
-        ).grid(row=3, column=3, pady=5, padx=10, sticky='w')
+        ).grid(row=6, column=1, pady=5, padx=10, sticky='w')
 
 
         # 按键：设备初始化按键
