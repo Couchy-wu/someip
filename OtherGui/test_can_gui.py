@@ -103,6 +103,18 @@ class CANFDGUI:
         # 放在已有按钮右侧（示例放在第 2 行第 2 列）
         self.rotate_btn.grid(row=2, column=2, pady=5, padx=10, sticky='ew')
 
+        # 镜面反转 勾选状态
+        self.mirror_enable_var = tk.IntVar(value=1)   # 0 – 关闭， 1 – 开启
+        # 勾选框：是否开启镜面反转
+        tk.Checkbutton(
+            root,
+            text="开启镜面反转",
+            variable=self.mirror_enable_var,   # 绑定到新声明的 IntVar
+            onvalue=1,                         # 勾选时的取值
+            offvalue=0,                        # 未勾选时的取值
+            font=("微软雅黑", 10)
+        ).grid(row=5, column=1, pady=5, padx=10, sticky='w')
+
         # ---------- 变换控制 ----------
         # 勾选框：是否启用变换
         tk.Checkbutton(
@@ -298,7 +310,7 @@ class CANFDGUI:
     def _camera_frame_callback(self, frame_rgb):
         """
         camera_viewer 通过此回调把每帧 RGB 的 numpy 数组送进来。
-        1️⃣ 首先根据 “是否开启图像测试” 与 “图像旋转” 标记生成 **第一块**画面；
+        1️⃣ 首先根据 “是否开启图像测试” 与 “图像旋转，镜面翻转” 等标记，生成 **第一块**画面；
         2️⃣ 再把 **已经旋转（如果有）的同一帧** 交给变换函数，生成 **第二块**画面；
         3️⃣ 两块画面统一缩放、转成 PhotoImage、交给主线程 via after。
         """
@@ -309,9 +321,14 @@ class CANFDGUI:
             # 1) 显示摄像头画面（并可选 180° 旋转）
             if self.image_test_var.get() == 1:
                 img_arr = frame_rgb             # 读取原始帧
+                # 180° 旋转（如果打开）
                 if self.rotate_flag:                     
-                    img_arr = rotate_image_180(img_arr)       # 按需旋转 180°
-                img = Image.fromarray(img_arr)                # 转为 PIL Image 供后续处理
+                    img_arr = rotate_image_180(img_arr) 
+                # 镜面水平翻转（如果打开）
+                if self.mirror_enable_var.get() == 1: 
+                    img_arr = img_arr[:, ::-1, :] 
+                # 转为 Pillow Image                    
+                img = Image.fromarray(img_arr)
             else: 
                 img = self._make_no_camera_image(text="Camera is Not Open")     # 开关关闭 → 用黑屏 + 文字提示 占位，用已封装的文字图
                 img_arr = None                               # 下面的变换不使用
