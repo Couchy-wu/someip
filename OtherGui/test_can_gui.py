@@ -44,14 +44,14 @@ class CANFDGUI:
         self.channel_handles = None             # 通道句柄
         self.receive_threads = None             # 接收线程列表        
 
-        # ---------- 右上角摄像头显示区域 ----------
+        # ---------- 第一块视频显示：右上角摄像头显示区域 ----------
         # 用一个固定大小的 Label 充当画布（640×360）
         self.video_label = tk.Label(root, bg="black")
         self.video_label.grid(row=0, column=4, rowspan=5, padx=10, pady=5, sticky='e')
         root.grid_columnconfigure(4, weight=1)
 
         # 立即显示 “Camera is not open” 的占位图（避免首次出现纯黑屏）
-        no_cam_img = self._make_no_camera_image()
+        no_cam_img = self._make_no_camera_image(text="Camera is Not Open")
         self._no_cam_placeholder = ImageTk.PhotoImage(no_cam_img)
         self.video_label.configure(image=self._no_cam_placeholder)
         self.video_label.image = self._no_cam_placeholder   # 防止被 GC
@@ -61,6 +61,19 @@ class CANFDGUI:
             target=self._run_camera_viewer, daemon=True
         )
         self._camera_thread.start()
+
+        # ---------- 第二块视频显示：变换相关 ----------
+        self.transform_enable_var = tk.IntVar(value=0)          # 勾选框：是否开启变换
+        self.transform_option_var = tk.StringVar(value="变换A") # 下拉框当前选项
+
+        # 视频显示
+        # 先放一个黑屏占位图（同样 640×360）
+        self.video_label2 = tk.Label(root, bg="black")
+        self.video_label2.grid(row=5, column=4, rowspan=5, padx=10, pady=5, sticky='e')
+        no_cam_img2 = self._make_no_camera_image(text="Not activated transformation")
+        self._no_cam_placeholder2 = ImageTk.PhotoImage(no_cam_img2)
+        self.video_label2.configure(image=self._no_cam_placeholder2)
+        self.video_label2.image = self._no_cam_placeholder2
 
 
         # 图像测试勾选框状态
@@ -93,6 +106,27 @@ class CANFDGUI:
         )
         # 放在已有按钮右侧（示例放在第 2 行第 2 列）
         self.rotate_btn.grid(row=2, column=2, pady=5, padx=10, sticky='ew')
+
+        # ---------- 变换控制 ----------
+        # 勾选框：是否启用变换
+        tk.Checkbutton(
+            root,
+            text="开启变换",
+            variable=self.transform_enable_var,
+            onvalue=1,
+            offvalue=0,
+            font=("微软雅黑", 10)
+        ).grid(row=3, column=2, pady=5, padx=10, sticky='w')
+
+        # 下拉框：变换类型（A/B，后续可继续添加）
+        ttk.Combobox(
+            root,
+            textvariable=self.transform_option_var,
+            values=["变换A", "变换B"],
+            state="readonly",
+            width=12,
+            font=("微软雅黑", 10)
+        ).grid(row=3, column=3, pady=5, padx=10, sticky='w')
 
 
         # 按键：设备初始化按键
@@ -275,23 +309,30 @@ class CANFDGUI:
         if getattr(self, "_stop_camera_thread", False):
             return
         try:
-            # 1) 正常显示摄像头画面（并可选 180° 旋转）
+            # 1) 显示摄像头画面（并可选 180° 旋转）
             if self.image_test_var.get() == 1:
-                # 读取原始帧
-                img_arr = frame_rgb
-                # 按需旋转 180°
+                img_arr = frame_rgb             # 读取原始帧
                 if self.rotate_flag:                     
-                    img_arr = rotate_image_180(img_arr)
-                # 转为 PIL Image 供后续处理
-                img = Image.fromarray(img_arr)  
-            # 2) 开关关闭 → 用黑屏 + 文字提示 占位              
+                    img_arr = rotate_image_180(img_arr)       # 按需旋转 180°
+                img = Image.fromarray(img_arr)                # 转为 PIL Image 供后续处理
             else: 
-                img = self._make_no_camera_image()     # 已封装的文字图
+                img = self._make_no_camera_image(text="Camera is Not Open")     # 开关关闭 → 用黑屏 + 文字提示 占位，用已封装的文字图
+            # 2) 变换后的画面
+            if self.transform_enable_var.get() == 1 and self.image_test_var.get() == 1:
+                # 这里调用占位的变换函数；实际项目中换成真正的算法
+                img2 = self._apply_transform(frame_rgb)
+            else:
+                img2 = self._make_no_camera_image(text="Not activated transformation")
+            
             # 缩放到 640×360（对应 OUTPUT_WIDTH / OUTPUT_HEIGHT）
             img = img.resize((640, 360), Image.LANCZOS)
+            img2 = img2.resize((640, 360), Image.LANCZOS)
             # 在主线程中更新 UI（Tk 只能在主线程操作）
             photo = ImageTk.PhotoImage(img)
+            photo2 = ImageTk.PhotoImage(img2)
+            # 记录 after id，后面关闭窗口时可取消
             self._after_id = self.root.after(0, self._update_video_label, photo)
+            self._after_id2 = self.root.after(0, self._update_video_label2, photo2)
         except Exception as err:
             print(f"[ERROR] 摄像头回调异常: {err}")
 
@@ -307,28 +348,83 @@ class CANFDGUI:
             # 可能在窗口销毁的瞬间被调用，安全忽略
             pass
 
-    def _make_no_camera_image(self, width=640, height=360, text="Camera is Not Open"):
-        """
-        生成一张 640×360（默认）黑底并在中心写文字的 PIL.Image。
-        只在需要时调用，避免每帧都重新创建字体对象。
-        """
-        # ① 创建黑色背景
-        img = Image.new('RGB', (width, height), (0, 0, 0))
-        # ② 绘制文字
-        draw = ImageDraw.Draw(img)
+    def _update_video_label2(self, photo_image):
+        """把第二块的 PhotoImage 放到 video_label2 上（只能在主线程调用）"""
+        if not getattr(self, "video_label2", None) or not self.video_label2.winfo_exists():
+            return
         try:
-            # 常见的系统字体，若不存在会回退到默认
-            font = ImageFont.truetype("arial.ttf", 32)
+            self.video_label2.configure(image=photo_image)
+            self.video_label2.image = photo_image   # 防止被 GC
+        except tk.TclError:
+            pass
+
+    def _make_no_camera_image(self, width=640, height=360,
+                              text="Camera is Not Open\nor\nNot activated transformation"):
+        """
+        生成一张指定宽高的黑底占位图，并把 *多行* 文本居中绘制。
+        参数
+        ----
+        width, height : 图片尺寸（默认 640×360，与你的 video_label 大小一致）。
+        text          : 需要显示的文字，支持换行（`\n`）。
+        """
+        # 1️⃣ 创建黑底
+        img = Image.new('RGB', (width, height), (0, 0, 0))
+        # 2️⃣ 准备绘图对象
+        draw = ImageDraw.Draw(img)
+        # 3️⃣ 选取字体（系统自带的 Arial，若不存在则回退到默认字体）
+        try:
+            font = ImageFont.truetype("arial.ttf", 32)   # 颜色、字号可以自行调
         except Exception:
             font = ImageFont.load_default()
-        # Pillow ≥10 推荐使用 getbbox 来获取文字尺寸
-        bbox = font.getbbox(text)
-        text_w = bbox[2] - bbox[0]
-        text_h = bbox[3] - bbox[1]
-        x = (width - text_w) // 2
-        y = (height - text_h) // 2
-        draw.text((x, y), text, font=font, fill=(0, 255, 0))
+        # 4️⃣ 把传进来的文本按行拆分
+        lines = text.split('\n')
+        # 5️⃣ 计算每行文字的宽高（Pillow≥10 建议使用 getbbox）
+        line_sizes = [font.getbbox(l)[2:] for l in lines]  # (w, h) 列表
+        line_heights = [h for (_, h) in line_sizes]
+        # 6️⃣ 计算整体文字块的高度（行间距 4px，可自行调）
+        line_spacing = 4
+        total_text_h = sum(line_heights) + line_spacing * (len(lines) - 1)
+        # 7️⃣ 计算首行左上角的起始坐标，使整个文字块在图片中心
+        start_y = (height - total_text_h) // 2
+        # 8️⃣ 逐行绘制，每行水平居中
+        for i, line in enumerate(lines):
+            w, h = line_sizes[i]
+            x = (width - w) // 2               # 水平居中
+            y = start_y + sum(line_heights[:i]) + line_spacing * i
+            draw.text((x, y), line, font=font, fill=(0, 255, 0))
+
         return img
+
+    # --------------------- 图像变换相关功能 ---------------------
+    def _apply_transform(self, frame_rgb):
+        """
+        ### 临时变换处理，后续算法可以在这里进行替换 ###
+
+        根据下拉框的当前选项对摄像头帧做不同的“变换”。
+        - 变换A：水平镜面翻转（左↔右）
+        - 变换B：转成灰度图（仍保持 3 通道，方便后面直接转 ImageTk.PhotoImage）
+        """
+        # 读取当前选项
+        option = self.transform_option_var.get()
+
+        if option == "变换A":
+            # 水平翻转：numpy 切片实现，几乎不耗时
+            transformed = frame_rgb[:, ::-1, :]          # 左右翻转
+            return Image.fromarray(transformed)
+
+        elif option == "变换B":
+            # 灰度化：先转成单通道，再复制三遍保持 (H, W, 3) 结构
+            # 0.2126 R + 0.7152 G + 0.0722 B → 采用 Pillow 的 convert
+            img = Image.fromarray(frame_rgb)            # PIL Image (RGB)
+            gray = img.convert("L")                     # 单通道灰度
+            # 再转回 3 通道（RGB），这样后面的 resize / PhotoImage 不需要额外处理
+            gray_rgb = Image.merge("RGB", (gray, gray, gray))
+            return gray_rgb
+
+        else:
+            # 兜底：不做任何处理，直接返回原始帧
+            return Image.fromarray(frame_rgb)  
+
 
     # --------------------- CAN设备初始化 ---------------------
     def start_init(self):
@@ -624,9 +720,15 @@ class CANFDGUI:
 
     def on_closing(self):
         """
-        安全关闭检查：只有当“关闭设备”按钮不可用时才允许退出。
-        这里会显式结束摄像头线程，防止 after 回调触发错误或卡顿。
+        安全关闭主窗口的统一入口。
+
+        主要职责：
+        1️⃣ 防止在 CAN 设备仍未关闭的情况下退出程序；
+        2️⃣ 正常结束摄像头采集线程，防止 after 回调在窗口销毁后继续执行；
+        3️⃣ 取消所有已安排的 `after` 回调（包括原来的 video_label 和 video_label2）
+        4️⃣ 最终销毁根窗口。
         """
+        # 1.检查 CAN 设备是否已经关闭
         if self.close_btn.winfo_exists() and str(self.close_btn['state']) == 'normal':
             import tkinter.messagebox as messagebox
             messagebox.showwarning(
@@ -639,7 +741,7 @@ class CANFDGUI:
             self.root.after(0, lambda: self.root.attributes("-topmost", False))
             return
 
-        # 让摄像头线程自行退出，标记回调函数不再处理新帧
+        # 2.让摄像头线程自行退出，标记回调函数不再处理新帧
         self._stop_camera_thread = True
         # 若已经创建了 CameraViewer 实例，调用它的 stop()
         if hasattr(self, "_camera_viewer") and self._camera_viewer is not None:
@@ -647,17 +749,24 @@ class CANFDGUI:
                 self._camera_viewer.stop()
             except Exception as e:
                 print(f"[WARN] 停止 CameraViewer 时异常: {e}")
-        # 取消可能已经排好的 after 回调
-        if getattr(self, "_after_id", None):
-            try:
-                self.root.after_cancel(self._after_id)
-            except Exception:
-                pass
-            self._after_id = None
-        # 等待摄像头子线程自行结束（最多 1 秒）
+
+        # 3.取消可能已经排好的 after 回调
+        for aid in (getattr(self, "_after_id", None),
+                    getattr(self, "_after_id2", None)):
+            if aid:
+                try:
+                    self.root.after_cancel(aid)
+                except Exception:
+                    # 有可能已经执行完或被别处取消，直接忽略
+                    pass
+        self._after_id  = None
+        self._after_id2 = None
+
+        # 4.等待摄像头子线程自行结束（最多 1 秒）
         if hasattr(self, "_camera_thread") and self._camera_thread.is_alive():
             self._camera_thread.join(timeout=1.0)
-        # 最后销毁窗口
+
+        # 5.最后销毁窗口
         self.root.destroy()
 
 
