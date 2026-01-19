@@ -28,7 +28,7 @@ FAST_RETINEX_SIGMA = 80          # 高斯模糊的标准差（尺度），越大
 FAST_RETINEX_GAIN  = 128.0       # 增益系数，用于放大对数差分的幅度
 FAST_RETINEX_OFFSET = 0.0        # 偏置，可在需要时微调整体亮度
 # ---------- 全局伽马 ----------
-GLOBAL_GAMMA = 0.8               # <1 ⇒ 提亮整体；>1 ⇒ 整体变暗
+GLOBAL_GAMMA = 0.8               # <1 ⇒ 提亮整体；>1 ⇒ 整体变暗(实际并没有使用)
 # ---------- 路径 ----------
 INPUT_PATH   = "CameraUtils/screenshot_10_warped.jpg"   # 待处理的原始图像路径
 OUTPUT_DIR   = Path("./output")               # 只保存 final_color.png
@@ -159,8 +159,6 @@ import cv2
 from typing import List, Tuple
 
 # 假设这些常量在别处定义
-ITERATIONS = 10
-STOP_MEDIAN = 200
 
 def adaptive_median_threshold(
     y: np.ndarray,
@@ -247,7 +245,6 @@ def adaptive_median_threshold(
     # print(f"[INFO] (downscale={downscale:.2f}) 迭代阈值 = {thresholds}")
     # print(f"[INFO] 最佳迭代轮数 = 第 {best_iter} 次 → 阈值 = {thresholds[best_iter-1]}")
     return thresholds, best_iter
-
 def compress_low_levels(y: np.ndarray, thr: int) -> np.ndarray:
     """把所有低于 thr 的像素提升到 thr """
     yc = y.copy()
@@ -266,7 +263,7 @@ def sharpen_unsharp_mask(gray: np.ndarray,
 def otsu_binary(gray: np.ndarray) -> np.ndarray:
     _, binary = cv2.threshold(gray, 0, 255,
                              cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    print(f"[INFO] Otsu 自动阈值 = {_:.2f}")
+    # print(f"[INFO] Otsu 自动阈值 = {_:.2f}")
     return binary
 # ------------------- 导向滤波（降采样‑上采样） ------------------- #
 def fast_guided_filter(y_uint8: np.ndarray,
@@ -326,29 +323,25 @@ def save_stage(name: str, img: np.ndarray) -> None:
     """统一的保存函数（仅用于最终结果）。"""
     path = OUTPUT_DIR / f"{name}.png"
     cv2.imwrite(str(path), img)
-    print(f"[INFO] 已保存: {path}")
+    # print(f"[INFO] 已保存: {path}")
 # ============================= 主流程 ============================= #
 def main() -> None:
     """主流程（经过“跳过无效步骤”优化的版本）"""
     ensure_dir(OUTPUT_DIR)
-
     # -------------------------------------------------
     # 1️⃣ 读取图像并拆分 YUV
     # -------------------------------------------------
     with _time_it("load_image & split YUV"):
         img_bgr = load_image(INPUT_PATH)
         Y_orig, U, V = rgb2yuv(img_bgr)
-
     # -------------------------------------------------
     # 2️⃣ 导向滤波 + 边缘恢复（仅在需要时执行）
     # -------------------------------------------------
     # 这里直接把 Y_tmp 指向 Y_orig，只有在需要修改时才复制一次。
     Y_tmp = Y_orig  # 可能是原图的引用，也可能是拷贝（下面会处理）
-
     if ENABLE_GUIDED_FILTER or ENABLE_EDGE_RESTORE:
         # 必须拷贝一次，后面的滤波/恢复会改写数据
         Y_tmp = Y_orig.copy()
-
         if ENABLE_GUIDED_FILTER:
             with _time_it("guided filter"):
                 Y_tmp = fast_guided_filter(
@@ -356,8 +349,7 @@ def main() -> None:
                     radius=GUIDED_RADIUS,
                     eps=GUIDED_EPS,
                 )
-                print("[INFO] 导向滤波已启用（fast_guided_filter）")
-
+                # print("[INFO] 导向滤波已启用（fast_guided_filter）")
         if ENABLE_EDGE_RESTORE:
             with _time_it("edge restore"):
                 Y_tmp = restore_edges(
@@ -368,10 +360,10 @@ def main() -> None:
                     dilate_k=DILATE_KERNEL_SIZE,
                     iterations=DILATE_ITERATIONS,
                 )
-                print("[INFO] 边缘恢复已启用（restore_edges）")
+                # print("[INFO] 边缘恢复已启用（restore_edges）")
     else:
-        print("[INFO] 导向滤波 & 边缘恢复均已关闭，直接使用原始 Y 通道")
-
+        # print("[INFO] 导向滤波 & 边缘恢复均已关闭，直接使用原始 Y 通道")
+        pass
     # -------------------------------------------------
     # 3️⃣ 自适应中位数阈值 & 低亮度压缩
     # -------------------------------------------------
@@ -380,18 +372,15 @@ def main() -> None:
             Y_tmp, max_iter=ITERATIONS, stop_median=200
         )
         best_thr = thresholds[best_iter - 1]
-
     with _time_it("compress low levels"):
         # 直接在 Y_tmp 上做压缩，省掉一次拷贝
         Y_tmp = compress_low_levels(Y_tmp, best_thr)
-
     # -------------------------------------------------
     # 4️⃣ 亮度增强（Fast‑Retinex + 全局 γ）——可选
     # -------------------------------------------------
     if ENABLE_FAST_RETINEX:
         with _time_it("fast_retinex"):
             Y_tmp = fast_retinex_fast(Y_tmp)          # 已在内部完成降采样/上采样
-
 
     # -------------------------------------------------
     # 5️⃣ 锐化（可选）
@@ -404,10 +393,10 @@ def main() -> None:
                 ksize=SHARPEN_KERNEL_SIZE,
                 sigma=SHARPEN_SIGMA,
             )
-            print("[INFO] 锐化已启用")
+            # print("[INFO] 锐化已启用")
     else:
-        print("[INFO] 锐化已关闭")
-
+        # print("[INFO] 锐化已关闭")
+        pass
     # -------------------------------------------------
     # 6️⃣ Otsu 二值化 + 小噪声去除（可选）
     # -------------------------------------------------
@@ -422,13 +411,13 @@ def main() -> None:
                 Y_binary_clean = remove_small_noise_regions(
                     Y_binary, min_area=MIN_AREA_THRESHOLD
                 )
-            print(f"[INFO] 二值化 + 小噪声去除已完成（阈值={MIN_AREA_THRESHOLD}）")
+            # print(f"[INFO] 二值化 + 小噪声去除已完成（阈值={MIN_AREA_THRESHOLD}）")
         else:
             Y_binary_clean = Y_binary.copy()
-            print("[INFO] 小噪声去除已关闭，仅执行二值化")
+            # print("[INFO] 小噪声去除已关闭，仅执行二值化")
     else:
-        print("[INFO] 二值化已关闭")
-
+        # print("[INFO] 二值化已关闭")
+        pass
     # -------------------------------------------------
     # 7️⃣ 合成最终彩色图（只保存 final_color.png）
     # -------------------------------------------------
@@ -439,7 +428,6 @@ def main() -> None:
             Y_final = np.zeros_like(Y_tmp)
             U_final = np.full_like(U, 128)
             V_final = np.full_like(V, 128)
-
             Y_final[mask] = Y_orig[mask]
             U_final[mask] = U[mask]
             V_final[mask] = V[mask]
@@ -447,19 +435,15 @@ def main() -> None:
             Y_final = Y_tmp
             U_final = U
             V_final = V
-
         yuv_final = cv2.merge([Y_final, U_final, V_final])
         final_color = cv2.cvtColor(yuv_final, cv2.COLOR_YUV2BGR)
-
         # 只保存最终结果
         save_stage("final_color", final_color)
-
     # -------------------------------------------------
     # 8️⃣ 时间统计 & 结束提示
     # -------------------------------------------------
     print_time_summary()
-    print(f"\n[INFO] 结果已保存至: {OUTPUT_DIR.resolve()}\n")
-
+    # print(f"\n[INFO] 结果已保存至: {OUTPUT_DIR.resolve()}\n")
 
 if __name__ == "__main__":
     main()
