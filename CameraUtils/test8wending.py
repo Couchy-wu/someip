@@ -4,7 +4,7 @@
 # 1️⃣ 读取图像并分离 YUV
 # 2️⃣ 导向滤波 + 边缘恢复
 # 3️⃣ 自适应中位数阈值迭代 → 低亮度压缩
-# 4️⃣ 亮度增强（Fast‑Retinex + 全局 γ）或仅使用原始 Y 通道
+# 4️⃣ 亮度增强（Fast‑Retinex + 全局 γ）
 # 5️⃣ 锐化（可选）
 # 6️⃣ Otsu 二值化 + 小面积噪声去除（新增开关控制）
 # 7️⃣ 彩色图合成
@@ -17,12 +17,12 @@ from typing import List, Tuple, Dict, Any
 import time   # 用于时间统计
 # ============================= 参数 ============================= #
 # ---------- 开关 ----------
-ENABLE_FAST_RETINEX   = False   # True → Fast‑Retinex + 全局 γ；False → 直接使用原始 Y（仅压暗部）
 ENABLE_GUIDED_FILTER = False   # 是否在亮度通道上执行导向滤波
 ENABLE_EDGE_RESTORE  = False   # 导向滤波后是否把原始强边缘恢复回去
+ENABLE_FAST_RETINEX   = False   # True → Fast‑Retinex + 全局 γ；False → 直接使用原始 Y（仅压暗部）
 ENABLE_SHARPEN       = False   # 是否在亮度增强后执行锐化
-ENABLE_BINARY        = True    # 是否对最终亮度图做 Otsu 二值化
-ENABLE_SMALL_NOISE_REMOVE = True  # 是否启用小面积噪声去除（新增开关）
+ENABLE_BINARY        = False    # 是否对最终亮度图做 Otsu 二值化
+ENABLE_SMALL_NOISE_REMOVE = False  # 是否启用小面积噪声去除（新增开关）
 # ---------- Fast‑Retinex ----------
 FAST_RETINEX_SIGMA = 80          # 高斯模糊的标准差（尺度），越大平滑范围越广
 FAST_RETINEX_GAIN  = 128.0       # 增益系数，用于放大对数差分的幅度
@@ -30,7 +30,7 @@ FAST_RETINEX_OFFSET = 0.0        # 偏置，可在需要时微调整体亮度
 # ---------- 全局伽马 ----------
 GLOBAL_GAMMA = 0.8               # <1 ⇒ 提亮整体；>1 ⇒ 整体变暗
 # ---------- 路径 ----------
-INPUT_PATH   = "CameraUtils/NEW_warped.jpg"   # 待处理的原始图像路径
+INPUT_PATH   = "CameraUtils/screenshot_10_warped.jpg"   # 待处理的原始图像路径
 OUTPUT_DIR   = Path("./output")               # 只保存 final_color.png
 # ---------- 其余处理 ----------
 ITERATIONS   = 10               # 自适应中位数阈值的最大迭代次数
@@ -45,13 +45,29 @@ SHARPEN_KERNEL_SIZE = 3        # 锐化时高斯模糊的核大小（必须为�
 SHARPEN_SIGMA = 0.0            # 锐化时高斯模糊的 sigma（0 ⇒ 自动计算）
 # ---------- 全局参数 ----------
 GUIDED_DOWNSAMPLE_SCALE = 1   # 导向滤波的降采样倍率（1 = 不降采样）
-MIN_AREA_THRESHOLD = 30      # 小面积噪声去除阈值（像素）
+MIN_AREA_THRESHOLD = 50      # 小面积噪声去除阈值（像素）
 # ---------- Fast‑Retinex 加速选项 ----------
 RETINEX_DOWNSAMPLE_SCALE = 2          # 1 → 不降采样；2 → 1/2 分辨率；4 → 1/4 分辨率 …
 RETINEX_USE_BOXFILTER   = True       # True → 用积分图实现的 boxFilter（近似高斯，极快）
 # =========================================================== #
 # ------------------- 时间统计工具 ------------------- #
 _step_times: Dict[str, float] = {}
+
+# ── 中文步骤名称映射（未列出的保持原样） ────────────────────────────────────────
+_CN_STEP_NAME = {
+    "load_image & split YUV": "加载图像并拆分 YUV",
+    "guided filter":          "导向滤波",
+    "edge restore":           "边缘恢复",
+    "adaptive median threshold": "自适应中位数阈值",
+    "compress low levels":    "压缩低亮度",
+    "fast_retinex":           "快速 Retinex",
+    "global_gamma":           "全局 γ 变换",
+    "sharpen":                "锐化",
+    "otsu binary":            "Otsu 二值化",
+    "remove small noise":     "小面积噪声去除",
+    "reconstruct final color":"重建最终彩色图",
+}
+
 def _time_it(step_name: str) -> Any:
     """上下文管理器：记录 step_name 对应代码块的耗时（毫秒）。"""
     class _Timer:
@@ -61,15 +77,19 @@ def _time_it(step_name: str) -> Any:
         def __exit__(self, exc_type, exc_val, exc_tb):
             elapsed = (time.perf_counter() - self.t0) * 1000.0
             _step_times[step_name] = elapsed
-            print(f"[TIME] {step_name:<30} {elapsed:8.2f} ms")
+            # 使用中文步骤名（若未映射则直接使用原名）
+            cn_name = _CN_STEP_NAME.get(step_name, step_name)
+            # (f"[耗时] {cn_name:<30} {elapsed:8.2f} ms")
     return _Timer()
+
 def print_time_summary() -> None:
-    """统一输出所有步骤的耗时表。"""
+    """统一输出所有步骤的耗时表（中文）。"""
     print("\n===== 运行时间统计 =====")
     total = sum(_step_times.values())
     for name, ms in _step_times.items():
-        print(f"{name:<30} {ms:8.2f} ms")
-    print(f"{'TOTAL':<30} {total:8.2f} ms")
+        cn_name = _CN_STEP_NAME.get(name, name)
+        print(f"{cn_name:<30} {ms:8.2f} ms")
+    print(f"{'总计':<30} {total:8.2f} ms")
     print("=========================\n")
 # ------------------- 基础工具 ------------------- #
 def ensure_dir(p: Path) -> None:
@@ -78,7 +98,7 @@ def load_image(path: str) -> np.ndarray:
     img = cv2.imread(path, cv2.IMREAD_COLOR)
     if img is None:
         raise FileNotFoundError(f"无法读取图像文件: {path}")
-    print(f"[INFO] 已加载图像: {path}   shape={img.shape}")
+    # print(f"[INFO] 已加载图像: {path}   shape={img.shape}")
     return img
 def rgb2yuv(img: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     yuv = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
@@ -134,41 +154,102 @@ def global_gamma(y: np.ndarray, gamma: float = GLOBAL_GAMMA) -> np.ndarray:
     out = np.clip(out * 255.0, 0, 255).astype(np.uint8)
     return out
 # ------------------- 自适应迭代中位数阈值（直方图 O(n)） ------------------- #
-def adaptive_median_threshold(y: np.ndarray,
-                              max_iter: int = ITERATIONS,
-                              stop_median: int = 200) -> Tuple[List[int], int]:
-    """使用 256 桶直方图的 O(n) 实现，功能等价于原来的 adaptive_median_threshold。"""
-    hist = np.bincount(y.ravel(), minlength=256)   # 统计全图直方图
-    total_pixels = y.size
-    thresholds: List[int] = []
+import numpy as np
+import cv2
+from typing import List, Tuple
+
+# 假设这些常量在别处定义
+ITERATIONS = 10
+STOP_MEDIAN = 200
+
+def adaptive_median_threshold(
+    y: np.ndarray,
+    max_iter: int = ITERATIONS,
+    stop_median: int = 200,
+    downscale: float = 0.25,   # 下采样，0.25 → 总像素数约 1/16
+    interp: int = None,  # 保留参数但不再使用，避免调用方代码出错
+) -> Tuple[List[int], int]:
+    """
+    在可选的下采样图像上求取自适应中位数阈值序列。
+    返回 (thresholds, best_iter)。若 downscale == 1.0，则行为与原实现完全相同。
+    
+    参数说明
+    ----------
+    y : np.ndarray
+        输入灰度图，dtype 必须是 uint8（0‑255）。
+    max_iter : int
+        最大迭代次数（默认 ITERATIONS）。
+    stop_median : int
+        当中位数 > stop_median 时提前退出（默认 STOP_MEDIAN）。
+    downscale : float
+        缩放系数，<1 表示把宽高都乘以该系数（即像素数约为系数²）。
+        典型取值 0.5 → 总像素数约为原来的 1/4。
+    interp : int
+        已弃用，不再影响下采样方式。现在使用切片下采样，计算量最小。
+    """
+    # -------------------------------------------------
+    # 1️⃣ 使用切片进行快速下采样（无需插值，计算量最小）
+    # -------------------------------------------------
+    if downscale < 1.0:
+        # 计算步长，例如 downscale=0.25 → step=4
+        step = max(1, int(round(1.0 / downscale)))
+        y_small = y[::step, ::step]
+    else:
+        y_small = y                     # 不下采样，直接使用原图
+    
+    # -------------------------------------------------
+    # 2️⃣ 直方图一次性统计（固定 256 桶）
+    # -------------------------------------------------
+    hist = np.bincount(y_small.ravel(), minlength=256).astype(np.int64)
+    total_pixels = y_small.size
+    thresholds: List[int] = []          # 每轮得到的阈值（中位数）
     cur_len = total_pixels
-    for _ in range(max_iter):
-        if cur_len == 0:
-            break
-        target = (cur_len - 1) // 2          # 中位数的索引（0‑based）
-        cum = 0
-        median_val = 0
-        for v in range(255, -1, -1):         # 从大到小累计
-            cum += hist[v]
-            if cum > target:
-                median_val = v
-                break
-        thresholds.append(median_val)
+    iter_cnt = 0
+    
+    # -------------------------------------------------
+    # 3️⃣ 主循环：向量化累计 + 搜索中位数
+    # -------------------------------------------------
+    while cur_len > 0 and iter_cnt < max_iter:
+        # (cur_len-1)//2 = 0‑based 中位数索引（从大到小累计时的目标位置）
+        target = (cur_len - 1) // 2
+        # 反向累计（大 → 小），一次性得到累计直方图
+        cum_hist = np.cumsum(hist[::-1])
+        # 第一个累计值 > target 的位置（右侧开区间）
+        idx = np.searchsorted(cum_hist, target + 1, side='right')
+        median_val = 255 - idx            # 恢复到原灰度值
+        thresholds.append(int(median_val))
+        
+        # 早停条件
         if median_val > stop_median:
             break
-        # 只保留 >= median_val 的像素作为下一轮候选
-        cur_len = int(hist[median_val:].sum())
-        hist[:median_val] = 0   # 清零低位
-    # ----- 选取最佳迭代次数（保持原逻辑） -----
+        
+        # 直接使用累计计数得到本轮保留的像素数
+        cur_len = int(cum_hist[idx])
+        
+        # 清零低位，防止下一轮再次计入
+        if median_val > 0:
+            hist[:median_val] = 0
+        
+        iter_cnt += 1
+    
+    # -------------------------------------------------
+    # 4️⃣ 选取最佳迭代次数（保持原逻辑）
+    # -------------------------------------------------
     best_iter = 1
     if len(thresholds) > 1:
         diffs = [abs(thresholds[i] - thresholds[i - 1]) for i in range(1, len(thresholds))]
         min_diff_idx = int(np.argmin(diffs))
-        best_iter = min_diff_idx + 2   # +2 因为 diffs 索引比 thresholds 小 1，且要取“后一次”
-    print(f"[INFO] 迭代阈值 (A,B,…,Tₙ) = {thresholds}")
-    print(f"[INFO] 最佳迭代轮数 = 第 {best_iter} 次 → 阈值 = {thresholds[best_iter-1]}")
+        best_iter = min_diff_idx + 2   # +2 因为 diffs 索引比 thresholds 小 1，且取“后一次”
+    
+    # -------------------------------------------------
+    # 5️⃣ 信息打印（可自行关闭）
+    # -------------------------------------------------
+    # print(f"[INFO] (downscale={downscale:.2f}) 迭代阈值 = {thresholds}")
+    # print(f"[INFO] 最佳迭代轮数 = 第 {best_iter} 次 → 阈值 = {thresholds[best_iter-1]}")
     return thresholds, best_iter
+
 def compress_low_levels(y: np.ndarray, thr: int) -> np.ndarray:
+    """把所有低于 thr 的像素提升到 thr """
     yc = y.copy()
     yc[yc < thr] = thr
     return yc
@@ -310,11 +391,7 @@ def main() -> None:
     if ENABLE_FAST_RETINEX:
         with _time_it("fast_retinex"):
             Y_tmp = fast_retinex_fast(Y_tmp)          # 已在内部完成降采样/上采样
-        with _time_it("global_gamma"):
-            Y_tmp = global_gamma(Y_tmp, gamma=GLOBAL_GAMMA)
-        print("[INFO] 已完成 Fast‑Retinex + 全局 γ 亮度增强")
-    else:
-        print("[INFO] Fast‑Retinex 已关闭，使用压缩后的 Y 通道作为增强基准")
+
 
     # -------------------------------------------------
     # 5️⃣ 锐化（可选）
