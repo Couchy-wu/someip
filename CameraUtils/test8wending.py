@@ -19,16 +19,14 @@ import time   # 用于时间统计
 # ---------- 开关 ----------
 ENABLE_GUIDED_FILTER = False   # 是否在亮度通道上执行导向滤波
 ENABLE_EDGE_RESTORE  = False   # 导向滤波后是否把原始强边缘恢复回去
-ENABLE_FAST_RETINEX   = False   # True → Fast‑Retinex；False → 直接使用原始 Y（仅压暗部）
-ENABLE_SHARPEN       = False   # 是否在亮度增强后执行锐化
+ENABLE_FAST_RETINEX   = True   # True → Fast‑Retinex；False → 直接使用原始 Y（仅压暗部）
+ENABLE_SHARPEN       = True   # 是否在亮度增强后执行锐化
 ENABLE_BINARY        = True    # 是否对最终亮度图做 Otsu 二值化
-ENABLE_SMALL_NOISE_REMOVE = False  # 是否启用小面积噪声去除（新增开关）
+ENABLE_SMALL_NOISE_REMOVE = True  # 是否启用小面积噪声去除（新增开关）
 # ---------- Fast‑Retinex ----------
 FAST_RETINEX_SIGMA = 80          # 高斯模糊的标准差（尺度），越大平滑范围越广
 FAST_RETINEX_GAIN  = 128.0       # 增益系数，用于放大对数差分的幅度
 FAST_RETINEX_OFFSET = 0.0        # 偏置，可在需要时微调整体亮度
-# ---------- 全局伽马 ----------
-GLOBAL_GAMMA = 0.8               # <1 ⇒ 提亮整体；>1 ⇒ 整体变暗(实际并没有使用)
 # ---------- 路径 ----------
 INPUT_PATH   = "CameraUtils/screenshot_10_warped.jpg"   # 待处理的原始图像路径
 OUTPUT_DIR   = Path("./output")               # 只保存 final_color.png
@@ -52,7 +50,6 @@ RETINEX_USE_BOXFILTER   = True       # True → 用积分图实现的 boxFilter�
 # =========================================================== #
 # ------------------- 时间统计工具 ------------------- #
 _step_times: Dict[str, float] = {}
-
 # ── 中文步骤名称映射（未列出的保持原样） ────────────────────────────────────────
 _CN_STEP_NAME = {
     "load_image & split YUV": "加载图像并拆分 YUV",
@@ -61,13 +58,11 @@ _CN_STEP_NAME = {
     "adaptive median threshold": "自适应中位数阈值",
     "compress low levels":    "压缩低亮度",
     "fast_retinex":           "快速 Retinex",
-    "global_gamma":           "全局 γ 变换",
     "sharpen":                "锐化",
     "otsu binary":            "Otsu 二值化",
     "remove small noise":     "小面积噪声去除",
     "reconstruct final color":"重建最终彩色图",
 }
-
 def _time_it(step_name: str) -> Any:
     """上下文管理器：记录 step_name 对应代码块的耗时（毫秒）。"""
     class _Timer:
@@ -81,7 +76,6 @@ def _time_it(step_name: str) -> Any:
             cn_name = _CN_STEP_NAME.get(step_name, step_name)
             # (f"[耗时] {cn_name:<30} {elapsed:8.2f} ms")
     return _Timer()
-
 def print_time_summary() -> None:
     """统一输出所有步骤的耗时表（中文）。"""
     print("\n===== 运行时间统计 =====")
@@ -146,13 +140,6 @@ def fast_retinex_fast(y: np.ndarray,
                          (y.shape[1], y.shape[0]),
                          interpolation=cv2.INTER_LINEAR)
     return ret.astype(np.uint8)
-# ------------------- 全局伽马 ------------------- #
-def global_gamma(y: np.ndarray, gamma: float = GLOBAL_GAMMA) -> np.ndarray:
-    """对整幅亮度通道统一做 γ 变换。"""
-    y_norm = y.astype(np.float32) / 255.0
-    out = np.power(y_norm, gamma)
-    out = np.clip(out * 255.0, 0, 255).astype(np.uint8)
-    return out
 # ------------------- 自适应迭代中位数阈值（直方图 O(n)） ------------------- #
 def adaptive_median_threshold(
     y: np.ndarray,
@@ -232,10 +219,8 @@ def adaptive_median_threshold(
         diffs = [abs(thresholds[i] - thresholds[i - 1]) for i in range(1, len(thresholds))]
         min_diff_idx = int(np.argmin(diffs))
         best_iter = min_diff_idx + 2   # +2 因为 diffs 索引比 thresholds 小 1，且取“后一次”
-    
-    # -------------------------------------------------
+
     # 5️⃣ 信息打印（可自行关闭）
-    # -------------------------------------------------
     # print(f"[INFO] (downscale={downscale:.2f}) 迭代阈值 = {thresholds}")
     # print(f"[INFO] 最佳迭代轮数 = 第 {best_iter} 次 → 阈值 = {thresholds[best_iter-1]}")
     return thresholds, best_iter
@@ -347,7 +332,6 @@ def reconstruct_final_color_black_bg(
     cv2.copyTo(bgr_processed, binary_mask, result_bgr)
     
     return result_bgr
-
 # ============================= 主流程 ============================= #
 def main() -> None:
     """主流程（经过“跳过无效步骤”优化的版本）"""
@@ -361,10 +345,8 @@ def main() -> None:
     # -------------------------------------------------
     # 2️⃣ 导向滤波 + 边缘恢复（仅在需要时执行）
     # -------------------------------------------------
-    # 这里直接把 Y_tmp 指向 Y_orig，只有在需要修改时才复制一次。
-    Y_tmp = Y_orig  # 可能是原图的引用，也可能是拷贝（下面会处理）
+    Y_tmp = Y_orig
     if ENABLE_GUIDED_FILTER or ENABLE_EDGE_RESTORE:
-        # 必须拷贝一次，后面的滤波/恢复会改写数据
         Y_tmp = Y_orig.copy()
         if ENABLE_GUIDED_FILTER:
             with _time_it("guided filter"):
@@ -373,7 +355,6 @@ def main() -> None:
                     radius=GUIDED_RADIUS,
                     eps=GUIDED_EPS,
                 )
-                # print("[INFO] 导向滤波已启用（fast_guided_filter）")
         if ENABLE_EDGE_RESTORE:
             with _time_it("edge restore"):
                 Y_tmp = restore_edges(
@@ -384,10 +365,6 @@ def main() -> None:
                     dilate_k=DILATE_KERNEL_SIZE,
                     iterations=DILATE_ITERATIONS,
                 )
-                # print("[INFO] 边缘恢复已启用（restore_edges）")
-    else:
-        # print("[INFO] 导向滤波 & 边缘恢复均已关闭，直接使用原始 Y 通道")
-        pass
     # -------------------------------------------------
     # 3️⃣ 自适应中位数阈值 & 低亮度压缩
     # -------------------------------------------------
@@ -397,15 +374,13 @@ def main() -> None:
         )
         best_thr = thresholds[best_iter - 1]
     with _time_it("compress low levels"):
-        # 直接在 Y_tmp 上做压缩，省掉一次拷贝
         Y_tmp = compress_low_levels(Y_tmp, best_thr)
     # -------------------------------------------------
-    # 4️⃣ 亮度增强（Fast‑Retinex + 全局 γ）——可选
+    # 4️⃣ 亮度增强（Fast‑Retinex）——可选
     # -------------------------------------------------
     if ENABLE_FAST_RETINEX:
         with _time_it("fast_retinex"):
-            Y_tmp = fast_retinex_fast(Y_tmp)          # 已在内部完成降采样/上采样
-
+            Y_tmp = fast_retinex_fast(Y_tmp)
     # -------------------------------------------------
     # 5️⃣ 锐化（可选）
     # -------------------------------------------------
@@ -417,43 +392,30 @@ def main() -> None:
                 ksize=SHARPEN_KERNEL_SIZE,
                 sigma=SHARPEN_SIGMA,
             )
-            # print("[INFO] 锐化已启用")
-    else:
-        # print("[INFO] 锐化已关闭")
-        pass
     # -------------------------------------------------
     # 6️⃣ Otsu 二值化 + 小噪声去除（可选）
     # -------------------------------------------------
-    Y_binary_clean = None  # 统一的占位变量，后面拼接时判断是否为 None
+    Y_binary_clean = None
     if ENABLE_BINARY:
         with _time_it("otsu binary"):
             Y_binary = otsu_binary(Y_tmp)
         
-        # 新增开关控制小面积噪声去除
         if ENABLE_SMALL_NOISE_REMOVE:
             with _time_it("remove small noise"):
                 Y_binary_clean = remove_small_noise_regions(
                     Y_binary, min_area=MIN_AREA_THRESHOLD
                 )
-            # print(f"[INFO] 二值化 + 小噪声去除已完成（阈值={MIN_AREA_THRESHOLD}）")
         else:
             Y_binary_clean = Y_binary.copy()
-            # print("[INFO] 小噪声去除已关闭，仅执行二值化")
-    else:
-        # print("[INFO] 二值化已关闭")
-        pass
     # -------------------------------------------------
     # 7️⃣ 合成最终彩色图（使用处理后的Y通道Y_tmp，只保存 final_color.png）
     # -------------------------------------------------
     with _time_it("reconstruct final color"):
         final_color = reconstruct_final_color_black_bg(Y_tmp, U, V, Y_tmp, Y_binary_clean)
-        # 保存图像
         save_stage("final_color", final_color)
     # -------------------------------------------------
     # 8️⃣ 时间统计 & 结束提示
     # -------------------------------------------------
     print_time_summary()
-    # print(f"\n[INFO] 结果已保存至: {OUTPUT_DIR.resolve()}\n")
-
 if __name__ == "__main__":
     main()
