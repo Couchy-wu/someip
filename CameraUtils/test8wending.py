@@ -4,10 +4,10 @@
 # 1️⃣ 读取图像并分离 YUV
 # 2️⃣ 导向滤波 + 边缘恢复
 # 3️⃣ 自适应中位数阈值迭代 → 低亮度压缩
-# 4️⃣ 亮度增强（Fast‑Retinex + 全局 γ）
+# 4️⃣ 亮度增强（Fast‑Retinex）
 # 5️⃣ 锐化（可选）
-# 6️⃣ Otsu 二值化 + 小面积噪声去除（新增开关控制）
-# 7️⃣ 彩色图合成
+# 6️⃣ Otsu 二值化 + 小面积噪声去除
+# 7️⃣ 彩色图合成（使用处理后的Y通道）
 # 8️⃣ 只保存最终彩色图（final_color.png）
 # --------------------------------------------------------------
 import cv2
@@ -19,10 +19,10 @@ import time   # 用于时间统计
 # ---------- 开关 ----------
 ENABLE_GUIDED_FILTER = False   # 是否在亮度通道上执行导向滤波
 ENABLE_EDGE_RESTORE  = False   # 导向滤波后是否把原始强边缘恢复回去
-ENABLE_FAST_RETINEX   = True   # True → Fast‑Retinex + 全局 γ；False → 直接使用原始 Y（仅压暗部）
-ENABLE_SHARPEN       = True   # 是否在亮度增强后执行锐化
+ENABLE_FAST_RETINEX   = False   # True → Fast‑Retinex；False → 直接使用原始 Y（仅压暗部）
+ENABLE_SHARPEN       = False   # 是否在亮度增强后执行锐化
 ENABLE_BINARY        = True    # 是否对最终亮度图做 Otsu 二值化
-ENABLE_SMALL_NOISE_REMOVE = True  # 是否启用小面积噪声去除（新增开关）
+ENABLE_SMALL_NOISE_REMOVE = False  # 是否启用小面积噪声去除（新增开关）
 # ---------- Fast‑Retinex ----------
 FAST_RETINEX_SIGMA = 80          # 高斯模糊的标准差（尺度），越大平滑范围越广
 FAST_RETINEX_GAIN  = 128.0       # 增益系数，用于放大对数差分的幅度
@@ -154,12 +154,6 @@ def global_gamma(y: np.ndarray, gamma: float = GLOBAL_GAMMA) -> np.ndarray:
     out = np.clip(out * 255.0, 0, 255).astype(np.uint8)
     return out
 # ------------------- 自适应迭代中位数阈值（直方图 O(n)） ------------------- #
-import numpy as np
-import cv2
-from typing import List, Tuple
-
-# 假设这些常量在别处定义
-
 def adaptive_median_threshold(
     y: np.ndarray,
     max_iter: int = ITERATIONS,
@@ -330,26 +324,27 @@ def reconstruct_final_color_black_bg(
     Y_tmp: np.ndarray,
     U: np.ndarray,
     V: np.ndarray,
-    Y_orig: np.ndarray,
+    Y_for_color: np.ndarray,
     binary_mask: np.ndarray
 ) -> np.ndarray:
     """
     重建最终彩色图，非mask区域为纯黑背景
+    使用处理后的Y通道(Y_for_color)进行彩色合成，而非原始Y通道
     性能优化：单次BGR创建 + OpenCV原生掩码操作
     """
     if binary_mask is None:
-        # 无mask时直接转换
-        return cv2.cvtColor(cv2.merge([Y_tmp, U, V]), cv2.COLOR_YUV2BGR)
+        # 无mask时直接转换（使用处理后的Y通道）
+        return cv2.cvtColor(cv2.merge([Y_for_color, U, V]), cv2.COLOR_YUV2BGR)
     
     # 1️⃣ 创建全黑BGR背景（默认就是0，无需填充）
     result_bgr = np.zeros((Y_tmp.shape[0], Y_tmp.shape[1], 3), dtype=np.uint8)
     
-    # 2️⃣ 将原始YUV转BGR
-    yuv_orig = cv2.merge([Y_orig, U, V])
-    bgr_orig = cv2.cvtColor(yuv_orig, cv2.COLOR_YUV2BGR)
+    # 2️⃣ 使用处理后的Y通道合成YUV并转BGR
+    yuv_processed = cv2.merge([Y_for_color, U, V])
+    bgr_processed = cv2.cvtColor(yuv_processed, cv2.COLOR_YUV2BGR)
     
     # 3️⃣ 只复制mask区域（OpenCV C++加速）
-    cv2.copyTo(bgr_orig, binary_mask, result_bgr)
+    cv2.copyTo(bgr_processed, binary_mask, result_bgr)
     
     return result_bgr
 
@@ -448,10 +443,10 @@ def main() -> None:
         # print("[INFO] 二值化已关闭")
         pass
     # -------------------------------------------------
-    # 7️⃣ 合成最终彩色图（只保存 final_color.png）
+    # 7️⃣ 合成最终彩色图（使用处理后的Y通道Y_tmp，只保存 final_color.png）
     # -------------------------------------------------
     with _time_it("reconstruct final color"):
-        final_color = reconstruct_final_color_black_bg(Y_tmp, U, V, Y_orig, Y_binary_clean)
+        final_color = reconstruct_final_color_black_bg(Y_tmp, U, V, Y_tmp, Y_binary_clean)
         # 保存图像
         save_stage("final_color", final_color)
     # -------------------------------------------------
