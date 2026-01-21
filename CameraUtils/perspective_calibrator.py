@@ -372,7 +372,7 @@ class PerspectiveCalibrator:
 
         # --- 使用非阻塞循环，支持热更新 ---
         while True:
-            key = cv2.waitKey(50) & 0xFF  # 每50ms检查一次
+            key = cv2.waitKey(10) & 0xFF  # 每10ms检查一次
             if key == 27:  # ESC
                 break
             elif key == ord('r'):  # 小写r重置选择
@@ -397,6 +397,87 @@ class PerspectiveCalibrator:
 
         cv2.destroyAllWindows()
         return self.corners if hasattr(self, 'corners') and self.corners else None
+
+    def run_auto(self, enable_watch=True, save_output=False):
+        """
+        自动模式（仅使用 JSON 中已有的透视矩阵对原始图像做透视变换）：
+        ----
+        enable_watch : bool, default True
+            开启/关闭热更新监听。
+        save_output : bool, default False
+            开启/关闭变换后图像的自动保存。
+        """
+        # -----------------------------------------------------------------
+        # ① 执行一次变换（内部函数，复用两次）
+        # -----------------------------------------------------------------
+        def _process():
+            # 读取 JSON（文件一定存在且格式正确）
+            with open(self.config_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            if "perspective_matrix" not in data:
+                print("❌ 配置文件缺少 `perspective_matrix` 键")
+                return False
+
+            # 直接使用保存的矩阵
+            self.perspective_matrix = np.array(
+                data["perspective_matrix"], dtype=np.float32
+            )
+
+            # 计算输出尺寸（保持原有分辨率逻辑）
+            if self.output_resolution == "720p":
+                width, height = 1280, 720
+            elif self.output_resolution == "1080p":
+                width, height = 1920, 1080
+            else:  # original
+                width, height = self.orig_width, self.orig_height
+
+            # 进行透视变换
+            self.warped_image = cv2.warpPerspective(
+                self.original_image,
+                self.perspective_matrix,
+                (width, height),
+                flags=cv2.INTER_LINEAR,
+            )
+
+            # ------------------- 保存（受开关控制） -------------------
+            if save_output:
+                output_path = (
+                    self.image_path.parent
+                    / f"{self.image_path.stem}_warped_auto.jpg"
+                )
+                cv2.imwrite(str(output_path), self.warped_image)
+                # print(f"✅ 已完成透视变换并自动保存: {output_path}")
+            else:
+                # print("✅ 已完成透视变换（未保存文件）")
+                pass
+            return True
+        # -----------------------------------------------------------------
+        # ② 第一次处理
+        # -----------------------------------------------------------------
+        if not _process():
+            return None                
+
+        # -----------------------------------------------------------------
+        # ③ 可选的热更新监听（同样受 save_output 控制）
+        # -----------------------------------------------------------------
+        if enable_watch:
+            import time
+            last_mtime = self.config_path.stat().st_mtime
+            print("🔄 已开启 透视变换矩阵 热更新监听 (fixed_corners.json)")
+            try:
+                while True:
+                    time.sleep(2)
+                    cur_mtime = self.config_path.stat().st_mtime
+                    if cur_mtime != last_mtime:                     # 文件被修改
+                        print("🔄 检测到配置文件变化，重新加载并变换")
+                        if _process():
+                            last_mtime = cur_mtime
+            except KeyboardInterrupt:
+                # 手动 Ctrl‑C 停止监听
+                pass
+        return self.warped_image                                        
+
 
     def apply_perspective_transform(self):
         """根据四个角点进行透视变换，将四边形区域拉直"""
@@ -506,7 +587,7 @@ class PerspectiveCalibrator:
             self.observer.schedule(event_handler, str(self.directory), recursive=False)
             thread = Thread(target=self.observer.start, daemon=True)
             thread.start()
-            print(f"📁 正在监听配置文件变化: {self.config_path}")
+            # print(f"📁 正在监听配置文件变化: {self.config_path}")
 
 
 # 使用示例
