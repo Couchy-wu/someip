@@ -155,9 +155,8 @@ def take_screenshot(frame, save_path="Resources/Picture"):
     else:
         print(f"[WARN] 截图保存失败: {filepath}")
 
-import platform  # ★ NEW   (标准库，无需额外安装)
 
-def set_exposure(cap, exposure_val, verbose=True):  # ★ NEW
+def set_exposure(cap, exposure_val, verbose=True):  
     """
     尝试对 ``cap`` 关闭自动曝光并手动设置 ``exposure_val``，随后读取
     实际值并与期望值比较，返回是否成功。
@@ -224,7 +223,7 @@ class CameraViewer:
     - stop()    → 立刻请求退出并安全释放资源
     - run()     → 兼容原来的直接调用方式（阻塞式运行）
     """
-    def __init__(self, display_callback=None, is_standalone=True, screenshot_path="Resources/Picture", exposure = -2):
+    def __init__(self, display_callback=None, is_standalone=True, screenshot_path="Resources/Picture", exposure = -3):
         self.display_callback = display_callback
         self.is_standalone = is_standalone  # 是否独立运行（在本文件中调用）
         self.screenshot_path = screenshot_path
@@ -382,7 +381,7 @@ def main(display_callback=None):
     is_standalone = (__name__ == "__main__")
     viewer = CameraViewer(display_callback=display_callback,
                           is_standalone=is_standalone,
-                          exposure=-2.0)
+                          exposure=-4)
     viewer.run()          # 阻塞，直到窗口关闭或外部调用 viewer.stop()
 
 
