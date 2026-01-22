@@ -11,7 +11,7 @@ import xml.etree.ElementTree as ET
 from CanDataProcessing.can_testcase_runner import LogParser
 from PIL import Image, ImageTk, ImageDraw, ImageFont
 from CameraUtils.camera_viewer import CameraViewer, rotate_image_180
-
+import cv2
 
 # 判断是否被 import 调用
 IS_STANDALONE = __name__ == "__main__"
@@ -42,7 +42,12 @@ class CANFDGUI:
         # 用来保存初始化返回的句柄、通道列表、线程列表
         self.device_handle = None               # 设备句柄
         self.channel_handles = None             # 通道句柄
-        self.receive_threads = None             # 接收线程列表        
+        self.receive_threads = None             # 接收线程列表       
+
+        # ---------- 图像预处理 ----------
+        # 在 GUI 中创建一次 ImageEnhancer 实例，以便在 “变换” 中复用
+        from CameraUtils.image_enhancer import ImageEnhancer
+        self._enhancer = ImageEnhancer(enable_timing=False)    
 
         # ---------- 第一块视频显示：右上角摄像头显示区域 ----------
         # 用一个固定大小的 Label 充当画布（640×360）
@@ -417,16 +422,19 @@ class CANFDGUI:
         ### 临时变换处理，后续算法可以在这里进行替换 ###
 
         根据下拉框的当前选项对摄像头帧做不同的“变换”。
-        - 变换A：水平镜面翻转（左↔右）
+        - 变换A：使用 ImageEnhancer 进行图像预处理
         - 变换B：转成灰度图（仍保持 3 通道，方便后面直接转 ImageTk.PhotoImage）
         """
         # 读取当前选项
         option = self.transform_option_var.get()
 
         if option == "变换A":
-            # 水平翻转：numpy 切片实现，几乎不耗时
-            transformed = frame_rgb[:, ::-1, :]          # 左右翻转
-            return Image.fromarray(transformed)
+            # 使用 ImageEnhancer 进行图像增强，而不是简单的左右翻转
+            #   ImageEnhancer.process 接收 BGR 或 RGB numpy 数组并返回 BGR
+            enhanced_bgr = self._enhancer.process(frame_rgb, save_output=False)   # 返回 BGR
+            # 转为 RGB 供 Pillow 使用
+            enhanced_rgb = cv2.cvtColor(enhanced_bgr, cv2.COLOR_BGR2RGB)
+            return Image.fromarray(enhanced_rgb)
 
         elif option == "变换B":
             # 灰度化：先转成单通道，再复制三遍保持 (H, W, 3) 结构

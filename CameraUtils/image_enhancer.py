@@ -388,22 +388,20 @@ class ImageEnhancer:
         """
         total_start = time.perf_counter()
         self.timings.clear()
-
         # -------------------------------------------------
         # 1️⃣ 读取图像并拆分 YUV
         # -------------------------------------------------
         if isinstance(image_input, str):
             img_bgr = self._maybe_time("load_image", self._load_image, image_input)
         elif isinstance(image_input, np.ndarray):
+            # 直接把传入的 ndarray 赋给 img_bgr
+            img_bgr = image_input
             if img_bgr.ndim != 3 or img_bgr.shape[2] != 3:
                 raise ValueError("输入图像必须是 H×W×3 的 BGR 图像")
-            img_bgr = image_input
         else:
             raise TypeError("image_input 必须是字符串路径或 numpy 数组")
-
         Y_orig, U, V = self._rgb2yuv(img_bgr)
         Y_tmp = Y_orig.copy()
-
         # -------------------------------------------------
         # 2️⃣ 导向滤波 + 边缘恢复（仅在需要时执行）
         # -------------------------------------------------
@@ -417,7 +415,6 @@ class ImageEnhancer:
                                         self._restore_edges,
                                         Y_orig,
                                         Y_tmp)
-
         # -------------------------------------------------
         # 3️⃣ 自适应中位数阈值 & 低亮度压缩
         # -------------------------------------------------
@@ -429,7 +426,6 @@ class ImageEnhancer:
                                 self._compress_low_levels,
                                 Y_tmp,
                                 best_thr)
-
         # -------------------------------------------------
         # 4️⃣ 亮度增强（Fast‑Retinex）——可选
         # -------------------------------------------------
@@ -437,7 +433,6 @@ class ImageEnhancer:
             Y_tmp = self._maybe_time("fast_retinex",
                                     self._fast_retinex_fast,
                                     Y_tmp)
-
         # -------------------------------------------------
         # 5️⃣ 锐化（可选）
         # -------------------------------------------------
@@ -445,7 +440,6 @@ class ImageEnhancer:
             Y_tmp = self._maybe_time("sharpen",
                                     self._sharpen_unsharp_mask,
                                     Y_tmp)
-
         # -------------------------------------------------
         # 6️⃣ Otsu 二值化 + 小噪声去除（可选）
         # -------------------------------------------------
@@ -460,7 +454,6 @@ class ImageEnhancer:
                                                  Y_binary)
             else:
                 Y_binary_clean = Y_binary.copy()
-
         # 7️⃣ 合成最终彩色图（使用 **原始** Y 通道，只保存 final_color.png）
         final_color = self._maybe_time(
             "reconstruct_color",
@@ -470,16 +463,13 @@ class ImageEnhancer:
             V,
             Y_binary_clean   # binary_mask（可能为 None）
         )
-
         # -------------------------------------------------
         # 8️⃣ 保存结果
         # -------------------------------------------------
         if save_output:
             self._save_stage("final_color", final_color)
-
         total_elapsed = time.perf_counter() - total_start
         self.timings["total"] = total_elapsed
-
         # ------------------- 打印计时报告 ------------------- #
         if self.enable_timing:
             print("\n=== 运行时间统计 (milliseconds) ===")
@@ -501,7 +491,6 @@ class ImageEnhancer:
                     ms = self.timings[key] * 1000          # 秒 → 毫秒
                     print(f"{label:20s} {ms:8.2f} ms")
             print("=================================\n")
-
         return final_color
 
 
@@ -512,7 +501,7 @@ if __name__ == "__main__":
 
     # 调用接口（路径输入，保存输出）
     result_image = enhancer.process(
-        image_input="CameraUtils/screenshot_7_warped.jpg",
+        image_input="CameraUtils/screenshot_4_warped.jpg",
         save_output=True
     )
 
