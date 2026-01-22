@@ -164,7 +164,7 @@ class CameraViewer:
     - stop()    → 立刻请求退出并安全释放资源
     - run()     → 兼容原来的直接调用方式（阻塞式运行）
     """
-    def __init__(self, display_callback=None, is_standalone=True, screenshot_path="Resources/Picture"):
+    def __init__(self, display_callback=None):
         self.display_callback = display_callback
 
         # ---------- 与原 main 中硬编码的配置保持一致 ----------
@@ -246,12 +246,6 @@ class CameraViewer:
                 if self.display_callback is None:
                     cv2.imshow(win_name, display_frame)
                     key = cv2.waitKey(self.FRAME_DELAY_MS) & 0xFF
-                    
-                    # 只有在独立运行时才监听's'键截图
-                    if self.is_standalone and key == ord('s'):
-                        # 截取原始帧（保持原始分辨率）
-                        take_screenshot(frame, self.screenshot_path)
-                    
                     if (cv2.getWindowProperty(win_name,
                                               cv2.WND_PROP_VISIBLE) < 1
                             or key == 27):
@@ -309,10 +303,7 @@ def main(display_callback=None):
     摄像头主函数（保持向后兼容）。
     现在内部会实例化 ``CameraViewer`` 并调用 ``run()``。
     """
-    # 判断是否为本文件直接调用
-    is_standalone = (__name__ == "__main__")
-    viewer = CameraViewer(display_callback=display_callback,
-                          is_standalone=is_standalone)
+    viewer = CameraViewer(display_callback=display_callback)
     viewer.run()          # 阻塞，直到窗口关闭或外部调用 viewer.stop()
 
 
