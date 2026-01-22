@@ -33,7 +33,7 @@ FAST_RETINEX_GAIN  = 128.0       # 增益系数，用于放大对数差分的幅
 FAST_RETINEX_OFFSET = 0.0        # 偏置，可在需要时微调整体亮度
 
 # ---------- 路径 ----------
-INPUT_PATH   = "CameraUtils/screenshot_10_warped.jpg"   # 待处理的原始图像路径
+INPUT_PATH   = "CameraUtils/screenshot_7_warped.jpg"   # 待处理的原始图像路径
 OUTPUT_DIR   = Path("./output")               # 只保存 final_color.png
 
 # ---------- 其余处理 ----------
@@ -298,30 +298,27 @@ def save_stage(name: str, img: np.ndarray) -> None:
 
 # ------------------- 重建最终彩色图（极简版 - 背景全黑） ------------------- #
 def reconstruct_final_color_black_bg(
-    Y_tmp: np.ndarray,
+    Y_original: np.ndarray,      # 使用原始 Y 通道
     U: np.ndarray,
     V: np.ndarray,
-    Y_for_color: np.ndarray,
-    binary_mask: np.ndarray
+    binary_mask: np.ndarray     
 ) -> np.ndarray:
     """
-    重建最终彩色图，非 mask 区域为纯黑背景。
-    使用处理后的 Y 通道 (Y_for_color) 进行彩色合成，而非原始 Y 通道。
+    使用原始 Y 通道合成彩色图，mask 区域保留，其他区域为黑色背景。
     """
     if binary_mask is None:
-        # 无mask时直接转换（使用处理后的Y通道）
-        return cv2.cvtColor(cv2.merge([Y_for_color, U, V]), cv2.COLOR_YUV2BGR)
-    
-    # 1️⃣ 创建全黑BGR背景（默认就是0，无需填充）
-    result_bgr = np.zeros((Y_tmp.shape[0], Y_tmp.shape[1], 3), dtype=np.uint8)
-    
-    # 2️⃣ 使用处理后的Y通道合成YUV并转BGR
-    yuv_processed = cv2.merge([Y_for_color, U, V])
-    bgr_processed = cv2.cvtColor(yuv_processed, cv2.COLOR_YUV2BGR)
-    
-    # 3️⃣ 只复制mask区域（OpenCV C++加速）
-    cv2.copyTo(bgr_processed, binary_mask, result_bgr)
+        # 没有 mask 时直接把原始 Y、U、V 合成 BGR
+        return cv2.cvtColor(cv2.merge([Y_original, U, V]), cv2.COLOR_YUV2BGR)
 
+    # 1️⃣ 创建全黑 BGR 背景
+    result_bgr = np.zeros((Y_original.shape[0], Y_original.shape[1], 3), dtype=np.uint8)
+
+    # 2️⃣ 用原始 Y 通道合成 YUV → BGR
+    yuv_original = cv2.merge([Y_original, U, V])
+    bgr_original = cv2.cvtColor(yuv_original, cv2.COLOR_YUV2BGR)
+
+    # 3️⃣ 只复制 mask 区域（OpenCV 高效实现）
+    cv2.copyTo(bgr_original, binary_mask, result_bgr)
     return result_bgr
 
 # ============================= 计时工具 ============================= #
@@ -424,12 +421,15 @@ def main() -> None:
         else:
             Y_binary_clean = Y_binary.copy()
 
-    # -------------------------------------------------
-    # 7️⃣ 合成最终彩色图（使用处理后的 Y 通道，只保存 final_color.png）
-    # -------------------------------------------------
-    final_color = maybe_time("reconstruct_color",
-                              reconstruct_final_color_black_bg,
-                              Y_tmp, U, V, Y_tmp, Y_binary_clean)
+    # 7️⃣ 合成最终彩色图（使用 **原始** Y 通道，只保存 final_color.png）
+    final_color = maybe_time(
+        "reconstruct_color",
+        reconstruct_final_color_black_bg,
+        Y_orig,          # ★ MOD: 传入原始亮度通道
+        U,
+        V,
+        Y_binary_clean   # binary_mask（可能为 None）
+    )
 
     # -------------------------------------------------
     # 8️⃣ 保存结果
