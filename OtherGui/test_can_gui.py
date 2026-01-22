@@ -104,7 +104,7 @@ class CANFDGUI:
         self.rotate_btn.grid(row=2, column=2, pady=5, padx=10, sticky='ew')
 
         # 镜面反转 勾选状态
-        self.mirror_enable_var = tk.IntVar(value=1)   # 0 – 关闭， 1 – 开启
+        self.mirror_enable_var = tk.IntVar(value=0)   # 0 – 关闭， 1 – 开启
         # 勾选框：是否开启镜面反转
         tk.Checkbutton(
             root,

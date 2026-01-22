@@ -10,7 +10,7 @@ import sys
 import traceback
 import threading          # <-- 新增
 import time               # <-- 新增（统一使用）
-
+import platform 
 
 # 读取摄像头，并设置分辨率
 def try_open_camera(indices=(0, 1), target_width=1280, target_height=720, target_fps=30):
@@ -155,6 +155,66 @@ def take_screenshot(frame, save_path="Resources/Picture"):
     else:
         print(f"[WARN] 截图保存失败: {filepath}")
 
+import platform  # ★ NEW   (标准库，无需额外安装)
+
+def set_exposure(cap, exposure_val, verbose=True):  # ★ NEW
+    """
+    尝试对 ``cap`` 关闭自动曝光并手动设置 ``exposure_val``，随后读取
+    实际值并与期望值比较，返回是否成功。
+
+    参数
+    ----
+    cap : cv2.VideoCapture
+        已打开的摄像头对象
+    exposure_val : float
+        期望的曝光值（Windows 常用负数对数，Linux 常用毫秒）
+    verbose : bool
+        是否在控制台打印调试信息
+    """
+    # ----- 关闭自动曝光（不同平台取值不同） -----
+    if platform.system() == "Windows":
+        # DSHOW：0.25 手动，0.75 自动
+        auto_val = 0.25
+    else:
+        # Linux/macOS (V4L2)：1 手动，0 自动
+        auto_val = 1.0
+
+    if not cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, auto_val):
+        if verbose:
+            print("[WARN] 无法关闭自动曝光 (CAP_PROP_AUTO_EXPOSURE)")
+    else:
+        if verbose:
+            print("[INFO] 已关闭自动曝光 (CAP_PROP_AUTO_EXPOSURE)")
+
+    # ----- 设置曝光值 -----
+    if not cap.set(cv2.CAP_PROP_EXPOSURE, float(exposure_val)):
+        if verbose:
+            print("[WARN] set(CAP_PROP_EXPOSURE) 返回 False，驱动可能不支持手动曝光")
+    else:
+        if verbose:
+            print(f"[INFO] 尝试设置曝光值为 {exposure_val}")
+
+    # ----- 读取并校验实际曝光值 -----
+    actual = cap.get(cv2.CAP_PROP_EXPOSURE)
+    if verbose:
+        print(f"[INFO] 实际曝光值: {actual}")
+
+    # 某些驱动返回 0 表示“不支持手动曝光”
+    if actual == 0 and exposure_val != 0:
+        if verbose:
+            print("[WARN] 读取到的曝光值为 0，极有可能不支持手动曝光")
+        return False
+
+    tolerance = 0.1 * abs(exposure_val) if exposure_val != 0 else 0.1
+    if abs(actual - exposure_val) <= tolerance:
+        if verbose:
+            print("[INFO] 曝光值设置成功")
+        return True
+    else:
+        if verbose:
+            print("[WARN] 曝光值设置失败 （误差超出容忍范围）")
+        return False
+
 
 # 线程化摄像头封装类
 class CameraViewer:
@@ -164,9 +224,11 @@ class CameraViewer:
     - stop()    → 立刻请求退出并安全释放资源
     - run()     → 兼容原来的直接调用方式（阻塞式运行）
     """
-    def __init__(self, display_callback=None):
+    def __init__(self, display_callback=None, is_standalone=True, screenshot_path="Resources/Picture", exposure = -2):
         self.display_callback = display_callback
-
+        self.is_standalone = is_standalone  # 是否独立运行（在本文件中调用）
+        self.screenshot_path = screenshot_path
+        self.exposure = exposure                # 手动曝光目标值（None 表示使用自动曝光）
         # ---------- 与原 main 中硬编码的配置保持一致 ----------
         self.CAMERA_INDICES = (0, 1)
         self.CAPTURE_TARGET_WIDTH = 1280
@@ -203,6 +265,11 @@ class CameraViewer:
                 self.capture_w, self.capture_h = resolution
         else:
             self.capture_w, self.capture_h = 1280, 720
+        # 若用户提供了 exposure，则尝试手动设置
+        if self.exposure is not None and self.cap.isOpened():
+            success = set_exposure(self.cap, self.exposure, verbose=True)
+            if not success:
+                print("[WARN] 曝光设置未成功，后续将使用默认（自动）曝光")
 
     # --------------------------------------------------------------
     # 主循环（原来 while True 循环搬进这里，加入 stop 标识）
@@ -227,6 +294,8 @@ class CameraViewer:
                     frame = np.zeros((self.capture_h,
                                      self.capture_w, 3), dtype=np.uint8)
 
+                frame = cv2.flip(frame, 1) # 镜面翻转（左↔右）
+
                 # ---------- 无摄像头提示 ----------
                 if self.cam_index is None:
                     draw_centered_text(frame,
@@ -246,9 +315,15 @@ class CameraViewer:
                 if self.display_callback is None:
                     cv2.imshow(win_name, display_frame)
                     key = cv2.waitKey(self.FRAME_DELAY_MS) & 0xFF
+                    
+                    # 只有在独立运行时才监听's'键截图
+                    if self.is_standalone and key == ord('s'):
+                        # 截取原始帧（保持原始分辨率）
+                        take_screenshot(frame, self.screenshot_path)
+                    
                     if (cv2.getWindowProperty(win_name,
                                               cv2.WND_PROP_VISIBLE) < 1
-                            or key == 27):
+                            or key == 27):  # ESC键退出
                         break
                 else:
                     rgb = cv2.cvtColor(display_frame,
@@ -303,12 +378,23 @@ def main(display_callback=None):
     摄像头主函数（保持向后兼容）。
     现在内部会实例化 ``CameraViewer`` 并调用 ``run()``。
     """
-    viewer = CameraViewer(display_callback=display_callback)
+    # 判断是否为本文件直接调用
+    is_standalone = (__name__ == "__main__")
+    viewer = CameraViewer(display_callback=display_callback,
+                          is_standalone=is_standalone,
+                          exposure=-2.0)
     viewer.run()          # 阻塞，直到窗口关闭或外部调用 viewer.stop()
 
 
-# ----------------------------------------------------------------------
-# 7️⃣ 直接运行时的入口
-# ----------------------------------------------------------------------
-if __name__ == "__main__":
+def mirror_flip(frame: np.ndarray) -> np.ndarray:  # ★ NEW
+    """
+    对输入的 BGR 图像做水平镜面翻转（左↔右），返回翻转后的图像。
+
+    使用 OpenCV 的 cv2.flip 实现，零拷贝，毫秒级耗时。
+    """
+    # flipCode=1 → 水平翻转
+    return cv2.flip(frame, 1)
+
+
+if __name__ == "__main__":                     
     main()
