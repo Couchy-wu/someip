@@ -450,9 +450,13 @@ class CANFDGUI:
             messagebox.showwarning("提示", "当前没有可用的摄像头帧，请先确保摄像头正常工作后再尝试校正。")
             return
 
-        # ② 将帧写入临时文件
-        tmp_dir = tempfile.gettempdir()
-        tmp_path = os.path.join(tmp_dir, f"tmp_cam_{int(time.time()*1000)}.png")
+        # ② 将帧写入 **代码所在目录** 的临时文件
+        # 使用当前脚本所在目录而不是系统临时目录,避免临时图像残留找不到位置
+        script_dir = os.path.abspath(os.path.dirname(__file__))
+        tmp_path = os.path.join(
+            script_dir,
+            f"tmp_cam_{int(time.time() * 1000)}.png"
+        )
         # cv2.imwrite 需要 BGR 格式，latest_frame 已经是 RGB（camera_viewer 里是 RGB），先转回 BGR
         cv2.imwrite(tmp_path, cv2.cvtColor(self.latest_frame, cv2.COLOR_RGB2BGR))
 
@@ -470,11 +474,12 @@ class CANFDGUI:
             except Exception as e:
                 print(f"[ERROR] 透视校正异常: {e}")
             finally:
-                # 删除临时文件（确保即使异常也能清理）
+                # 删除临时文件
                 try:
                     os.remove(tmp_path)
                 except Exception:
                     pass
+
         threading.Thread(target=_run_calibrator, daemon=True).start()
 
     # --------------------- 图像变换相关功能 ---------------------
