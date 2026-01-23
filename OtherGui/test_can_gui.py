@@ -12,6 +12,8 @@ from CanDataProcessing.can_testcase_runner import LogParser
 from PIL import Image, ImageTk, ImageDraw, ImageFont
 from CameraUtils.camera_viewer import CameraViewer, rotate_image_180
 import cv2
+from CameraUtils.perspective_calibrator import PerspectiveCalibrator
+import tempfile
 
 # 判断是否被 import 调用
 IS_STANDALONE = __name__ == "__main__"
@@ -34,6 +36,9 @@ class CANFDGUI:
         # ---------- 线程控制 ----------
         self._stop_camera_thread = False          # 用来在关闭窗口时让摄像头回调提前退出
         self._after_id = None                     # 用来保存 after 的 id
+
+        # ---------- 、保存最近一帧原始图像 ----------
+        self.latest_frame = None                  # 、用于透视校正时取帧
 
         # 一些变量
         self.repeat_var = tk.StringVar(value="1")   # 用例重复检测次数
@@ -141,6 +146,17 @@ class CANFDGUI:
             font=("微软雅黑", 10)
         ).grid(row=6, column=1, pady=5, padx=10, sticky='w')
 
+        # “透视变换校正” 按键（放在已有按钮的下面，保持布局一致）
+        self.perspective_btn = tk.Button(
+            root,
+            text="透视变换校正",
+            font=("微软雅黑", 12),
+            bg="#3CC4A6", 
+            fg="white",
+            activebackground="#35D164",
+            command=self.start_perspective_correction
+        )
+        self.perspective_btn.grid(row=3, column=2, pady=5, padx=10, sticky='ew')
 
         # 按键：设备初始化按键
         self.init_btn = tk.Button(
@@ -322,6 +338,8 @@ class CANFDGUI:
         # ----------- 若窗口已请求关闭，则直接返回 ----------
         if getattr(self, "_stop_camera_thread", False):
             return
+        # 先把原始（未做任何处理的）帧保存下来，以便后续 “透视变换校正” 使用
+        self.latest_frame = frame_rgb.copy()   # 保留最新的原始帧
         try:
             # 1) 显示摄像头画面（并可选 180° 旋转）
             if self.image_test_var.get() == 1:
@@ -415,6 +433,49 @@ class CANFDGUI:
             draw.text((x, y), line, font=font, fill=(0, 255, 0))
 
         return img
+
+    # 透视变换校正入口（非阻塞）
+    def start_perspective_correction(self):
+        """
+        按下 “透视变换校正” 按键后执行的回调。
+        步骤：
+        1. 读取最近一次捕获的原始帧（self.latest_frame）。
+        2. 将该帧保存为临时 PNG 文件（opencv 读取更方便）。
+        3. 在子线程里实例化 PerspectiveCalibrator 并调用 .run()，
+           保证整个过程不阻塞 GUI 主线程。
+        4. 线程结束后自动删除临时文件。
+        """
+        # ① 检查是否已有帧可用
+        if self.latest_frame is None:
+            messagebox.showwarning("提示", "当前没有可用的摄像头帧，请先确保摄像头正常工作后再尝试校正。")
+            return
+
+        # ② 将帧写入临时文件
+        tmp_dir = tempfile.gettempdir()
+        tmp_path = os.path.join(tmp_dir, f"tmp_cam_{int(time.time()*1000)}.png")
+        # cv2.imwrite 需要 BGR 格式，latest_frame 已经是 RGB（camera_viewer 里是 RGB），先转回 BGR
+        cv2.imwrite(tmp_path, cv2.cvtColor(self.latest_frame, cv2.COLOR_RGB2BGR))
+
+        # ③ 在新线程中运行校正器
+        def _run_calibrator():
+            try:
+                # 这里使用与主程序相同的输出分辨率，可自行修改
+                calibrator = PerspectiveCalibrator(
+                    image_path=tmp_path,
+                    display_width=640,
+                    display_height=360,
+                    output_resolution="720p"      # 与主界面保持一致，可自行改为 "original"/"1080p"
+                )
+                calibrator.run()                # 进入交互式手动校准界面（OpenCV 窗口）
+            except Exception as e:
+                print(f"[ERROR] 透视校正异常: {e}")
+            finally:
+                # 删除临时文件（确保即使异常也能清理）
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+        threading.Thread(target=_run_calibrator, daemon=True).start()
 
     # --------------------- 图像变换相关功能 ---------------------
     def _apply_transform(self, frame_rgb):
