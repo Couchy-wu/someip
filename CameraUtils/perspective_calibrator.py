@@ -454,14 +454,30 @@ class PerspectiveCalibrator:
     # -----------------------------------------------------------------
     # 10️⃣ 自动模式（仅使用已有矩阵）
     # -----------------------------------------------------------------
-    def run_auto(self, enable_watch=True, save_output=False):
+    def run_auto(self, enable_watch=True, save_output=False, image_data=None):
         """
-        自动模式（仅使用 JSON 中已有的透视矩阵对原始图像做透视变换）：
-        enable_watch : bool, default True   – 开启/关闭热更新监听。
-        save_output : bool, default False  – 开启/关闭变换后图像的自动保存。
+        透视变换自动模式。
+
+        现在支持两种输入方式：
+        1️⃣ 传统方式 – 通过 `self.image_path`（在 __init__ 中读取的文件）。
+        2️⃣ 直接传入 numpy RGB 图像 – `image_data` 参数 (shape: H×W×3, dtype=uint8)。
+
+        当 `image_data` 不为 None 时，直接使用该数组做变换，
+        并在内部更新 `self.original_image`、`self.orig_height`、`self.orig_width`，
+        其余逻辑保持不变（读取透视矩阵、计算输出尺寸、warp 等）。
         """
+        # ---------- ① 若传入了 image_data，直接使用 ----------
+        if image_data is not None:
+            # OpenCV 需要 BGR 格式；这里假设传入的是 RGB → 转为 BGR
+            if image_data.ndim == 3 and image_data.shape[2] == 3:
+                self.original_image = cv2.cvtColor(image_data, cv2.COLOR_RGB2BGR)
+            else:
+                # 已经是 BGR（或单通道）则直接使用
+                self.original_image = image_data
+            self.orig_height, self.orig_width = self.original_image.shape[:2]
+
         # -----------------------------------------------------------------
-        # ① 执行一次变换（内部函数，复用两次）
+        # ② 读取透视矩阵（保持原实现）
         # -----------------------------------------------------------------
         def _process():
             with open(self.config_path, "r", encoding="utf-8") as f:
@@ -490,12 +506,13 @@ class PerspectiveCalibrator:
                 cv2.imwrite(str(output_path), self.warped_image)
             return True
         # -----------------------------------------------------------------
-        # ② 第一次处理
+        # ③ 首次处理
         # -----------------------------------------------------------------
         if not _process():
             return None
+
         # -----------------------------------------------------------------
-        # ③ 可选的热更新监听（同样受 save_output 控制）
+        # ④ 可选的热更新监听（保持原实现）
         # -----------------------------------------------------------------
         if enable_watch:
             import time
@@ -524,7 +541,7 @@ class PerspectiveCalibrator:
         # 若已有缓存矩阵且未被手动清除，则直接使用
         if self.perspective_matrix is not None:
             matrix = self.perspective_matrix
-            print("使用已缓存的透视矩阵进行变换")
+            # print("使用已缓存的透视矩阵进行变换")
         else:
             # 获取原始图像中的四个角点（顺序：TL, TR, BR, BL）
             pts_src = np.array([

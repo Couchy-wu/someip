@@ -140,7 +140,7 @@ class CANFDGUI:
         ttk.Combobox(
             root,
             textvariable=self.transform_option_var,
-            values=["变换A", "变换B"],
+            values=["变换A", "变换B", "变换C"],
             state="readonly",
             width=12,
             font=("微软雅黑", 10)
@@ -485,36 +485,90 @@ class CANFDGUI:
     # --------------------- 图像变换相关功能 ---------------------
     def _apply_transform(self, frame_rgb):
         """
-        ### 临时变换处理，后续算法可以在这里进行替换 ###
-
-        根据下拉框的当前选项对摄像头帧做不同的“变换”。
-        - 变换A：使用 ImageEnhancer 进行图像预处理
-        - 变换B：转成灰度图（仍保持 3 通道，方便后面直接转 ImageTk.PhotoImage）
+        根据下拉框当前选项返回不同的处理结果。
+        - 变换A → 透视自动校正（原来的变换C）；
+        - 变换B → 灰度化（保持 3 通道）；
+        - 变换C → 先透视校正（变换A），再进行图像增强（原来的变换A）。
+        
+        注意：
+        * 这里的 ``frame_rgb`` 实际上是 **BGR**（CameraViewer 直接返回的 OpenCV 帧），
+          为避免颜色通道错位，所有需要 **RGB** 的地方都会先做 BGR→RGB 转换，
+          需要 **BGR** 的地方则直接使用原始数组。
         """
-        # 读取当前选项
         option = self.transform_option_var.get()
 
         if option == "变换A":
-            # 使用 ImageEnhancer 进行图像增强，而不是简单的左右翻转
-            #   ImageEnhancer.process 接收 BGR 或 RGB numpy 数组并返回 BGR
-            enhanced_bgr = self._enhancer.process(frame_rgb, save_output=False)   # 返回 BGR
-            # 转为 RGB 供 Pillow 使用
-            enhanced_rgb = cv2.cvtColor(enhanced_bgr, cv2.COLOR_BGR2RGB)
-            return Image.fromarray(enhanced_rgb)
+            # 直接返回 Pillow Image（已在内部完成 BGR→RGB）
+            return self._apply_perspective_auto(frame_rgb)
 
         elif option == "变换B":
-            # 灰度化：先转成单通道，再复制三遍保持 (H, W, 3) 结构
-            # 0.2126 R + 0.7152 G + 0.0722 B → 采用 Pillow 的 convert
-            img = Image.fromarray(frame_rgb)            # PIL Image (RGB)
+            # 灰度化：保持 3 通道，便于后续 resize / PhotoImage
+            img = Image.fromarray(cv2.cvtColor(frame_rgb, cv2.COLOR_BGR2RGB))  # BGR→RGB
             gray = img.convert("L")                     # 单通道灰度
-            # 再转回 3 通道（RGB），这样后面的 resize / PhotoImage 不需要额外处理
             gray_rgb = Image.merge("RGB", (gray, gray, gray))
             return gray_rgb
 
-        else:
-            # 兜底：不做任何处理，直接返回原始帧
-            return Image.fromarray(frame_rgb)  
+        elif option == "变换C":                         # 先透视校正 → 再图像增强
+            # 1️⃣ 透视校正（使用已有的自动函数），得到 Pillow Image (RGB)
+            corrected_img = self._apply_perspective_auto(frame_rgb)
+            # 2️⃣ Pillow Image → numpy **RGB** 数组
+            import numpy as np                         # 局部导入，避免全局改动）
+            corrected_rgb = np.array(corrected_img)      # (H, W, 3) RGB ndarray
+            # 3️⃣ ImageEnhancer 需要 **BGR** 输入 → 先把 RGB 转回 BGR
+            corrected_bgr = cv2.cvtColor(corrected_rgb, cv2.COLOR_RGB2BGR)
+            # 4️⃣ 进行图像增强（返回 BGR），再转回 RGB 供 Pillow 使用
+            enhanced_bgr = self._enhancer.process(corrected_bgr, save_output=False)
+            enhanced_rgb = cv2.cvtColor(enhanced_bgr, cv2.COLOR_BGR2RGB)
+            return Image.fromarray(enhanced_rgb)       # 返回 Pillow Image (RGB)
 
+        else:
+            # 兜底：直接返回原始帧（BGR → RGB 再转 Pillow）
+            rgb = cv2.cvtColor(frame_rgb, cv2.COLOR_BGR2RGB)
+            return Image.fromarray(rgb)
+
+    def _apply_perspective_auto(self, frame_rgb):
+        """
+        透视变换实现。
+        - 直接把当前帧（RGB ndarray）传给 ``PerspectiveCalibrator.run_auto``；
+        - 为满足 `PerspectiveCalibrator` 必须的 ``image_path`` 参数，临时创建一个
+          *空* PNG 文件并立即删除，只用作占位；
+        - 返回 ``PIL.Image``，若校正失败则返回原始帧对应的 Image。
+        """
+        import tempfile, os
+
+        # ① 创建占位文件（仅为构造 PerspectiveCalibrator 所需的路径）
+        tmp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        tmp_path = tmp_file.name
+        tmp_file.close()
+        # 把当前帧写成 BGR PNG（OpenCV 读取时需要 BGR）
+        cv2.imwrite(tmp_path, cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR))
+
+        try:
+            # ② 实例化校准器（使用占位路径），立刻走自动模式
+            calibrator = PerspectiveCalibrator(
+                image_path=tmp_path,
+                display_width=640,
+                display_height=360,
+                output_resolution="720p"          # 与主界面保持一致，可自行修改
+            )
+            # ③ 只传入图像数据（RGB），不再依赖磁盘读取
+            warped_bgr = calibrator.run_auto(
+                enable_watch=False,                # 不需要热更新监听
+                save_output=False,                 # 不保存输出文件
+                image_data=frame_rgb               
+            )
+            # ④ 若得到结果，转回 RGB 并返回 Pillow Image；否则返回原图
+            if warped_bgr is not None:
+                warped_rgb = cv2.cvtColor(warped_bgr, cv2.COLOR_BGR2RGB)
+                return Image.fromarray(warped_rgb)
+            else:
+                return Image.fromarray(frame_rgb)
+        finally:
+            # ⑤ 清理临时占位文件
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
 
     # --------------------- CAN设备初始化 ---------------------
     def start_init(self):
