@@ -345,20 +345,19 @@ class PerspectiveCalibrator:
         cv2.imshow("Manual Corner Detector", self.working_image)
 
     def run(self):
-        """启动角点检测"""
+        """启动角点检测并在两个窗口均被手动关闭时退出"""
         cv2.namedWindow("Manual Corner Detector", cv2.WINDOW_NORMAL)
         cv2.resizeWindow("Manual Corner Detector", self.display_width, self.display_height)
         cv2.imshow("Manual Corner Detector", self.working_image)
         cv2.setMouseCallback("Manual Corner Detector", self.click_event)
 
-        # 显示当前分辨率设置
+        # ---------- 显示帮助信息 ----------
         resolution_names = {
             "720p": "720P (1280x720)",
             "1080p": "1080P (1920x1080)",
             "original": f"原始尺寸 ({self.orig_width}x{self.orig_height})"
         }
         current_res_name = resolution_names.get(self.output_resolution, "未知")
-
         print("\n📌 操作说明:")
         print("   - 点击图像选择4个角点（顺序任意）")
         print("   - 选完4个点后将自动保存配置")
@@ -368,26 +367,25 @@ class PerspectiveCalibrator:
         print("   - 'x' 键: 缩小5%")
         print("   - 'w' 键: 保存拉直后的图像")
         print(f"   - 当前输出分辨率: {current_res_name}")
-        print("   - ESC 键: 退出程序")
 
-        # --- 使用非阻塞循环，支持热更新 ---
+        # ---------- 主循环 ----------
         while True:
-            key = cv2.waitKey(10) & 0xFF  # 每10ms检查一次
-            if key == 27:  # ESC
-                break
-            elif key == ord('r'):  # 小写r重置选择
+            key = cv2.waitKey(10) & 0xFF  # 每10ms检查一次键盘
+
+            # ---------- 键盘快捷键 ----------
+            if key == ord('r'):               # 小写 r 重置选择
                 self.reset()
                 try:
                     cv2.destroyWindow("Warped View")
                 except:
                     pass
-            elif key == ord('e'):  # e键重置缩放比例至100%
+            elif key == ord('e'):             # e 键重置缩放比例至100%
                 self.reset_scale()
-            elif key == ord('z'):  # 扩大5%
+            elif key == ord('z'):             # 扩大5%
                 self.scale_quad(1.05)
-            elif key == ord('x'):  # 缩小5%
+            elif key == ord('x'):             # 缩小5%
                 self.scale_quad(0.95)
-            elif key == ord('w'):  # 保存变换后的图像
+            elif key == ord('w'):             # 保存变换后的图像
                 if hasattr(self, 'warped_image') and self.warped_image is not None:
                     output_path = self.image_path.parent / f"{self.image_path.stem}_warped.jpg"
                     cv2.imwrite(str(output_path), self.warped_image)
@@ -395,6 +393,17 @@ class PerspectiveCalibrator:
                 else:
                     print("无变换图像可保存，请先选择四个角点")
 
+            # ---------- 窗口关闭检测 ----------
+            # 当两个窗口都不可见（用户点击右上角 X）时退出循环
+            manual_visible = cv2.getWindowProperty(
+                "Manual Corner Detector", cv2.WND_PROP_VISIBLE) >= 1  
+            warped_visible = cv2.getWindowProperty(
+                "Warped View", cv2.WND_PROP_VISIBLE) >= 1       
+            if not manual_visible and not warped_visible:       
+                # print("检测到两个窗口均已关闭，程序即将退出…") 
+                break
+
+        # ---------- 清理 ----------
         cv2.destroyAllWindows()
         return self.corners if hasattr(self, 'corners') and self.corners else None
 
@@ -592,7 +601,7 @@ class PerspectiveCalibrator:
 
 # 使用示例
 if __name__ == "__main__":
-    image_path = "CameraUtils/screenshot_5.png"  # 替换为你的图像路径
+    image_path = "CameraUtils/screenshot_4.png"  # 替换为你的图像路径
 
     # --- 快速设置输出分辨率（在此修改）---
     # 可选值："720p" | "1080p" | "original"
