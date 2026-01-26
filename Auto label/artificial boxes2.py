@@ -23,6 +23,9 @@ from tkinter import ttk, messagebox
 from functools import partial
 import traceback
 
+PROJECT_ROOT = Path(__file__).resolve().parent
+os.chdir(PROJECT_ROOT)
+
 # -------------------------------------------------
 # 1️⃣ 参数 & 环境检查（加入可调参数）
 # -------------------------------------------------
@@ -248,6 +251,7 @@ def detect_multi(frame_gray, templates, class_names,
 
 def load_templates(tpl_dir):
     """返回 dict {stem: gray_image}"""
+    tpl_dir = Path(tpl_dir)
     tmpl_paths = list(Path(tpl_dir).glob("*.*"))
     templates = {}
     for p in tmpl_paths:
@@ -870,21 +874,38 @@ class AnnotatorUI:
 # 6️⃣ 主入口（遍历图片、打开 UI）
 # -------------------------------------------------
 def main():
-    img_root = os.path.join(DATA_ROOT, 'images')
-    lbl_root = os.path.join(DATA_ROOT, 'labels')
-    if SUBSET:
-        img_root = os.path.join(img_root, SUBSET)
-        lbl_root = os.path.join(lbl_root, SUBSET)
+    # -------------------------------------------------
+    # 1️⃣ 统一根目录 → 绝对路径（已在文件顶部完成）
+    # -------------------------------------------------
+    img_root = Path(DATA_ROOT) / 'images'
+    lbl_root = Path(DATA_ROOT) / 'labels'
 
-    img_files = list_image_files(img_root)
+    if SUBSET:
+        img_root = img_root / SUBSET
+        lbl_root = lbl_root / SUBSET
+
+    # -------------------------------------------------
+    # 2️⃣ 读取图片列表（list_image_files 仍接受 str）
+    # -------------------------------------------------
+    img_files = list_image_files(str(img_root))
     if not img_files:
         print(f'⚠️ 未在 {img_root} 中找到图片')
         sys.exit(1)
 
+    # -------------------------------------------------
+    # 3️⃣ 读取类别名称（YAML_PATH 已是绝对路径）
+    # -------------------------------------------------
     class_names = load_class_names(YAML_PATH)
     print(f"[Info] 已读取 {len(class_names)} 个类别（来自 {YAML_PATH}）")
+
+    # -------------------------------------------------
+    # 4️⃣ 生成颜色映射（必须在使用前完成） 
+    # -------------------------------------------------
     class_colors = generate_color_map(len(class_names))
 
+    # -------------------------------------------------
+    # 5️⃣ 其它初始化
+    # -------------------------------------------------
     default_class = DEFAULT_CLASS
     if default_class >= len(class_names):
         print("[Warning] 默认类别 ID 超出 yaml 中的类别数，已重置为 0")
@@ -894,14 +915,25 @@ def main():
     idx = 0
     print(f'🖼️ 共计 {total_imgs} 张图片待标注')
 
+    # -------------------------------------------------
+    # 6️⃣ 主循环
+    # -------------------------------------------------
     while 0 <= idx < total_imgs:
         img_path = img_files[idx]
-        txt_path = txt_path_from_img(img_path, img_root, lbl_root)
+        txt_path = txt_path_from_img(str(img_path), str(img_root), str(lbl_root))
 
-        core = AnnotatorCore(img_path, txt_path, default_class, class_colors)
-        ui = AnnotatorUI(core, class_names,
-                         img_files, idx, total_imgs,
-                         img_root, lbl_root)
+        core = AnnotatorCore(
+            img_path=str(img_path),
+            txt_path=txt_path,
+            default_class=default_class,
+            class_colors=class_colors,
+        )
+
+        ui = AnnotatorUI(
+            core, class_names,
+            img_files, idx, total_imgs,
+            str(img_root), str(lbl_root)
+        )
 
         if ui.result == "next":
             idx += 1
