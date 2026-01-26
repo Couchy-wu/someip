@@ -223,7 +223,7 @@ class CameraViewer:
     - stop()    → 立刻请求退出并安全释放资源
     - run()     → 兼容原来的直接调用方式（阻塞式运行）
     """
-    def __init__(self, display_callback=None, is_standalone=True, screenshot_path="Resources/Picture", exposure = -3):
+    def __init__(self, display_callback=None, is_standalone=True, screenshot_path="Resources/Picture", exposure = -4):
         self.display_callback = display_callback
         self.is_standalone = is_standalone  # 是否独立运行（在本文件中调用）
         self.screenshot_path = screenshot_path
@@ -385,7 +385,7 @@ def main(display_callback=None):
     viewer.run()          # 阻塞，直到窗口关闭或外部调用 viewer.stop()
 
 
-def mirror_flip(frame: np.ndarray) -> np.ndarray:  # ★ NEW
+def mirror_flip(frame: np.ndarray) -> np.ndarray:
     """
     对输入的 BGR 图像做水平镜面翻转（左↔右），返回翻转后的图像。
 

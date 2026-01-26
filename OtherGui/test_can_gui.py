@@ -10,7 +10,7 @@ import time
 import xml.etree.ElementTree as ET
 from CanDataProcessing.can_testcase_runner import LogParser
 from PIL import Image, ImageTk, ImageDraw, ImageFont
-from CameraUtils.camera_viewer import CameraViewer, rotate_image_180
+from CameraUtils.camera_viewer import CameraViewer, rotate_image_180, set_exposure
 import cv2
 from CameraUtils.perspective_calibrator import PerspectiveCalibrator
 import tempfile
@@ -124,6 +124,23 @@ class CANFDGUI:
             offvalue=0,                        # 未勾选时的取值
             font=("微软雅黑", 10)
         ).grid(row=5, column=1, pady=5, padx=10, sticky='w')
+
+        # 曝光值下拉框
+        self.exposure_var = tk.IntVar(value=-4)                     # 默认值
+        # 下拉框，选项为 0、-1 … -10
+        ttk.Label(root, text="曝光值:", font=("微软雅黑", 10)).grid(
+            row=0, column=3, sticky='w', padx=5, pady=5)
+        self.exposure_cb = ttk.Combobox(
+            root,
+            textvariable=self.exposure_var,
+            values=[0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11, -12],
+            state="readonly",
+            width=6,
+            font=("微软雅黑", 10)
+        )
+        self.exposure_cb.grid(row=0, column=4, sticky='w', padx=5, pady=5)
+        # 绑定选择事件，实时更新摄像头曝光
+        self.exposure_cb.bind("<<ComboboxSelected>>", self._on_exposure_change)
 
         # ---------- 变换控制 ----------
         # 勾选框：是否启用变换
@@ -481,6 +498,33 @@ class CANFDGUI:
                     pass
 
         threading.Thread(target=_run_calibrator, daemon=True).start()
+
+    # 曝光值实时更新回调
+    def _on_exposure_change(self, event=None):
+        """
+        当用户在曝光下拉框中选择新值时调用。
+        """
+        # 取得用户选中的整数曝光值
+        try:
+            new_exp = int(self.exposure_var.get())
+        except Exception:
+            # 非法值回退到默认
+            new_exp = -4
+            self.exposure_var.set(new_exp)
+
+        # 如果摄像头已经在运行，尝试即时修改
+        if hasattr(self, "_camera_viewer") and self._camera_viewer is not None:
+            cap = getattr(self._camera_viewer, "cap", None)
+            if cap is not None and cap.isOpened():
+                # 调用 camera_viewer 中封装好的 set_exposure
+                success = set_exposure(cap, new_exp, verbose=True)
+                if not success:
+                    print(f"[WARN] 曝光值 {new_exp} 设置失败，保持原值")
+            # 同时更新实例内部的 exposure 属性，防止后续 restart 时使用旧值
+            self._camera_viewer.exposure = new_exp
+        else:
+            pass
+
 
     # --------------------- 图像变换相关功能 ---------------------
     def _apply_transform(self, frame_rgb):
