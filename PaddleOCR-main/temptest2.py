@@ -44,7 +44,8 @@ for i in images_list:
 # Visualize the results and save the JSON results
     for res in result:
         # res.print()
-        print(res["rec_texts"],_time)
+        img_name = res.get("img_path") or res.get("img_name") or i
+        print("图片名：", os.path.basename(img_name), "识别文本：", res["rec_texts"], "分数：", res["rec_scores"], "耗时：", _time)
 
         res.save_to_img("output")
         res.save_to_json("output")

@@ -1,0 +1,6 @@
+path: ./dataset
+train: ARHUD_frames
+val: ARHUD_frames
+
+nc: 3   # 类别数
+names: ['velocity', 'phone', 'FCW']
