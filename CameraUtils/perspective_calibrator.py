@@ -228,7 +228,7 @@ class PerspectiveCalibrator:
         self.real_points = [tuple(map(int, pt)) for pt in scaled_pts]
         self.points = [(pt[0] / self.base_scale_x * self.current_scale,
                         pt[1] / self.base_scale_y * self.current_scale)
-                       for pt in scaled_pts]                     # ★ MOD
+                       for pt in scaled_pts]
         # 重绘
         self._redraw_with_corners()
         # 清除旧矩阵，使后续得到最新矩阵
@@ -254,7 +254,7 @@ class PerspectiveCalibrator:
         ]
         # 重新计算显示坐标（float）
         self.points = [(x / self.base_scale_x, y / self.base_scale_y)
-                       for (x, y) in self.real_points]          # ★ MOD
+                       for (x, y) in self.real_points]
         self._redraw_with_corners()
         # 需要重新计算矩阵
         self.perspective_matrix = None
@@ -297,7 +297,7 @@ class PerspectiveCalibrator:
                 data_to_save["perspective_matrix"] = self.perspective_matrix.tolist()
             with open(self.config_path, 'w', encoding='utf-8') as f:
                 json.dump(data_to_save, f, indent=4, ensure_ascii=False)
-            print(f"角点已自动保存至: {self.config_path}")
+            # print(f"角点已自动保存至: {self.config_path}")
         except Exception as e:
             print(f"保存配置失败: {e}")
 
@@ -307,7 +307,8 @@ class PerspectiveCalibrator:
     def load_corners(self, src_path=None):
         """从 JSON 文件加载角点并刷新显示（支持热更新）"""
         if src_path:
-            print(f"🔄 检测到配置文件修改: {src_path}")
+            # print(f"🔄 检测到配置文件修改: {src_path}")
+            pass
         if not self.config_path.exists():
             print(f"角点配置文件不存在: {self.config_path}")
             return False
@@ -325,8 +326,8 @@ class PerspectiveCalibrator:
             # 读取透视矩阵（若有）
             if "perspective_matrix" in data:
                 self.perspective_matrix = np.array(
-                    data["perspective_matrix"], dtype=np.float32)   # ★ MOD
-                print("已加载透视矩阵")
+                    data["perspective_matrix"], dtype=np.float32)
+                # print("已加载透视矩阵")
             else:
                 self.perspective_matrix = None
             ordered_pts = [
@@ -339,14 +340,14 @@ class PerspectiveCalibrator:
             # 计算显示坐标（float，考虑当前整体缩放）
             self.points = [(x / self.base_scale_x * self.current_scale,
                             y / self.base_scale_y * self.current_scale)
-                           for (x, y) in ordered_pts]                # ★ MOD
+                           for (x, y) in ordered_pts] 
             # 如果是首次加载，将其设为原始角点
             if self.original_corners is None:
                 self.original_corners = self.corners.copy()
                 self.current_scale = 1.0
             self._redraw_with_corners()
-            # print(f"已热更新加载角点配置: {self.config_path}")  # ★ MOD: 注释掉原有的打印
-            self.apply_perspective_transform()                      # ★ MOD
+            # print(f"已热更新加载角点配置: {self.config_path}") 
+            self.apply_perspective_transform()
             return True
         except Exception as e:
             print(f"加载角点配置失败: {e}")

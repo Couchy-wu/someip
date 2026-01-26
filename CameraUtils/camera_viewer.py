@@ -183,7 +183,8 @@ def set_exposure(cap, exposure_val, verbose=True):
             print("[WARN] 无法关闭自动曝光 (CAP_PROP_AUTO_EXPOSURE)")
     else:
         if verbose:
-            print("[INFO] 已关闭自动曝光 (CAP_PROP_AUTO_EXPOSURE)")
+            # print("[INFO] 已关闭自动曝光 (CAP_PROP_AUTO_EXPOSURE)")
+            pass
 
     # ----- 设置曝光值 -----
     if not cap.set(cv2.CAP_PROP_EXPOSURE, float(exposure_val)):

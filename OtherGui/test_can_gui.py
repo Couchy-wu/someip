@@ -467,15 +467,24 @@ class CANFDGUI:
             messagebox.showwarning("提示", "当前没有可用的摄像头帧，请先确保摄像头正常工作后再尝试校正。")
             return
 
-        # ② 将帧写入 **代码所在目录** 的临时文件
+        # 对 latest_frame 应用当前 UI 中的翻转/旋转设置
+        proc_frame = self.latest_frame.copy()          # 复制防止修改原始缓存
+        # 180° 旋转（如果打开）
+        if self.rotate_flag:
+            proc_frame = rotate_image_180(proc_frame)
+        # 镜面水平翻转（如果打开）
+        if self.mirror_enable_var.get() == 1:
+            proc_frame = proc_frame[:, ::-1, :]
+
+        # ② 将处理后的帧写入 **代码所在目录** 的临时文件
         # 使用当前脚本所在目录而不是系统临时目录,避免临时图像残留找不到位置
         script_dir = os.path.abspath(os.path.dirname(__file__))
         tmp_path = os.path.join(
             script_dir,
             f"tmp_cam_{int(time.time() * 1000)}.png"
         )
-        # cv2.imwrite 需要 BGR 格式，latest_frame 已经是 RGB（camera_viewer 里是 RGB），先转回 BGR
-        cv2.imwrite(tmp_path, cv2.cvtColor(self.latest_frame, cv2.COLOR_RGB2BGR))
+        # cv2.imwrite 需要 BGR 格式，proc_frame 已经是 RGB（camera_viewer 里返回的是 RGB），先转回 BGR
+        cv2.imwrite(tmp_path, cv2.cvtColor(proc_frame, cv2.COLOR_RGB2BGR))
 
         # ③ 在新线程中运行校正器
         def _run_calibrator():
