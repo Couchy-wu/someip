@@ -22,7 +22,7 @@ class CANFDGUI:
     def __init__(self, root, selected_file=None):
         self.root = root
         self.root.title("CANFD 设备控制")
-        self.root.geometry("1200x800")
+        self.root.geometry("1500x800")
         self.sub_window = None  # 用于跟踪子窗口是否存在
         
         # === 修改：安全获取 selected_file ===
@@ -97,6 +97,19 @@ class CANFDGUI:
             offvalue=0,                    # 未勾选时的取值
             font=("微软雅黑", 10)
         ).grid(row=5, column=0, sticky='w', padx=5)
+
+        # 图像采集模式开关
+        self.image_capture_var = tk.IntVar(value=0)   # 0 – 关闭，1 – 开启
+        tk.Checkbutton(
+            root,
+            text="开启图像采集模式",
+            variable=self.image_capture_var,
+            onvalue=1,
+            offvalue=0,
+            font=("微软雅黑", 10)
+        ).grid(row=5, column=2, sticky='w', padx=5, pady=5)   # 与其它勾选框保持布局
+        self.root.bind("<Key>", self._on_key_press)   # 绑定键盘事件（全局捕获）
+
 
         # 记录图像是否需要旋转
         self.rotate_flag = False
@@ -379,7 +392,14 @@ class CANFDGUI:
                 img2 = self._apply_transform(img_arr)
             else:
                 img2 = self._make_no_camera_image(text="Not activated transformation")
-            
+
+            # 记录最近一次 “变换C” 的图像（供键盘保存使用）
+            if self.transform_option_var.get() == "变换C" and self.image_test_var.get() == 1:
+                # img2 已经是 Pillow Image（变换C 的最终结果）
+                self._last_transform_c_image = img2.copy()
+            else:
+                self._last_transform_c_image = None
+
             # 缩放到 640×360（对应 OUTPUT_WIDTH / OUTPUT_HEIGHT）
             img = img.resize((640, 360), Image.LANCZOS)
             img2 = img2.resize((640, 360), Image.LANCZOS)
@@ -413,6 +433,50 @@ class CANFDGUI:
             self.video_label2.image = photo_image   # 防止被 GC
         except tk.TclError:
             pass
+
+    def _on_key_press(self, event):
+        """
+        当窗口获得焦点且用户按下键盘时调用。
+        若打开了 “图像采集模式” 并且按下的是字母键 **a**，则保存最近一次
+        经过 “变换C” 的帧到 Resources/Captured 目录，文件名递增。
+        """
+        if event.keysym.lower() != 'a':
+            return
+        if getattr(self, "image_capture_var", None) and self.image_capture_var.get() == 1:
+            self._save_captured_image()
+
+    def _save_captured_image(self):
+        """
+        将最近一次保存的 “变换C” 图像写入
+        <项目根目录>/Resources/Captured/<序号>.png（序号从 1 开始递增）。
+        若当前没有可保存的图像则弹出提示。
+        """
+        if not getattr(self, "_last_transform_c_image", None):
+            messagebox.showwarning("保存失败", "当前没有可保存的变换C图像。")
+            return
+
+        # 目标文件夹：Resources/Captured（相对于本文件所在目录）
+        save_dir = os.path.join(os.path.dirname(__file__), "Resources", "Captured")
+        os.makedirs(save_dir, exist_ok=True)
+
+        # 计算下一个递增的文件名
+        existing = [f for f in os.listdir(save_dir) if f.lower().endswith('.png')]
+        next_index = 1
+        if existing:
+            nums = []
+            for f in existing:
+                name, _ = os.path.splitext(f)
+                if name.isdigit():
+                    nums.append(int(name))
+            if nums:
+                next_index = max(nums) + 1
+
+        filename = os.path.join(save_dir, f"{next_index}.png")
+        try:
+            self._last_transform_c_image.save(filename, format="PNG")
+            print("保存成功")
+        except Exception as e:
+            messagebox.showerror("保存错误", f"保存图像时出现异常:\n{e}")    
 
     def _make_no_camera_image(self, width=640, height=360,
                               text="Camera is Not Open\nor\nNot activated transformation"):
