@@ -1,19 +1,27 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-交互式标注 + ORB 多模板自动检测（调参/Debug 版）
+交互式标注 + ORB 多模板自动检测（加入鼠标拉伸/缩放 & 动态缩略图）
 """
 
 # -------------------------------------------------
 # 0️⃣ 必要导入
 # -------------------------------------------------
-import os, sys, argparse, cv2, numpy as np, random, colorsys, yaml, threading, queue
+import os
+import sys
+import argparse
+import cv2
+import numpy as np
+import yaml
+import threading
+import queue
 from pathlib import Path
 from tqdm import tqdm
 from PIL import Image, ImageTk
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from functools import partial
+import traceback
 
 # -------------------------------------------------
 # 1️⃣ 参数 & 环境检查（加入可调参数）
@@ -40,27 +48,19 @@ parser.add_argument('--nms_iou',    type=float, default=0.5,
                     help='NMS IOU 阈值')
 args = parser.parse_args()
 
+# ---------- 参数映射 ----------
 DATA_ROOT    = args.data_root
 SUBSET       = args.subset.strip()
 DEFAULT_CLASS = args.default_class
 MAX_CLASS    = args.max_class
 YAML_PATH    = args.yaml_path or os.path.join(DATA_ROOT, 'data.yaml')
-
-TPL_DIR      = os.path.join(args.tpl_dir)
-
+TPL_DIR      = Path(args.tpl_dir)                     # 正确使用传入路径
 RATIO_THR    = args.ratio_thr
 RANSAC_THR   = args.ransac_thr
 SCALE_FACTOR = args.scale_factor
 MIN_MATCH    = args.min_match
 NMS_IOU      = args.nms_iou
 
-tpl_dir = Path('muban')   # <-- 改成实际路径
-files = list(tpl_dir.glob("*.*"))
-print("模板文件数（所有后缀）:", len(files))
-for p in files:
-    print(p.name, p.suffix)
-    img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
-    print("  读取成功?" , img is not None)
 # -------------------------------------------------
 # 2️⃣ 小工具（文件遍历、路径转换、yaml、颜色）
 # -------------------------------------------------
@@ -78,6 +78,7 @@ def txt_path_from_img(img_path, img_root, lbl_root):
     return os.path.join(lbl_root, rel_dir, base + '.txt')
 
 def read_boxes(txt_path):
+    """读取 YOLO‑style txt，返回 [(cls, xc, yc, w, h), …]"""
     if not os.path.isfile(txt_path):
         return []
     with open(txt_path, 'r', encoding='utf-8') as f:
@@ -85,7 +86,8 @@ def read_boxes(txt_path):
     boxes = []
     for ln in lines:
         parts = ln.split()
-        if len(parts) != 5: continue
+        if len(parts) != 5:
+            continue
         cls, xc, yc, w, h = map(float, parts)
         boxes.append((int(cls), xc, yc, w, h))
     return boxes
@@ -131,12 +133,13 @@ def generate_color_map(num_classes):
 # 3️⃣ ORB 多模板检测模块（调试打印已加入）
 # -------------------------------------------------
 def nms(boxes, scores, iou_thr=0.3):
-    if not boxes: return []
+    if not boxes:
+        return []
     boxes = np.array(boxes, dtype=np.float32)
     scores = np.array(scores, dtype=np.float32)
-    x1, y1 = boxes[:,0], boxes[:,1]
-    x2, y2 = boxes[:,0]+boxes[:,2]-1, boxes[:,1]+boxes[:,3]-1
-    areas = (x2-x1+1)*(y2-y1+1)
+    x1, y1 = boxes[:, 0], boxes[:, 1]
+    x2, y2 = boxes[:, 0] + boxes[:, 2] - 1, boxes[:, 1] + boxes[:, 3] - 1
+    areas = (x2 - x1 + 1) * (y2 - y1 + 1)
     order = scores.argsort()[::-1]
     keep = []
     while order.size:
@@ -146,12 +149,12 @@ def nms(boxes, scores, iou_thr=0.3):
         yy1 = np.maximum(y1[i], y1[order[1:]])
         xx2 = np.minimum(x2[i], x2[order[1:]])
         yy2 = np.minimum(y2[i], y2[order[1:]])
-        w = np.maximum(0.0, xx2-xx1+1)
-        h = np.maximum(0.0, yy2-yy1+1)
-        inter = w*h
-        iou = inter/(areas[i]+areas[order[1:]]-inter)
+        w = np.maximum(0.0, xx2 - xx1 + 1)
+        h = np.maximum(0.0, yy2 - yy1 + 1)
+        inter = w * h
+        iou = inter / (areas[i] + areas[order[1:]] - inter)
         inds = np.where(iou <= iou_thr)[0]
-        order = order[inds+1]
+        order = order[inds + 1]
     return keep
 
 _ORB = cv2.ORB_create(
@@ -167,25 +170,30 @@ def _detect_one_template(frame_gray, tmpl_gray,
                          ratio_thr=0.55, min_match=4,
                          ransac_thr=12.0, scale_factor=2.0,
                          max_instances=20):
+    """返回 [(bbox, H, score), …]，bbox = (x, y, w, h) (像素)"""
     if scale_factor != 1.0:
         tmpl_gray = cv2.resize(
             tmpl_gray,
-            (int(tmpl_gray.shape[1]*scale_factor),
-             int(tmpl_gray.shape[0]*scale_factor)),
+            (int(tmpl_gray.shape[1] * scale_factor),
+             int(tmpl_gray.shape[0] * scale_factor)),
             interpolation=cv2.INTER_LINEAR)
+
     kp_t, des_t = _ORB.detectAndCompute(tmpl_gray, None)
     kp_i, des_i = _ORB.detectAndCompute(frame_gray, None)
-    print(f"[DEBUG] 模板关键点数 = {len(kp_t)}，帧关键点数 = {len(kp_i)}")
+    print(f"[DEBUG] 模板关键点数={len(kp_t)}，帧关键点数={len(kp_i)}")
     if des_t is None or des_i is None:
         return []
+
     matches = _BF.knnMatch(des_t, des_i, k=2)
     good = [m for m, n in matches if m.distance < ratio_thr * n.distance]
-    print(f"[DEBUG] 匹配总数 = {len(matches)}，好匹配数 = {len(good)}（ratio_thr={ratio_thr}）")
+    print(f"[DEBUG] 匹配总数={len(matches)}，好匹配数={len(good)}（ratio_thr={ratio_thr}）")
+
     results = []
     instance_id = 0
     while len(good) >= min_match and instance_id < max_instances:
-        src_pts = np.float32([kp_t[m.queryIdx].pt for m in good]).reshape(-1,1,2)
-        dst_pts = np.float32([kp_i[m.trainIdx].pt for m in good]).reshape(-1,1,2)
+        src_pts = np.float32([kp_t[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
+        dst_pts = np.float32([kp_i[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
+
         if src_pts.shape[0] < 4:
             break
         H, mask = cv2.findHomography(src_pts, dst_pts,
@@ -193,12 +201,14 @@ def _detect_one_template(frame_gray, tmpl_gray,
         if H is None:
             print("[DEBUG] RANSAC 失败（Homography 为 None）")
             break
+
         h, w = tmpl_gray.shape[:2]
-        corners = np.float32([[0,0],[w,0],[w,h],[0,h]]).reshape(-1,1,2)
+        corners = np.float32([[0, 0], [w, 0], [w, h], [0, h]]).reshape(-1, 1, 2)
         proj = cv2.perspectiveTransform(corners, H)
         x, y, w_box, h_box = cv2.boundingRect(proj.astype(np.int32))
         inlier_cnt = int(mask.sum())
         score = inlier_cnt / max(len(kp_t), 1)
+
         results.append(((x, y, w_box, h_box), H, float(score)))
         good = [g for i, g in enumerate(good) if mask[i] == 0]
         instance_id += 1
@@ -208,12 +218,14 @@ def detect_multi(frame_gray, templates, class_names,
                  ratio_thr=0.55, min_match=4,
                  ransac_thr=12.0, scale_factor=2.0,
                  max_instances=20, nms_iou=0.3):
+    """返回 [(bbox, class_id, score), …]（bbox 为像素坐标）"""
     all_res = []
     for name, tmpl in templates.items():
         if name not in class_names:
             class_names.append(name)
             print(f"[INFO] 自动把模板 `{name}` 加入类别列表，class_id={len(class_names)-1}")
         class_id = class_names.index(name)
+
         raw = _detect_one_template(
             frame_gray, tmpl,
             ratio_thr=ratio_thr,
@@ -224,6 +236,7 @@ def detect_multi(frame_gray, templates, class_names,
         )
         if not raw:
             continue
+
         boxes = [r[0] for r in raw]
         scores = [r[2] for r in raw]
         keep = nms(boxes, scores, iou_thr=nms_iou)
@@ -234,10 +247,11 @@ def detect_multi(frame_gray, templates, class_names,
     return all_res
 
 def load_templates(tpl_dir):
+    """返回 dict {stem: gray_image}"""
     tmpl_paths = list(Path(tpl_dir).glob("*.*"))
     templates = {}
     for p in tmpl_paths:
-        if p.suffix.lower() not in {".png",".jpg",".jpeg"}:
+        if p.suffix.lower() not in {".png", ".jpg", ".jpeg"}:
             continue
         img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
         if img is None:
@@ -247,7 +261,7 @@ def load_templates(tpl_dir):
     return templates
 
 # -------------------------------------------------
-# 4️⃣ 业务层 – AnnotatorCore（保持原实现）
+# 4️⃣ 业务层 – AnnotatorCore（加入拉伸/缩放）
 # -------------------------------------------------
 class AnnotatorCore:
     def __init__(self, img_path, txt_path, default_class, class_colors):
@@ -258,25 +272,177 @@ class AnnotatorCore:
         if self.cv_img is None:
             raise RuntimeError(f'Cannot read image: {img_path}')
         self.h, self.w = self.cv_img.shape[:2]
-        self.existing_boxes = read_boxes(txt_path)
-        self.new_boxes = []
+
+        self.existing_boxes = read_boxes(txt_path)   # 已有框
+        self.new_boxes = []                         # 本轮新增框
         self._deleted_all = False
+
         self.class_colors = class_colors
-    # ---------- 业务方法 ----------
+
+        # ---------- 拉伸/缩放交互状态 ----------
+        self._mode = 'draw'                 # 'draw' 或 'resize'
+        self._resize_info = None            # {'list_ref':…, 'idx':…, 'handle':…}
+        self._handle_size = 6               # 手柄半径（像素）
+        self._tolerance   = 8               # 判定点击为手柄的容差（像素）
+
+    # -----------------------------------------------------------------
+    # ① 工具：相对坐标 ↔︎ 像素
+    # -----------------------------------------------------------------
+    def _box_to_pixel(self, box):
+        """(cls, xc, yc, w, h) → (x1, y1, x2, y2)（像素）"""
+        cls, xc, yc, w, h = box
+        x1 = int((xc - w / 2) * self.w)
+        y1 = int((yc - h / 2) * self.h)
+        x2 = int((xc + w / 2) * self.w)
+        y2 = int((yc + h / 2) * self.h)
+        return x1, y1, x2, y2
+
+    def _pixel_to_rel(self, cls, x1, y1, x2, y2):
+        """像素 → (cls, xc, yc, w, h)（相对坐标）"""
+        xc = ((x1 + x2) / 2.0) / self.w
+        yc = ((y1 + y2) / 2.0) / self.h
+        w  = (x2 - x1) / self.w
+        h  = (y2 - y1) / self.h
+        return (cls, xc, yc, w, h)
+
+    # -----------------------------------------------------------------
+    # ② 判定是否点中已有框的手柄（8 个方向）
+    # -----------------------------------------------------------------
+    def _get_handle_at(self, x, y):
+        """返回 dict{'list_ref':…, 'idx':…, 'handle':…} 或 None"""
+        for lst in (self.existing_boxes, self.new_boxes):
+            for idx, box in enumerate(lst):
+                x1, y1, x2, y2 = self._box_to_pixel(box)
+                handles = [
+                    (x1, y1),                     # 0 左上
+                    ((x1 + x2) // 2, y1),         # 1 上中
+                    (x2, y1),                     # 2 右上
+                    (x2, (y1 + y2) // 2),         # 3 右中
+                    (x2, y2),                     # 4 右下
+                    ((x1 + x2) // 2, y2),         # 5 下中
+                    (x1, y2),                     # 6 左下
+                    (x1, (y1 + y2) // 2),         # 7 左中
+                ]
+                for h_id, (hx, hy) in enumerate(handles):
+                    if abs(x - hx) <= self._tolerance and abs(y - hy) <= self._tolerance:
+                        return {'list_ref': lst, 'idx': idx, 'handle': h_id}
+        return None
+
+    # -----------------------------------------------------------------
+    # ③ 开始一次拉伸（鼠标按下时调用）
+    # -----------------------------------------------------------------
+    def pick_resize_target(self, x, y):
+        """若点中手柄则进入 resize 模式并返回 True；否则返回 False"""
+        info = self._get_handle_at(x, y)
+        if info is None:
+            return False
+        self._mode = 'resize'
+        self._resize_info = info
+        return True
+
+    # -----------------------------------------------------------------
+    # ④ 实时更新框尺寸（鼠标拖动时调用）
+    # -----------------------------------------------------------------
+    def update_resize(self, x, y):
+        """仅在 self._mode == 'resize' 时有效"""
+        if self._mode != 'resize' or self._resize_info is None:
+            return
+        lst = self._resize_info['list_ref']
+        idx = self._resize_info['idx']
+        handle = self._resize_info['handle']
+
+        # 先把相对坐标转成像素坐标
+        x1, y1, x2, y2 = self._box_to_pixel(lst[idx])
+
+        # 根据手柄编号修改对应的边界
+        if handle == 0:   # 左上
+            x1, y1 = x, y
+        elif handle == 1: # 上中
+            y1 = y
+        elif handle == 2: # 右上
+            x2, y1 = x, y
+        elif handle == 3: # 右中
+            x2 = x
+        elif handle == 4: # 右下
+            x2, y2 = x, y
+        elif handle == 5: # 下中
+            y2 = y
+        elif handle == 6: # 左下
+            x1, y2 = x, y
+        elif handle == 7: # 左中
+            x1 = x
+
+        # 边界限制（防止越界、负宽高）
+        x1 = max(0, min(self.w - 1, x1))
+        x2 = max(0, min(self.w - 1, x2))
+        y1 = max(0, min(self.h - 1, y1))
+        y2 = max(0, min(self.h - 1, y2))
+        if x2 < x1:
+            x1, x2 = x2, x1
+        if y2 < y1:
+            y1, y2 = y2, y1
+
+        # 写回相对坐标
+        lst[idx] = self._pixel_to_rel(lst[idx][0], x1, y1, x2, y2)
+
+    # -----------------------------------------------------------------
+    # ⑤ 完成一次拉伸（鼠标松开时调用）
+    # -----------------------------------------------------------------
+    def finish_resize(self):
+        self._mode = 'draw'
+        self._resize_info = None
+
+    # -----------------------------------------------------------------
+    # ⑥ 兼容原有框选（仅在 draw 模式下使用）
+    # -----------------------------------------------------------------
+    def start_box(self, x, y):
+        if self._mode != 'draw':
+            return
+        self._drawing = True
+        self._start_pt = (x, y)
+        self._cur_rect = (x, y, x, y)
+
+    def update_box(self, x, y):
+        if self._mode != 'draw':
+            return
+        if getattr(self, '_drawing', False):
+            self._cur_rect = (self._start_pt[0], self._start_pt[1], x, y)
+
+    def finish_box(self, x, y):
+        if self._mode != 'draw':
+            return
+        if not getattr(self, '_drawing', False):
+            return
+        self._drawing = False
+        x1, y1, x2, y2 = self._cur_rect
+        xc = (x1 + x2) / 2.0 / self.w
+        yc = (y1 + y2) / 2.0 / self.h
+        bw = abs(x2 - x1) / self.w
+        bh = abs(y2 - y1) / self.h
+        if bw > 0 and bh > 0:
+            self.new_boxes.append((self.cur_class, xc, yc, bw, bh))
+        self._cur_rect = None
+
+    # -----------------------------------------------------------------
+    # ⑦ 撤销 / 清空 / 删除全部 / 保存
+    # -----------------------------------------------------------------
     def undo(self):
         if self.new_boxes:
             removed = self.new_boxes.pop()
             print(f"[Info] 撤销框 {removed}")
         else:
             print("[Info] 没有可撤销的框")
+
     def clear(self):
         self.new_boxes.clear()
         print("[Info] 已清空本次新增框")
+
     def delete_all(self):
         self.existing_boxes.clear()
         self.new_boxes.clear()
         self._deleted_all = True
         print("[Warning] 已清空当前图片的全部框（包括原有的），记得点击 Save/Next 保存")
+
     def save(self):
         ensure_dir(os.path.dirname(self.txt_path))
         if self._deleted_all:
@@ -289,63 +455,87 @@ class AnnotatorCore:
             self.existing_boxes.extend(self.new_boxes)
             self.new_boxes.clear()
         print("[Info] 已保存（新增框已合并进已有框）")
-    # ---------- 框选 ----------
-    def start_box(self, x, y):
-        self._drawing = True
-        self._start_pt = (x, y)
-        self._cur_rect = (x, y, x, y)
-    def update_box(self, x, y):
-        if getattr(self, '_drawing', False):
-            self._cur_rect = (self._start_pt[0], self._start_pt[1], x, y)
-    def finish_box(self, x, y):
-        if not getattr(self, '_drawing', False):
-            return
-        self._drawing = False
-        x1, y1, x2, y2 = self._cur_rect
-        xc = (x1 + x2) / 2.0 / self.w
-        yc = (y1 + y2) / 2.0 / self.h
-        bw = abs(x2 - x1) / self.w
-        bh = abs(y2 - y1) / self.h
-        if bw > 0 and bh > 0:
-            self.new_boxes.append((self.cur_class, xc, yc, bw, bh))
-        self._cur_rect = None
-    # ---------- 绘制 ----------
+
+    # -----------------------------------------------------------------
+    # ⑧ 绘制（包括 resize 手柄）
+    # -----------------------------------------------------------------
     def draw(self, show_cur_rect=True):
         canvas = self.cv_img.copy()
+
+        # 1️⃣ 画已有框
         for cls, xc, yc, w, h in self.existing_boxes:
             color = self.class_colors[cls % len(self.class_colors)]
-            x1 = int((xc - w/2) * self.w)
-            y1 = int((yc - h/2) * self.h)
-            x2 = int((xc + w/2) * self.w)
-            y2 = int((yc + h/2) * self.h)
+            x1 = int((xc - w / 2) * self.w)
+            y1 = int((yc - h / 2) * self.h)
+            x2 = int((xc + w / 2) * self.w)
+            y2 = int((yc + h / 2) * self.h)
             cv2.rectangle(canvas, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(canvas, str(cls), (x1, y1-4),
+            cv2.putText(canvas, str(cls), (x1, y1 - 4),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+
+        # 2️⃣ 画本轮新增框
         for cls, xc, yc, w, h in self.new_boxes:
             color = self.class_colors[cls % len(self.class_colors)]
-            x1 = int((xc - w/2) * self.w)
-            y1 = int((yc - h/2) * self.h)
-            x2 = int((xc + w/2) * self.w)
-            y2 = int((yc + h/2) * self.h)
+            x1 = int((xc - w / 2) * self.w)
+            y1 = int((yc - h / 2) * self.h)
+            x2 = int((xc + w / 2) * self.w)
+            y2 = int((yc + h / 2) * self.h)
             cv2.rectangle(canvas, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(canvas, str(cls), (x1, y1-4),
+            cv2.putText(canvas, str(cls), (x1, y1 - 4),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-        if show_cur_rect and getattr(self, '_cur_rect', None):
+
+        # 3️⃣ 若正在 resize，绘制红色粗框 + 手柄
+        if self._mode == 'resize' and self._resize_info is not None:
+            lst = self._resize_info['list_ref']
+            idx = self._resize_info['idx']
+            cls, xc, yc, w, h = lst[idx]
+            x1 = int((xc - w / 2) * self.w)
+            y1 = int((yc - h / 2) * self.h)
+            x2 = int((xc + w / 2) * self.w)
+            y2 = int((yc + h / 2) * self.h)
+
+            sel_color = (0, 0, 255)          # 红色手柄 / 粗框
+            cv2.rectangle(canvas, (x1, y1), (x2, y2), sel_color, 3)
+
+            handles = [
+                (x1, y1),
+                ((x1 + x2) // 2, y1),
+                (x2, y1),
+                (x2, (y1 + y2) // 2),
+                (x2, y2),
+                ((x1 + x2) // 2, y2),
+                (x1, y2),
+                (x1, (y1 + y2) // 2),
+            ]
+            for hx, hy in handles:
+                cv2.rectangle(canvas,
+                              (hx - self._handle_size, hy - self._handle_size),
+                              (hx + self._handle_size, hy + self._handle_size),
+                              sel_color, -1)
+
+        # 4️⃣ 当前绘制中的临时矩形（仅在 draw 模式下出现）
+        if show_cur_rect and getattr(self, '_cur_rect', None) and self._mode == 'draw':
             x1, y1, x2, y2 = self._cur_rect
-            cv2.rectangle(canvas, (x1, y1), (x2, y2), (0,0,255), 2)
+            cv2.rectangle(canvas, (x1, y1), (x2, y2), (0, 0, 255), 2)
+
+        # 5️⃣ 类别指示框
         cur_color = self.class_colors[self.cur_class % len(self.class_colors)]
-        cv2.rectangle(canvas, (0,0), (120,30), (0,0,0), -1)
+        cv2.rectangle(canvas, (0, 0), (120, 30), (0, 0, 0), -1)
         cv2.putText(canvas, f"Class: {self.cur_class}",
-                    (5,22), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
+                    (5, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
                     cur_color, 2)
         return canvas
-    # ---------- 键盘切类 ----------
+
+    # -----------------------------------------------------------------
+    # ⑨ 键盘切类
+    # -----------------------------------------------------------------
     def change_class(self, key):
-        if 48 <= key <= 57:
-            self.cur_class = (key-48) % (MAX_CLASS+1)
-        elif 97 <= key <= 122:
-            self.cur_class = (key-97+10) % (MAX_CLASS+1)
+        if 48 <= key <= 57:                     # 0‑9
+            self.cur_class = (key - 48) % (MAX_CLASS + 1)
+        elif 97 <= key <= 122:                  # a‑z
+            self.cur_class = (key - 97 + 10) % (MAX_CLASS + 1)
         print(f"[Info] 当前类别切换为 {self.cur_class}")
+
     def set_class_by_name(self, name, names_list):
         try:
             idx = names_list.index(name)
@@ -355,7 +545,7 @@ class AnnotatorCore:
             print(f"[Warning] 名称 `{name}` 不在类别列表中，保持原类别 {self.cur_class}")
 
 # -------------------------------------------------
-# 5️⃣ UI 层 – AnnotatorUI（加入 AutoDetect）
+# 5️⃣ UI 层 – AnnotatorUI（加入 AutoDetect & 动态缩略图）
 # -------------------------------------------------
 class AnnotatorUI:
     def __init__(self, core: AnnotatorCore, class_names,
@@ -377,9 +567,8 @@ class AnnotatorUI:
         # ---------- 加载模板 ----------
         self._templates = load_templates(TPL_DIR)
         print(f"[Info] 已加载 {len(self._templates)} 张模板用于自动检测")
-        # （可选）打印模板尺寸
         for n, im in self._templates.items():
-            h,w = im.shape[:2]
+            h, w = im.shape[:2]
             print(f"  - {n}: {w}×{h}")
 
         # ---------- Tkinter 主窗口 ----------
@@ -424,15 +613,15 @@ class AnnotatorUI:
         self.combo.set(init_name)
         self.combo.grid(pady=8)
         self.combo.bind("<<ComboboxSelected>>", self._on_class_selected)
-
         tk.Label(btn_frame, text="0‑9 / a‑z → change class",
                  fg='gray').grid(pady=10)
 
-        # ---------- 缩略图条 ----------
+        # ---------- 动态缩略图条 ----------
+        self.thumb_num = min(7, self.total_imgs)          # 实际需要的按钮数量
         thumb_bar = tk.Frame(self.root)
         thumb_bar.grid(row=2, column=0, columnspan=2, pady=5)
         self.thumb_buttons = []
-        for i in range(7):
+        for i in range(self.thumb_num):
             btn = tk.Button(thumb_bar, width=80, height=80,
                             command=partial(self._on_thumb_click, i))
             btn.grid(row=0, column=i, padx=2)
@@ -458,10 +647,9 @@ class AnnotatorUI:
         self.root.protocol("WM_DELETE_WINDOW", self._on_quit)
 
         # ---------- 刷新控制 ----------
-        self._refresh_interval = 33
+        self._refresh_interval = 33          # ≈30 FPS
         self._thumb_cache = {}
         self._last_new_boxes = []
-
         self._refresh_ui()
         self._schedule_refresh()
         self.root.mainloop()
@@ -472,19 +660,17 @@ class AnnotatorUI:
     def _on_next(self):
         self.result = "next"
         self.root.destroy()
+
     def _on_last(self):
         self.result = "last"
         self.root.destroy()
+
     def _on_quit(self):
-        # 先取消定时刷新
         if hasattr(self, '_refresh_job'):
             self.root.after_cancel(self._refresh_job)
-        self.core.save()  # 自动保存，防止误删
+        self.core.save()
         self.result = "quit"
         self.root.destroy()
-        # self.core.save()
-        # self.result = "quit"
-        # self.root.destroy()
 
     # -------------------------------------------------
     # 类别下拉框回调
@@ -499,10 +685,12 @@ class AnnotatorUI:
     def _on_thumb_click(self, slot_idx):
         start, _ = self._calc_thumb_range()
         real_idx = start + slot_idx
-        if real_idx < self.total_imgs:
-            self.result = "jump"
-            self.jump_to = real_idx
-            self.root.destroy()
+        if real_idx >= self.total_imgs:
+            messagebox.showinfo("提示", "当前数据集只有少量图片，暂无可跳转的其它图片。")
+            return
+        self.result = "jump"
+        self.jump_to = real_idx
+        self.root.destroy()
 
     # -------------------------------------------------
     # 跳转框回调
@@ -521,14 +709,27 @@ class AnnotatorUI:
         self.root.destroy()
 
     # -------------------------------------------------
-    # 鼠标框选
+    # 鼠标交互（框选 + 拉伸）
     # -------------------------------------------------
     def _on_mouse_down(self, event):
-        self.core.start_box(event.x, event.y)
+        """左键按下 → 先尝试进入 resize；若未命中则开始普通框选"""
+        entered_resize = self.core.pick_resize_target(event.x, event.y)
+        if not entered_resize:
+            self.core.start_box(event.x, event.y)
+
     def _on_mouse_move(self, event):
-        self.core.update_box(event.x, event.y)
+        """拖动 → 根据当前模式更新框或尺寸"""
+        if self.core._mode == 'draw':
+            self.core.update_box(event.x, event.y)
+        elif self.core._mode == 'resize':
+            self.core.update_resize(event.x, event.y)
+
     def _on_mouse_up(self, event):
-        self.core.finish_box(event.x, event.y)
+        """松开 → 完成对应操作"""
+        if self.core._mode == 'draw':
+            self.core.finish_box(event.x, event.y)
+        elif self.core._mode == 'resize':
+            self.core.finish_resize()
 
     # -------------------------------------------------
     # 键盘快捷键
@@ -540,15 +741,16 @@ class AnnotatorUI:
             self._on_quit()
 
     # -------------------------------------------------
-    # 计算 7 张缩略图的范围
+    # 计算缩略图的实际范围（根据实际按钮数量）
     # -------------------------------------------------
     def _calc_thumb_range(self):
-        half = 3
+        """返回 (start, end) 使得当前图片位于返回区间的中间（尽可能）"""
+        half = self.thumb_num // 2
         start = max(0, self.img_index - half)
-        end = start + 7
+        end = start + self.thumb_num
         if end > self.total_imgs:
             end = self.total_imgs
-            start = max(0, end - 7)
+            start = max(0, end - self.thumb_num)
         return start, end
 
     # -------------------------------------------------
@@ -559,6 +761,7 @@ class AnnotatorUI:
         for i, btn in enumerate(self.thumb_buttons):
             real_idx = start + i
             if real_idx >= self.total_imgs:
+                # 理论上不会进入这里，因为按钮数量已与图片数匹配
                 btn.configure(image='', state=tk.DISABLED)
                 btn.image = None
                 continue
@@ -577,10 +780,6 @@ class AnnotatorUI:
                     default_class=self.core.cur_class,
                     class_colors=self.core.class_colors,
                 )
-                # ------------------- 关键改动 -------------------
-                # 下面这行 **必须去掉**，否则会把当前图片的 new_boxes 复制到所有缩略图
-                # tmp_core.new_boxes = self.core.new_boxes.copy()
-                # ------------------------------------------------
                 thumb_img = tmp_core.draw(show_cur_rect=False)
                 thumb_small = cv2.resize(thumb_img, (80, 80), interpolation=cv2.INTER_AREA)
                 thumb_rgb = cv2.cvtColor(thumb_small, cv2.COLOR_BGR2RGB)
@@ -600,15 +799,15 @@ class AnnotatorUI:
         self.photo = ImageTk.PhotoImage(pil)
         self.canvas.delete("all")
         self.canvas.create_image(0, 0, anchor='nw', image=self.photo)
+
+        # 缩略图缓存失效检测（当 new_boxes 改变时刷新缩略图）
         if self.core.new_boxes != self._last_new_boxes:
             self._thumb_cache.clear()
             self._last_new_boxes = self.core.new_boxes.copy()
         self._update_thumbnails()
+
     def _schedule_refresh(self):
-        # self._refresh_ui()
-        # self.root.after(self._refresh_interval, self._schedule_refresh)
         self._refresh_ui()
-        # 把 after 的返回 id 保存下来，后面可以取消
         self._refresh_job = self.root.after(self._refresh_interval,
                                             self._schedule_refresh)
 
@@ -650,6 +849,7 @@ class AnnotatorUI:
         self._detect_running = False
         if isinstance(result, Exception):
             print("[Error] 自动检测异常：", result)
+            traceback.print_exc()
             return
         dets = result
         if not dets:
@@ -663,10 +863,7 @@ class AnnotatorUI:
                 yc = (y + h / 2.0) / img_h
                 nw = w / img_w
                 nh = h / img_h
-
                 self.core.new_boxes.append((class_id, xc, yc, nw, nh))
-                # --------------------
-            # 刷新 UI（包括缩略图会同步显示新框）
             self._refresh_ui()
 
 # -------------------------------------------------
@@ -678,6 +875,7 @@ def main():
     if SUBSET:
         img_root = os.path.join(img_root, SUBSET)
         lbl_root = os.path.join(lbl_root, SUBSET)
+
     img_files = list_image_files(img_root)
     if not img_files:
         print(f'⚠️ 未在 {img_root} 中找到图片')
@@ -695,14 +893,15 @@ def main():
     total_imgs = len(img_files)
     idx = 0
     print(f'🖼️ 共计 {total_imgs} 张图片待标注')
+
     while 0 <= idx < total_imgs:
         img_path = img_files[idx]
         txt_path = txt_path_from_img(img_path, img_root, lbl_root)
-        core = AnnotatorCore(img_path, txt_path, default_class, class_colors)
 
+        core = AnnotatorCore(img_path, txt_path, default_class, class_colors)
         ui = AnnotatorUI(core, class_names,
                          img_files, idx, total_imgs,
-                         img_root, lbl_root)   # ← 传根目录
+                         img_root, lbl_root)
 
         if ui.result == "next":
             idx += 1
@@ -715,7 +914,9 @@ def main():
             sys.exit(0)
         else:
             idx += 1
-        idx = max(0, min(idx, total_imgs-1))
+
+        idx = max(0, min(idx, total_imgs - 1))
+
     print('\n✅ 所有图片已完成标注！')
 
 if __name__ == '__main__':
