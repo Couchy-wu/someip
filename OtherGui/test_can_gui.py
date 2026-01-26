@@ -447,36 +447,60 @@ class CANFDGUI:
 
     def _save_captured_image(self):
         """
-        将最近一次保存的 “变换C” 图像写入
-        <项目根目录>/Resources/Captured/<序号>.png（序号从 1 开始递增）。
-        若当前没有可保存的图像则弹出提示。
+        将最近一次 “变换C” 处理后的图像保存为 PNG。
+        目标目录为项目根目录下的 ``Resources/Captured``，文件名从 1 开始递增。
+        若没有可保存的图像则弹出警告；出错时弹出错误提示；成功保存时保持沉默。
         """
+        # --------------------------------------------------------------
+        # 1️⃣ 确认缓存的图像是否存在
+        # --------------------------------------------------------------
         if not getattr(self, "_last_transform_c_image", None):
             messagebox.showwarning("保存失败", "当前没有可保存的变换C图像。")
             return
 
-        # 目标文件夹：Resources/Captured（相对于本文件所在目录）
-        save_dir = os.path.join(os.path.dirname(__file__), "Resources", "Captured")
-        os.makedirs(save_dir, exist_ok=True)
+        # --------------------------------------------------------------
+        # 2️⃣ 计算保存目录（使用绝对路径，避免相对路径误差）
+        # --------------------------------------------------------------
+        # 项目根目录 = 当前文件所在目录的父目录（即 OtherGui 同级目录的上一级）
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        save_dir = os.path.join(project_root, "Resources", "Captured")
 
-        # 计算下一个递增的文件名
-        existing = [f for f in os.listdir(save_dir) if f.lower().endswith('.png')]
-        next_index = 1
-        if existing:
-            nums = []
-            for f in existing:
-                name, _ = os.path.splitext(f)
-                if name.isdigit():
-                    nums.append(int(name))
-            if nums:
-                next_index = max(nums) + 1
+        # 如果您希望直接以当前工作目录为基准，只需要改成：
+        # save_dir = os.path.join(os.getcwd(), "Resources", "Captured")
 
-        filename = os.path.join(save_dir, f"{next_index}.png")
+        # 确保目录存在
         try:
-            self._last_transform_c_image.save(filename, format="PNG")
-            print("保存成功")
+            os.makedirs(save_dir, exist_ok=True)
         except Exception as e:
-            messagebox.showerror("保存错误", f"保存图像时出现异常:\n{e}")    
+            messagebox.showerror("目录创建错误", f"无法创建保存目录:\n{save_dir}\n异常: {e}")
+            return
+
+        # --------------------------------------------------------------
+        # 3️⃣ 生成递增的文件名（1.png, 2.png, …）
+        # --------------------------------------------------------------
+        try:
+            existing_files = [f for f in os.listdir(save_dir) if f.lower().endswith('.png')]
+            # 只保留纯数字文件名的部分
+            numbers = [
+                int(os.path.splitext(f)[0]) for f in existing_files
+                if os.path.splitext(f)[0].isdigit()
+            ]
+            next_index = max(numbers) + 1 if numbers else 1
+            filename = os.path.join(save_dir, f"{next_index}.png")
+        except Exception as e:
+            messagebox.showerror("文件名计算错误", f"生成文件名时出错: {e}")
+            return
+
+        # --------------------------------------------------------------
+        # 4️⃣ 实际写文件
+        # --------------------------------------------------------------
+        try:
+            # self._last_transform_c_image 已经是 Pillow Image
+            self._last_transform_c_image.save(filename, format="PNG")
+            # 成功后 **不弹窗**（保持安静），仅在控制台打印路径，便于调试
+            print(f"[INFO] 变换C图像已保存 → {filename}")
+        except Exception as e:
+            messagebox.showerror("保存错误", f"保存图像时出现异常:\n{e}") 
 
     def _make_no_camera_image(self, width=640, height=360,
                               text="Camera is Not Open\nor\nNot activated transformation"):
