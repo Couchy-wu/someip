@@ -447,28 +447,51 @@ class CANFDGUI:
 
     def _save_captured_image(self):
         """
-        将最近一次 “变换C” 处理后的图像保存为 PNG。
+        将最近一次 **选中的变换**（A、B 或 C）处理后的图像保存为 PNG。
         目标目录为项目根目录下的 ``Resources/Captured``，文件名从 1 开始递增。
-        若没有可保存的图像则弹出警告；出错时弹出错误提示；成功保存时保持沉默。
+
+        保存规则：
+        1️⃣ 必须满足以下条件才会尝试保存：
+            • 已打开摄像头并捕获到原始帧（self.latest_frame 不为 None）；
+            • “图像测试”已开启（self.image_test_var == 1）；
+            • “开启图像变换”已勾选（self.transform_enable_var == 1）；
+            • 当前下拉框中有合法的变换选项（A/B/C）。
+        2️⃣ 根据当前 ``self.transform_option_var`` 调用 ``self._apply_transform`` 对原始帧进行相同的处理，
+            生成对应的 Pillow Image（已完成所有颜色通道转换）。
+        3️⃣ 将生成的图像保存到 ``Resources/Captured``，文件名递增（1.png、2.png …）。
+        4️⃣ 若任意前置条件不满足，则弹出警告；保存出错则弹出错误提示；成功保存仅在控制台打印路径。
         """
         # --------------------------------------------------------------
-        # 1️⃣ 确认缓存的图像是否存在
+        # 1️⃣ 前置检查：确保有可保存的帧以及变换已启用
         # --------------------------------------------------------------
-        if not getattr(self, "_last_transform_c_image", None):
-            messagebox.showwarning("保存失败", "当前没有可保存的变换C图像。")
+        if self.latest_frame is None:
+            messagebox.showwarning("保存失败", "未捕获到任何摄像头帧，无法保存图像。")
+            return
+        if self.image_test_var.get() != 1:
+            messagebox.showwarning("保存失败", "请先开启“图像测试”，才能保存图像。")
+            return
+        if self.transform_enable_var.get() != 1:
+            messagebox.showwarning("保存失败", "请先勾选“开启图像变换”，才能保存变换后的图像。")
             return
 
         # --------------------------------------------------------------
-        # 2️⃣ 计算保存目录（使用绝对路径，避免相对路径误差）
+        # 2️⃣ 根据当前选项生成对应的变换图像
         # --------------------------------------------------------------
-        # 项目根目录 = 当前文件所在目录的父目录（即 OtherGui 同级目录的上一级）
+        try:
+            # self._apply_transform 会根据 self.transform_option_var 的值返回
+            # Pillow.Image（已完成所有必要的颜色空间转换）
+            transformed_img = self._apply_transform(self.latest_frame)
+            if transformed_img is None:
+                raise RuntimeError("变换函数返回了 None")
+        except Exception as e:
+            messagebox.showerror("保存错误", f"生成变换图像时出现异常:\n{e}")
+            return
+
+        # --------------------------------------------------------------
+        # 3️⃣ 计算保存目录（使用项目根目录的绝对路径）
+        # --------------------------------------------------------------
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         save_dir = os.path.join(project_root, "Resources", "Captured")
-
-        # 如果您希望直接以当前工作目录为基准，只需要改成：
-        # save_dir = os.path.join(os.getcwd(), "Resources", "Captured")
-
-        # 确保目录存在
         try:
             os.makedirs(save_dir, exist_ok=True)
         except Exception as e:
@@ -476,31 +499,26 @@ class CANFDGUI:
             return
 
         # --------------------------------------------------------------
-        # 3️⃣ 生成递增的文件名（1.png, 2.png, …）
+        # 4️⃣ 生成递增的文件名（1.png、2.png、…）
         # --------------------------------------------------------------
         try:
-            existing_files = [f for f in os.listdir(save_dir) if f.lower().endswith('.png')]
-            # 只保留纯数字文件名的部分
-            numbers = [
-                int(os.path.splitext(f)[0]) for f in existing_files
-                if os.path.splitext(f)[0].isdigit()
-            ]
-            next_index = max(numbers) + 1 if numbers else 1
-            filename = os.path.join(save_dir, f"{next_index}.png")
+            existing = [f for f in os.listdir(save_dir) if f.lower().endswith('.png')]
+            numbers = [int(os.path.splitext(f)[0]) for f in existing if os.path.splitext(f)[0].isdigit()]
+            next_idx = max(numbers) + 1 if numbers else 1
+            filename = os.path.join(save_dir, f"{next_idx}.png")
         except Exception as e:
             messagebox.showerror("文件名计算错误", f"生成文件名时出错: {e}")
             return
 
         # --------------------------------------------------------------
-        # 4️⃣ 实际写文件
+        # 5️⃣ 实际写文件
         # --------------------------------------------------------------
         try:
-            # self._last_transform_c_image 已经是 Pillow Image
-            self._last_transform_c_image.save(filename, format="PNG")
-            # 成功后 **不弹窗**（保持安静），仅在控制台打印路径，便于调试
-            print(f"[INFO] 变换C图像已保存 → {filename}")
+            # Pillow.Image 已经是 RGB 格式，直接保存
+            transformed_img.save(filename, format="PNG")
+            print(f"[INFO] 已保存变换图像 → {filename}")
         except Exception as e:
-            messagebox.showerror("保存错误", f"保存图像时出现异常:\n{e}") 
+            messagebox.showerror("保存错误", f"保存图像时出现异常:\n{e}")
 
     def _make_no_camera_image(self, width=640, height=360,
                               text="Camera is Not Open\nor\nNot activated transformation"):
