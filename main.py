@@ -40,9 +40,6 @@ selected_file = tk.StringVar()
 # 初始化查看用例处理器
 view_case_handler = ViewCaseHandler(selected_file)
 
-# 初始化查看用例处理器
-view_case_handler = ViewCaseHandler(selected_file)
-
 # 初始化测试用例解析出来的日志的查看器
 log_viewer = LogViewer(selected_file)
 
