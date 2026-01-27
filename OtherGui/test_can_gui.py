@@ -37,8 +37,9 @@ class CANFDGUI:
         self._stop_camera_thread = False          # 用来在关闭窗口时让摄像头回调提前退出
         self._after_id = None                     # 用来保存 after 的 id
 
-        # ---------- 、保存最近一帧原始图像 ----------
-        self.latest_frame = None                  # 、用于透视校正时取帧
+        # ---------- 保存最近一帧原始图像 ----------
+        self.latest_frame = None                   # 用于透视校正时取帧
+        self._pause_for_calibration = False        
 
         # 一些变量
         self.repeat_var = tk.StringVar(value="1")   # 用例重复检测次数
@@ -368,6 +369,9 @@ class CANFDGUI:
         # ----------- 若窗口已请求关闭，则直接返回 ----------
         if getattr(self, "_stop_camera_thread", False):
             return
+        # 若正在进行透视校正，暂停摄像头回调，防止旧帧被绘制到校正窗口
+        if getattr(self, "_pause_for_calibration", False):
+            return
         # 先把原始（未做任何处理的）帧保存下来，以便后续 “透视变换校正” 使用
         self.latest_frame = frame_rgb.copy()   # 保留最新的原始帧
         try:
@@ -572,7 +576,8 @@ class CANFDGUI:
         if self.latest_frame is None:
             messagebox.showwarning("提示", "当前没有可用的摄像头帧，请先确保摄像头正常工作后再尝试校正。")
             return
-
+        # 暂停摄像头回调，防止旧帧被绘制到校正窗口
+        self._pause_for_calibration = True
         # 对 latest_frame 应用当前 UI 中的翻转/旋转设置
         proc_frame = self.latest_frame.copy()          # 复制防止修改原始缓存
         # 180° 旋转（如果打开）
@@ -611,8 +616,14 @@ class CANFDGUI:
                     os.remove(tmp_path)
                 except Exception:
                     pass
+                # 恢复摄像头回调
+                self._pause_for_calibration = False
 
-        threading.Thread(target=_run_calibrator, daemon=True).start()
+        # 使用守护线程启动（不阻塞 UI 主循环）
+        self._calibration_thread = threading.Thread(
+            target=_run_calibrator, daemon=True
+        )
+        self._calibration_thread.start()
 
     # 曝光值实时更新回调
     def _on_exposure_change(self, event=None):
