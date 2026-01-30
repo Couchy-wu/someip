@@ -10,8 +10,6 @@ import threading
 
 # 模块功能：基于日志文件驱动的 CAN 总线自动化测试用例执行器
 
-# 注意！仅调试该文件时打开开关，其他情况请务必关掉该开关，避免重复初始化或意外关闭can设备
-# 其实现在逻辑已经解决了重复初始化，但是没解决意外关闭can设别，后续再修改
 # 是否自动开关CAN设备：根据执行方式智能判断
 if __name__ == "__main__":
     ENABLE_AUTO_OPEN_CLOSE_CAN = True
@@ -49,6 +47,9 @@ class LogParser:
         # 使用传入值或默认值
         self.case_repeat_count = case_repeat_count if case_repeat_count is not None else CASE_REPEAT_COUNT
         self.total_test_rounds = total_test_rounds if total_test_rounds is not None else TOTAL_TEST_ROUNDS
+
+        # 当前工况记录，初始为“等待”
+        self.current_state = "等待"      # 可取值：执行状态 / 执行动作 / 执行响应 / 等待        
 
         mylog.setup_logger(
             logger_name=LOGGER_NAME,
@@ -147,6 +148,13 @@ class LogParser:
                         break
 
                     case_id = case['id']
+                    # 进入“未启用”前先设状态
+                    if not self.has_script_result(case['content']):
+                        self.current_state = "等待"
+                        mylog.info(LOGGER_NAME, "不存在脚本解析结果，跳过该用例")
+                        print("不存在脚本解析结果，跳过该用例", flush=True)
+                        continue
+
                     mylog.info(LOGGER_NAME, "=============================================")
                     mylog.info(LOGGER_NAME, f"开始处理用例: {case_id}")
                     print(f"✅ 开始处理用例: {case_id}", flush=True)
@@ -195,6 +203,7 @@ class LogParser:
 
                     # 用例间延迟
                     if self.test_cases:  # 确保有测试用例
+                        self.current_state = "等待"
                         inter_case_delay = 5
                         mylog.info(LOGGER_NAME, f"用例 {case_id} 已完成，等待{inter_case_delay}秒后开始下一个用例...")
                         print(f"用例 {case_id} 已完成，等待{inter_case_delay}秒后开始下一个用例...", flush=True)
@@ -204,6 +213,7 @@ class LogParser:
 
                 # 本轮完成，若非最后一轮则等待
                 if round_idx < self.total_test_rounds:
+                    self.current_state = "等待"
                     inter_round_delay = 2
                     mylog.info(LOGGER_NAME, f"第 {round_idx} 轮测试完成，等待{inter_round_delay}秒后开始下一轮...")
                     print(f"第 {round_idx} 轮测试完成，等待{inter_round_delay}秒后开始下一轮...", flush=True)
@@ -243,6 +253,12 @@ class LogParser:
         except Exception as e:
             mylog.error(LOGGER_NAME, f"清理定时发送列表时发生异常: {e}")
 
+    def get_current_state(self): 
+        """
+        返回当前正处于的工况名称。
+        """
+        return self.current_state
+
     def analyze_script_parts(self, content):
         """解析状态、动作、响应"""
         self._analyze_state(content)
@@ -250,18 +266,21 @@ class LogParser:
         self._analyze_response(content)
 
     def _analyze_state(self, content):
+        self.current_state = "执行状态"
         mylog.debug(LOGGER_NAME, "执行“状态”")
         block = self._extract_block(content, "状态")
         if block:
             self._process_block_lines(block)
 
     def _analyze_action(self, content):
+        self.current_state = "执行动作"
         mylog.debug(LOGGER_NAME, "执行“动作”")
         block = self._extract_block(content, "动作")
         if block:
             self._process_block_lines(block)
 
     def _analyze_response(self, content):
+        self.current_state = "执行响应"
         mylog.debug(LOGGER_NAME, "执行“响应”")
         block = self._extract_block(content, "响应")
         if block:
@@ -697,7 +716,7 @@ class LogParser:
         if getattr(self, '_pause_event', None) is None:
             mylog.warning(LOGGER_NAME, "暂停功能未初始化，请检查 _pause_event 是否在 __init__ 中创建。")
             return
-
+        self.current_state = "等待"
         self._pause_event.clear()  # 进入暂停状态
         mylog.info(LOGGER_NAME, "测试流程已暂停。调用 resume_test() 可恢复。")
         print("测试已暂停。")
@@ -708,7 +727,7 @@ class LogParser:
         if getattr(self, '_pause_event', None) is None:
             mylog.warning(LOGGER_NAME, "恢复功能未初始化。")
             return
-
+        self.current_state = "等待"
         self._pause_event.set()  # 恢复运行
         mylog.info(LOGGER_NAME, "测试流程已恢复。")
         print("测试已恢复。")
@@ -716,23 +735,39 @@ class LogParser:
 
 # ==================== 使用示例 ====================
 if __name__ == "__main__":
+    # -------------------------------------------------
+    # 1. 创建 LogParser 实例
+    # -------------------------------------------------
+    log_file_path = "TestcaseCollection/JJJJSSSS_data.log"   # ← 请改为实际路径
+    parser = LogParser(log_file_path)                         # 实例化
 
-    # 设置日志文件路径
-    log_file_path = "TestcaseCollection/my测试_data.log"  # ← 修改为你的实际路径
+    # -------------------------------------------------
+    # 2. 启动一个守护线程：每 100 ms 打印一次当前工况状态
+    # -------------------------------------------------
+    def _state_printer(p: LogParser):
+        """在后台循环打印 parser 的 current_state，间隔 100 ms。"""
+        while not getattr(p, "_stop_event", False):
+            # 通过公开的 getter 获取状态，避免直接访问内部属性
+            print(f"[状态监控] 当前工况状态: {p.get_current_state()}", flush=True)
+            time.sleep(0.1)
 
-    parser = LogParser(log_file_path)                   # 先创建实例
+    state_thread = threading.Thread(
+        target=_state_printer,
+        args=(parser,),
+        daemon=True,          # 主程序退出时自动结束
+        name="StatePrinter"
+    )
+    state_thread.start()
 
-    import threading
-    threading.Thread(target=parser.run, daemon=True).start()
+    # -------------------------------------------------
+    # 3. 启动测试主流程（保持原有的后台运行方式）
+    # -------------------------------------------------
+    threading.Thread(target=parser.run, daemon=True, name="ParserRun").start()
 
-    # 回车暂停
-    input()
-    parser.pause_test()
+    # # -------------------------------------------------
+    # # 4. 交互式控制
+    # # -------------------------------------------------
 
-    # 回车继续
-    input()
-    parser.resume_test()
-
-    # 回车退出
+    # 回车 → 关闭测试并退出
     input()
     parser.close_test()
