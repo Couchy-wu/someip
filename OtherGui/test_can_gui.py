@@ -13,7 +13,7 @@ from PIL import Image, ImageTk, ImageDraw, ImageFont
 from CameraUtils.camera_viewer import CameraViewer, rotate_image_180, set_exposure
 import cv2
 from CameraUtils.perspective_calibrator import PerspectiveCalibrator
-import tempfile
+import tempfile, glob
 
 # 判断是否被 import 调用
 IS_STANDALONE = __name__ == "__main__"
@@ -146,7 +146,7 @@ class CANFDGUI:
         self.exposure_cb = ttk.Combobox(
             root,
             textvariable=self.exposure_var,
-            values=[0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11, -12],
+            values=[2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11, -12],
             state="readonly",
             width=6,
             font=("微软雅黑", 10)
@@ -554,8 +554,19 @@ class CANFDGUI:
             x = (width - w) // 2               # 水平居中
             y = start_y + sum(line_heights[:i]) + line_spacing * i
             draw.text((x, y), line, font=font, fill=(0, 255, 0))
-
         return img
+
+    def _cleanup_temp_files(self, prefix: str) -> None:
+        """
+        删除指定前缀的所有残留临时文件，以防止在透视变换校正时，因异常退出而遗留的文件堆积。
+        """
+        script_dir = os.path.abspath(os.path.dirname(__file__))
+        pattern = os.path.join(script_dir, f"{prefix}*.png")
+        for tmp_path in glob.glob(pattern):
+            try:
+                os.remove(tmp_path)
+            except Exception as e:
+                print(f"[WARN] 删除残留临时文件 {tmp_path} 时出错: {e}")
 
     # 透视变换校正入口（非阻塞）
     def start_perspective_correction(self):
@@ -568,6 +579,8 @@ class CANFDGUI:
            保证整个过程不阻塞 GUI 主线程。
         4. 线程结束后自动删除临时文件。
         """
+        self._cleanup_temp_files("tmp_cam_")  # 清理旧的临时文
+
         # ① 检查是否已有帧可用
         if self.latest_frame is None:
             messagebox.showwarning("提示", "当前没有可用的摄像头帧，请先确保摄像头正常工作后再尝试校正。")
@@ -606,12 +619,7 @@ class CANFDGUI:
             except Exception as e:
                 print(f"[ERROR] 透视校正异常: {e}")
             finally:
-                # 删除临时文件
-                try:
-                    os.remove(tmp_path)
-                except Exception:
-                    pass
-
+                self._cleanup_temp_files("tmp_cam_")  # 删除临时文件
         threading.Thread(target=_run_calibrator, daemon=True).start()
 
     # 曝光值实时更新回调
@@ -694,7 +702,7 @@ class CANFDGUI:
         - 返回 ``PIL.Image``，若校正失败则返回原始帧对应的 Image。
         """
         import tempfile, os
-
+        self._cleanup_temp_files("tmp_cam_")  # 先清理可能残留的旧文件
         # ① 创建占位文件（仅为构造 PerspectiveCalibrator 所需的路径）
         tmp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
         tmp_path = tmp_file.name
@@ -723,11 +731,7 @@ class CANFDGUI:
             else:
                 return Image.fromarray(frame_rgb)
         finally:
-            # ⑤ 清理临时占位文件
-            try:
-                os.remove(tmp_path)
-            except Exception:
-                pass
+            self._cleanup_temp_files("tmp_cam_")  # 清理临时占位文件
 
     # --------------------- CAN设备初始化 ---------------------
     def start_init(self):
