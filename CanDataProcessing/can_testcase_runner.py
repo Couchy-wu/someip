@@ -345,12 +345,22 @@ class LogParser:
                 continue
 
             # === 测试台CANID禁用 ===
-            disable_match = re.match(r'^测试台CANID禁用[0-9A-F]+，禁用对应index:(.+)$', line)
+            # 兼容 “测试台CANID禁用(32B.主ID禁用)” 这种括号形式
+            disable_paren_match = re.match(r'^测试台CANID禁用\(([^)]+)\)', line)
+            if disable_paren_match:
+                can_id_desc = disable_paren_match.group(1).strip()
+                # 这里仅记录日志，实际禁用逻辑视项目需求自行实现
+                mylog.debug(LOGGER_NAME, f"Disable → 禁用 CAN ID 描述: {can_id_desc}")
+                i += 1
+                continue
+            # 原有的 “禁用对应 index” 形式
+            disable_match = re.match(
+                r'^测试台CANID禁用[0-9A-F]+[，,]?\s*禁用对应index\s*:\s*(.+)$',
+                line
+            )
             if disable_match:
                 indices_str = disable_match.group(1).strip()
-                indices = [int(x.strip()) for x in indices_str.split(',') if x.strip().isdigit()]
-
-                # 获取设备句柄（复用已有资源）
+                indices = [int(x.strip()) for x in re.split(r'[,\s]+', indices_str) if x.strip().isdigit()]
                 device_handle = self.can_device[0] if self.can_device else None
                 if device_handle is not None:
                     for idx in indices:
@@ -738,7 +748,7 @@ if __name__ == "__main__":
     # -------------------------------------------------
     # 1. 创建 LogParser 实例
     # -------------------------------------------------
-    log_file_path = "TestcaseCollection/JJJJSSSS_data.log"   # ← 请改为实际路径
+    log_file_path = "TestcaseCollection/J12312_data.log"   # ← 请改为实际路径
     parser = LogParser(log_file_path)                         # 实例化
 
     # -------------------------------------------------
