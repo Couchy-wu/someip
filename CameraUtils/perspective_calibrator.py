@@ -5,7 +5,55 @@ from pathlib import Path
 from threading import Thread, Timer
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+import uuid
+import threading
 
+class _GlobalWatcher:
+    """
+    单例 watchdog.Observer，所有 PerspectiveCalibrator 实例共享同一个 Observer。
+    每个实例只需要把自己的回调注册进去，内部统一防抖。
+    """
+    _instance = None
+    _lock = threading.Lock()
+
+    def __new__(cls, directory):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super().__new__(cls)
+                cls._instance._observer = Observer()
+                cls._instance._observer.start()
+                cls._instance._handlers = {}      # Path -> [callback, ...]
+                cls._instance._directories = {}   # dir -> Handler
+            return cls._instance
+
+    def register(self, path: Path, callback):
+        """为指定文件注册回调，内部统一防抖。"""
+        path = path.resolve()
+        directory = str(path.parent)
+
+        # 为目录仅创建一次 Handler
+        if directory not in self._directories:
+            handler = self._make_handler()
+            self._observer.schedule(handler, directory, recursive=False)
+            self._directories[directory] = handler
+
+        # 保存回调（同一文件可有多个实例）
+        self._handlers.setdefault(path, []).append(callback)
+
+    def _make_handler(self):
+        parent = self
+
+        class Handler(FileSystemEventHandler):
+            def on_modified(self, event):
+                p = Path(event.src_path).resolve()
+                if p in parent._handlers:
+                    # ★ MOD: 防抖 0.3 s，防止一次保存触发多次加载
+                    if hasattr(self, "_timer") and self._timer:
+                        self._timer.cancel()
+                    self._timer = Timer(0.3,
+                                        lambda: [cb(str(p)) for cb in parent._handlers[p]])
+                    self._timer.start()
+        return Handler()
 
 class PerspectiveCalibrator:
     """
@@ -18,9 +66,20 @@ class PerspectiveCalibrator:
       - 输出分辨率预设（在初始化时设置）
     适用于文档扫描、投影对齐等场景。
     """
+    _file_lock = threading.Lock()          # 所有实例共享的文件读写锁
+
     def __init__(self, image_path,
                  display_width=960, display_height=540,
-                 output_resolution="original"):
+                 output_resolution="original",
+                 config_name=None):
+
+        # ---------- 唯一实例标识 ----------
+        self._uid = uuid.uuid4().hex[:8]             # 用于窗口名、文件名等唯一化
+
+        # ---------- 窗口名 ----------
+        self._win_main   = f"PC-{self._uid}-Manual"   # 主窗口唯一名称
+        self._win_warped = f"PC-{self._uid}-Warped"   # 透视结果窗口唯一名称
+
         # ---------- 基础图像 ----------
         self.original_image = cv2.imread(image_path)
         if self.original_image is None:
@@ -32,11 +91,11 @@ class PerspectiveCalibrator:
         self.display_height = display_height
 
         # ---------- 基准比例（原始 → 显示） ----------
-        self.base_scale_x = self.orig_width / self.display_width   # ★ NEW
-        self.base_scale_y = self.orig_height / self.display_height # ★ NEW
+        self.base_scale_x = self.orig_width / self.display_width
+        self.base_scale_y = self.orig_height / self.display_height
 
         # ---------- 当前整体缩放（放大/缩小） ----------
-        self.current_scale = 1.0                                 # ★ NEW
+        self.current_scale = 1.0
 
         # ---------- 用于显示的缩放图 ----------
         self.display_image = cv2.resize(self.original_image,
@@ -57,18 +116,21 @@ class PerspectiveCalibrator:
 
         # ---------- 配置文件 ----------
         self.image_path = Path(image_path)
-
-        # ★ MOD: 固定将配置文件放在本模块所在的 CameraUtils 目录
-        self._config_dir = Path(__file__).resolve().parent          # ★ NEW
-        self.config_path = self._config_dir / "fixed_corners.json"  # ★ MOD
+        # 固定将配置文件放在本模块所在的 CameraUtils 目录
+        self._config_dir = Path(__file__).resolve().parent
+        self.config_path = self._config_dir / "fixed_corners.json"
 
         # ---------- 缓存 ----------
         self.original_corners = None      # 原始检测到的角点（用于缩放基准）
         self.perspective_matrix = None    # 计算好的透视矩阵（热更新直接使用）
 
         # ---------- 启动配置文件监听 ----------
-        self.watcher = self.ConfigFileWatcher(self, self.config_path)
-        self.watcher.start()
+        # self.watcher = self.ConfigFileWatcher(self, self.config_path)
+        # self.watcher.start()
+
+    def _on_config_modified(self, path_str):
+        """文件被外部修改后，仅在本实例内部重新加载角点/矩阵。"""
+        self.load_corners(path_str)
 
     # -----------------------------------------------------------------
     # 1️⃣ 鼠标事件：点击、拖拽
@@ -90,7 +152,7 @@ class PerspectiveCalibrator:
                 self.real_points.append((real_x, real_y))
                 # 在图像上标记
                 cv2.circle(self.working_image, (x, y), 5, (0, 255, 0), -1)
-                cv2.imshow("Manual Corner Detector", self.working_image)
+                cv2.imshow(self._win_main, self.working_image)
                 if len(self.points) == 4:
                     self._finalize_quad_selection()
             return
@@ -144,12 +206,23 @@ class PerspectiveCalibrator:
         bl = left_group[np.argsort(left_group[:, 1])][1]   # 左下
         tr = right_group[np.argsort(right_group[:, 1])][0] # 右上
         br = right_group[np.argsort(right_group[:, 1])][1] # 右下
+
         # ---------- ★ MOD ----------
-        # 将原始坐标映射回显示坐标（考虑当前缩放比例）
+        # 将原始坐标映射回显示坐标（考虑当前缩放比例），并统一保存顺序
         def to_display(pt):
             return (int(pt[0] / self.base_scale_x * self.current_scale),
                     int(pt[1] / self.base_scale_y * self.current_scale))
+
         tl_d, tr_d, bl_d, br_d = map(to_display, [tl, tr, bl, br])
+
+        # 保存显示坐标（float）供后续拖拽使用，顺序必须与 point_order 对应
+        self.points = [
+            (float(tl_d[0]), float(tl_d[1])),
+            (float(tr_d[0]), float(tr_d[1])),
+            (float(bl_d[0]), float(bl_d[1])),
+            (float(br_d[0]), float(br_d[1]))
+        ]
+
         # 绘制边框
         cv2.line(self.working_image, tl_d, tr_d, (255, 0, 0), 2)
         cv2.line(self.working_image, tr_d, br_d, (255, 0, 0), 2)
@@ -163,8 +236,9 @@ class PerspectiveCalibrator:
             cv2.putText(self.working_image, label,
                         (pt[0] + offset_x, pt[1] + offset_y),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-        cv2.imshow("Manual Corner Detector", self.working_image)
+        cv2.imshow(self._win_main, self.working_image)
         print("已自动识别并连接四个角点")
+
         # 保存四个角点（原始坐标）
         self.corners = {
             "top_left_corner": tuple(map(int, tl)),
@@ -198,42 +272,55 @@ class PerspectiveCalibrator:
         if self.original_corners is None:
             print("请先完成四个角点的检测")
             return
-        # ---------- ★ MOD ----------
-        # 计算新的整体缩放比例
+
+        # 计算新的累计缩放比例
         new_scale = self.current_scale * scale_factor
         if new_scale < 0.3 or new_scale > 2.0:
             print(f"缩放比例超出限制 (当前: {self.current_scale:.0%}, 操作后: {new_scale:.0%})")
             print("允许范围: 30% - 200%")
             return
-        self.current_scale = new_scale
-        print(f"应用缩放: {scale_factor:.0%} → 当前缩放比例: {self.current_scale:.0%}")
-        # 计算原始角点的中心点
+
+        # 使用 **原始角点** 进行缩放，得到实际坐标（仍是原始图像坐标）
         pts = np.array([
             self.original_corners["top_left_corner"],
             self.original_corners["top_right_corner"],
             self.original_corners["bottom_left_corner"],
             self.original_corners["bottom_right_corner"]
         ], dtype="float32")
-        center = np.mean(pts, axis=0)
-        # 计算缩放后的新角点（仍然是 **原始图像坐标**）
-        scaled_pts = center + (pts - center) * self.current_scale
-        # 更新当前角点（原始坐标）
+
+        center = np.mean(pts, axis=0)                     # 四边形中心
+        scaled_pts = center + (pts - center) * new_scale   # 按 new_scale 缩放
+
+        # ---------- 更新内部状态 ----------
+        # 1) 角点（原始坐标）已被缩放
         self.corners = {
-            "top_left_corner": tuple(map(int, scaled_pts[0])),
-            "top_right_corner": tuple(map(int, scaled_pts[1])),
-            "bottom_left_corner": tuple(map(int, scaled_pts[2])),
-            "bottom_right_corner": tuple(map(int, scaled_pts[3]))
+            "top_left_corner":     tuple(map(int, scaled_pts[0])),
+            "top_right_corner":    tuple(map(int, scaled_pts[1])),
+            "bottom_left_corner":  tuple(map(int, scaled_pts[2])),
+            "bottom_right_corner": tuple(map(int, scaled_pts[3])),
         }
-        # 更新 real_points（原始坐标）和 points（显示坐标，使用 float）
+
+        # 2) real_points 与 corners 同步（整数坐标）
         self.real_points = [tuple(map(int, pt)) for pt in scaled_pts]
-        self.points = [(pt[0] / self.base_scale_x * self.current_scale,
-                        pt[1] / self.base_scale_y * self.current_scale)
-                       for pt in scaled_pts]
-        # 重绘
+
+        # 3) 计算 **显示坐标**（float），此处只把原始坐标映射到显示尺寸，
+        #    不再乘以 self.current_scale，因为 corners 已经包含了累计缩放。
+        self.points = [
+            (pt[0] / self.base_scale_x, pt[1] / self.base_scale_y) for pt in scaled_pts
+        ]
+
+        # 4) 更新累计缩放比例
+        self.current_scale = new_scale
+
+        # ---------- 调试信息 ----------
+        print(f"已应用缩放: {scale_factor:.0%} → 累计缩放: {self.current_scale:.0%}")
+
+        # ---------- 重绘 ----------
         self._redraw_with_corners()
+
         # 清除旧矩阵，使后续得到最新矩阵
         self.perspective_matrix = None
-        # 直接调用 apply（内部会重新计算矩阵并保存）
+        # 重新计算并保存透视矩阵
         self.apply_perspective_transform()
 
     # -----------------------------------------------------------------
@@ -274,7 +361,7 @@ class PerspectiveCalibrator:
         # 清除缓存的透视矩阵
         self.perspective_matrix = None
         self.working_image = self.display_image.copy()
-        cv2.imshow("Manual Corner Detector", self.working_image)
+        cv2.imshow(self._win_main, self.working_image)
         print("已重置，可重新选择4个角点...")
         # 安全关闭 "Warped View" 窗口
         try:
@@ -290,16 +377,16 @@ class PerspectiveCalibrator:
         if not self.corners:
             print("没有可保存的角点数据")
             return
-        try:
-            data_to_save = self.corners.copy()
-            # 若已有透视矩阵则一起保存
-            if self.perspective_matrix is not None:
-                data_to_save["perspective_matrix"] = self.perspective_matrix.tolist()
-            with open(self.config_path, 'w', encoding='utf-8') as f:
-                json.dump(data_to_save, f, indent=4, ensure_ascii=False)
-            # print(f"角点已自动保存至: {self.config_path}")
-        except Exception as e:
-            print(f"保存配置失败: {e}")
+        # 加全局写锁，防止多实例并发写入同一文件
+        with PerspectiveCalibrator._file_lock:
+            try:
+                data_to_save = self.corners.copy()
+                if self.perspective_matrix is not None:
+                    data_to_save["perspective_matrix"] = self.perspective_matrix.tolist()
+                with open(self.config_path, 'w', encoding='utf-8') as f:
+                    json.dump(data_to_save, f, indent=4, ensure_ascii=False)
+            except Exception as e:
+                print(f"保存配置失败: {e}")
 
     # -----------------------------------------------------------------
     # 7️⃣ 加载角点（热更新）
@@ -307,51 +394,56 @@ class PerspectiveCalibrator:
     def load_corners(self, src_path=None):
         """从 JSON 文件加载角点并刷新显示（支持热更新）"""
         if src_path:
-            # print(f"🔄 检测到配置文件修改: {src_path}")
-            pass
+            pass    # 保留占位，保持原接口
         if not self.config_path.exists():
             print(f"角点配置文件不存在: {self.config_path}")
             return False
-        try:
-            with open(self.config_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            required_keys = ["top_left_corner", "top_right_corner",
-                             "bottom_left_corner", "bottom_right_corner"]
-            if not all(k in data for k in required_keys):
-                print("角点配置文件格式错误：缺少必要键")
+
+        # 加全局读锁，防止读取时被其他实例写入覆盖
+        with PerspectiveCalibrator._file_lock:
+            try:
+                with open(self.config_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+            except Exception as e:
+                print(f"加载角点配置失败: {e}")
                 return False
-            # 读取角点（原始坐标）
-            self.corners = {k: tuple(v) for k, v in data.items()
-                            if k in required_keys}
-            # 读取透视矩阵（若有）
-            if "perspective_matrix" in data:
-                self.perspective_matrix = np.array(
-                    data["perspective_matrix"], dtype=np.float32)
-                # print("已加载透视矩阵")
-            else:
-                self.perspective_matrix = None
-            ordered_pts = [
-                self.corners["top_left_corner"],
-                self.corners["top_right_corner"],
-                self.corners["bottom_left_corner"],
-                self.corners["bottom_right_corner"]
-            ]
-            self.real_points = ordered_pts
-            # 计算显示坐标（float，考虑当前整体缩放）
-            self.points = [(x / self.base_scale_x * self.current_scale,
-                            y / self.base_scale_y * self.current_scale)
-                           for (x, y) in ordered_pts] 
-            # 如果是首次加载，将其设为原始角点
-            if self.original_corners is None:
-                self.original_corners = self.corners.copy()
-                self.current_scale = 1.0
-            self._redraw_with_corners()
-            # print(f"已热更新加载角点配置: {self.config_path}") 
-            self.apply_perspective_transform()
-            return True
-        except Exception as e:
-            print(f"加载角点配置失败: {e}")
+
+        required_keys = ["top_left_corner", "top_right_corner",
+                         "bottom_left_corner", "bottom_right_corner"]
+        if not all(k in data for k in required_keys):
+            print("角点配置文件格式错误：缺少必要键")
             return False
+
+        # 读取角点（原始坐标）
+        self.corners = {k: tuple(v) for k, v in data.items()
+                        if k in required_keys}
+        # 读取透视矩阵（若有）
+        if "perspective_matrix" in data:
+            self.perspective_matrix = np.array(
+                data["perspective_matrix"], dtype=np.float32)
+        else:
+            self.perspective_matrix = None
+
+        ordered_pts = [
+            self.corners["top_left_corner"],
+            self.corners["top_right_corner"],
+            self.corners["bottom_left_corner"],
+            self.corners["bottom_right_corner"]
+        ]
+        self.real_points = ordered_pts
+        # 计算显示坐标（float，考虑当前整体缩放）
+        self.points = [(x / self.base_scale_x * self.current_scale,
+                        y / self.base_scale_y * self.current_scale)
+                       for (x, y) in ordered_pts]
+
+        # 第一次加载时设为基准
+        if self.original_corners is None:
+            self.original_corners = self.corners.copy()
+            self.current_scale = 1.0
+
+        self._redraw_with_corners()
+        self.apply_perspective_transform()
+        return True
 
     # -----------------------------------------------------------------
     # 8️⃣ 根据当前 corners 重绘显示图像
@@ -361,12 +453,14 @@ class PerspectiveCalibrator:
         self.working_image = self.display_image.copy()
         pts_disp = {}
         for key, (rx, ry) in self.corners.items():
-            # 原始 → 显示（考虑当前整体缩放）
-            disp_x = int(rx / self.base_scale_x * self.current_scale)  # ★ MOD
-            disp_y = int(ry / self.base_scale_y * self.current_scale)  # ★ MOD
+            # 原始 → 显示（**不再乘以 self.current_scale**，因为 corners 已经是
+            # 已经缩放后的原始坐标）
+            disp_x = int(rx / self.base_scale_x)
+            disp_y = int(ry / self.base_scale_y)
             pts_disp[key] = (disp_x, disp_y)
             cv2.circle(self.working_image, (disp_x, disp_y), 5,
                        (0, 255, 0), -1)
+
         # 四条边
         cv2.line(self.working_image, pts_disp["top_left_corner"],
                  pts_disp["top_right_corner"], (255, 0, 0), 2)
@@ -376,6 +470,7 @@ class PerspectiveCalibrator:
                  pts_disp["bottom_left_corner"], (255, 0, 0), 2)
         cv2.line(self.working_image, pts_disp["bottom_left_corner"],
                  pts_disp["top_left_corner"], (255, 0, 0), 2)
+
         label_map = {
             "top_left_corner": "TL",
             "top_right_corner": "TR",
@@ -390,18 +485,19 @@ class PerspectiveCalibrator:
             cv2.putText(self.working_image, label,
                         (pt[0] + offset_x, pt[1] + offset_y),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-        cv2.imshow("Manual Corner Detector", self.working_image)
+
+        cv2.imshow(self._win_main, self.working_image)
 
     # -----------------------------------------------------------------
     # 9️⃣ 主交互循环
     # -----------------------------------------------------------------
     def run(self):
         """启动角点检测并在两个窗口均被手动关闭时退出"""
-        cv2.namedWindow("Manual Corner Detector", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("Manual Corner Detector",
+        cv2.namedWindow(self._win_main, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(self._win_main,
                          self.display_width, self.display_height)
-        cv2.imshow("Manual Corner Detector", self.working_image)
-        cv2.setMouseCallback("Manual Corner Detector", self.click_event)
+        cv2.imshow(self._win_main, self.working_image)
+        cv2.setMouseCallback(self._win_main, self.click_event)
         # ---------- 帮助信息 ----------
         resolution_names = {
             "720p": "720P (1280x720)",
@@ -424,7 +520,7 @@ class PerspectiveCalibrator:
             if key == ord('r'):               # 重置选择
                 self.reset()
                 try:
-                    cv2.destroyWindow("Warped View")
+                    cv2.destroyWindow(self._win_warped)
                 except:
                     pass
             elif key == ord('e'):             # 重置缩放比例至100%
@@ -443,9 +539,9 @@ class PerspectiveCalibrator:
 
             # ---------- 窗口关闭检测 ----------
             manual_visible = cv2.getWindowProperty(
-                "Manual Corner Detector", cv2.WND_PROP_VISIBLE) >= 1
+                self._win_main, cv2.WND_PROP_VISIBLE) >= 1
             warped_visible = cv2.getWindowProperty(
-                "Warped View", cv2.WND_PROP_VISIBLE) >= 1
+                self._win_warped, cv2.WND_PROP_VISIBLE) >= 1
             if not manual_visible and not warped_visible:
                 break
         # ---------- 清理 ----------
@@ -582,10 +678,11 @@ class PerspectiveCalibrator:
         # 创建显示用的缩小版本
         display_warped = cv2.resize(self.warped_image,
                                    (self.display_width, self.display_height))
-        cv2.namedWindow("Warped View", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("Warped View",
+        # apply_perspective_transform – 创建/显示透视结果窗口
+        cv2.namedWindow(self._win_warped, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(self._win_warped,
                          self.display_width, self.display_height)
-        cv2.imshow("Warped View", display_warped)
+        cv2.imshow(self._win_warped, display_warped)  
 
     # -----------------------------------------------------------------
     # 12️⃣ 文件监听器（保持不变，仅做了少量注释）
