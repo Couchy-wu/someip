@@ -51,6 +51,12 @@ class LogParser:
         # 当前工况记录，初始为“等待”
         self.current_state = "等待"      # 可取值：执行状态 / 执行动作 / 执行响应 / 等待        
 
+        #  统一的延迟参数
+        self.delay_between_repeats = 3          # 每次重复检测结束后的等待（秒）
+        self.delay_between_cases   = 3          # 用例间的等待（秒）
+        self.delay_between_rounds = 2          # 轮次之间的等待（秒）
+        self.delay_after_disable  = 0.2        # 禁用 index 后的短暂等待（秒）        
+
         mylog.setup_logger(
             logger_name=LOGGER_NAME,
             log_dir="./logs",
@@ -180,14 +186,12 @@ class LogParser:
 
                             # 每次重复后等待并清理（最后一次不等待）
                             if rep < self.case_repeat_count:
-                                delay_time = 5
-                                mylog.info(LOGGER_NAME, f"第 {rep} 次检测完成，等待{delay_time}秒后开始下一次...")
-                                print(f"第 {rep} 次检测完成，等待{delay_time}秒后开始下一次...", flush=True)
-
-                                if not self._safe_wait(delay_time):
-                                    break  # 停止或暂停中断等待，直接退出循环
+                                mylog.info(LOGGER_NAME,
+                                           f"第 {rep} 次检测完成，等待{self.delay_between_repeats}秒后开始下一次...")
+                                print(f"第 {rep} 次检测完成，等待{self.delay_between_repeats}秒后开始下一次...", flush=True)
+                                if not self._safe_wait(self.delay_between_repeats):
+                                    break
                                 self._clear_can_channel(chn=0)
-
                                 if getattr(self, '_stop_event', False):
                                     break
 
@@ -202,24 +206,22 @@ class LogParser:
                         continue
 
                     # 用例间延迟
-                    if self.test_cases:  # 确保有测试用例
+                    if self.test_cases:
                         self.current_state = "等待"
-                        inter_case_delay = 5
-                        mylog.info(LOGGER_NAME, f"用例 {case_id} 已完成，等待{inter_case_delay}秒后开始下一个用例...")
-                        print(f"用例 {case_id} 已完成，等待{inter_case_delay}秒后开始下一个用例...", flush=True)
-
-                        if not self._safe_wait(inter_case_delay):
-                            break  # 停止或暂停中断等待
+                        mylog.info(LOGGER_NAME,
+                                   f"用例 {case_id} 已完成，等待{self.delay_between_cases}秒后开始下一个用例...")
+                        print(f"用例 {case_id} 已完成，等待{self.delay_between_cases}秒后开始下一个用例...", flush=True)
+                        if not self._safe_wait(self.delay_between_cases):
+                            break
 
                 # 本轮完成，若非最后一轮则等待
                 if round_idx < self.total_test_rounds:
                     self.current_state = "等待"
-                    inter_round_delay = 2
-                    mylog.info(LOGGER_NAME, f"第 {round_idx} 轮测试完成，等待{inter_round_delay}秒后开始下一轮...")
-                    print(f"第 {round_idx} 轮测试完成，等待{inter_round_delay}秒后开始下一轮...", flush=True)
-
-                    if not self._safe_wait(inter_round_delay):
-                        break  # 停止或暂停中断等待
+                    mylog.info(LOGGER_NAME,
+                               f"第 {round_idx} 轮测试完成，等待{self.delay_between_rounds}秒后开始下一轮...")
+                    print(f"第 {round_idx} 轮测试完成，等待{self.delay_between_rounds}秒后开始下一轮...", flush=True)
+                    if not self._safe_wait(self.delay_between_rounds):
+                        break
 
         finally:
             # ========== 关闭 CAN 设备 ==========
