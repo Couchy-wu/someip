@@ -319,13 +319,6 @@ class CANFDGUI:
         )
         self.state_label.grid(row=0, column=3, sticky="ew", padx=10, pady=5)
         #root.grid_columnconfigure(0, weight=1)
-        # 实时刷新工况的线程
-        self._stop_state_thread = False          # 线程停止标识
-        self._state_thread = threading.Thread(
-            target=self._state_updater_loop, daemon=True
-        )
-        self._state_thread.start()
-
 
         # 输入框：用例重复测试次数
         tk.Label(root, text="用例重复测试次数:", font=("微软雅黑", 10)).grid(row=3, column=0, sticky='w', padx=12, pady=5)
@@ -924,6 +917,16 @@ class CANFDGUI:
                 case_repeat_count=repeat_count,
                 total_test_rounds=rounds_count
             )
+
+            # 注册状态回调，使 GUI 实时显示当前工况
+            self.parser.set_state_callback(
+                lambda s: self.root.after(
+                    0,
+                    lambda txt=s: self.state_label.config(text=f"当前工况: {txt}")
+                )
+            )
+
+            # 直接在当前线程（后台线程）运行解析器
             self.parser.run()
             success = True  # 标记成功
 
@@ -1009,22 +1012,6 @@ class CANFDGUI:
         except ValueError:
             return False
 
-    def _state_updater_loop(self):
-        """
-        在后台循环读取 LogParser 的当前工况并通过 ``after`` 更新 UI。
-        每 20 ms执行一次, 期间会检测 ``self._stop_state_thread`` 
-        """
-        while not getattr(self, "_stop_state_thread", False):
-            try:
-                # 若 parser 已创建则获取实时状态，否则保持 “等待”
-                state = self.parser.get_current_state() if hasattr(self, "parser") and self.parser else "等待"
-                # 使用 ``after`` 把 UI 更新放到主线程
-                self.root.after(0, lambda s=state: self.state_label.config(text=f"当前工况: {s}"))
-            except Exception as e:
-                # 防止线程因异常退出，记录但继续循环
-                print(f"[WARN] 状态刷新线程异常: {e}")
-            time.sleep(0.02)                     # 20 ms 间隔
-
     def _update_repeat_entry_state(self):
         """根据按钮状态决定是否允许编辑重复次数和完整轮数输入框"""
         init_btn_disabled = self.init_btn['state'] == tk.DISABLED
@@ -1105,10 +1092,10 @@ class CANFDGUI:
         self._after_id  = None
         self._after_id2 = None
 
-        # 终止实时工况刷新线程
-        self._stop_state_thread = True               # 标记线程退出
-        if hasattr(self, "_state_thread") and self._state_thread.is_alive():
-            self._state_thread.join(timeout=1.0)     # 最多等待 1 s        
+        # 终止实时工况刷新
+        if hasattr(self, "parser") and self.parser:
+            # 移除回调，防止在窗口销毁后仍尝试更新 UI
+            self.parser.set_state_callback(None)  
 
         # 等待摄像头子线程自行结束（最多 1 秒）
         if hasattr(self, "_camera_thread") and self._camera_thread.is_alive():

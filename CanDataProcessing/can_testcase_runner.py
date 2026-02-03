@@ -156,7 +156,7 @@ class LogParser:
                     case_id = case['id']
                     # 进入“未启用”前先设状态
                     if not self.has_script_result(case['content']):
-                        self.current_state = "等待"
+                        self._set_state("等待")
                         mylog.info(LOGGER_NAME, "不存在脚本解析结果，跳过该用例")
                         print("不存在脚本解析结果，跳过该用例", flush=True)
                         continue
@@ -207,7 +207,7 @@ class LogParser:
 
                     # 用例间延迟
                     if self.test_cases:
-                        self.current_state = "等待"
+                        self._set_state("等待")
                         mylog.info(LOGGER_NAME,
                                    f"用例 {case_id} 已完成，等待{self.delay_between_cases}秒后开始下一个用例...")
                         print(f"用例 {case_id} 已完成，等待{self.delay_between_cases}秒后开始下一个用例...", flush=True)
@@ -216,7 +216,7 @@ class LogParser:
 
                 # 本轮完成，若非最后一轮则等待
                 if round_idx < self.total_test_rounds:
-                    self.current_state = "等待"
+                    self._set_state("等待")
                     mylog.info(LOGGER_NAME,
                                f"第 {round_idx} 轮测试完成，等待{self.delay_between_rounds}秒后开始下一轮...")
                     print(f"第 {round_idx} 轮测试完成，等待{self.delay_between_rounds}秒后开始下一轮...", flush=True)
@@ -268,21 +268,21 @@ class LogParser:
         self._analyze_response(content)
 
     def _analyze_state(self, content):
-        self.current_state = "执行状态"
+        self._set_state("执行状态")
         mylog.debug(LOGGER_NAME, "执行“状态”")
         block = self._extract_block(content, "状态")
         if block:
             self._process_block_lines(block)
 
     def _analyze_action(self, content):
-        self.current_state = "执行动作"
+        self._set_state("执行动作")
         mylog.debug(LOGGER_NAME, "执行“动作”")
         block = self._extract_block(content, "动作")
         if block:
             self._process_block_lines(block)
 
     def _analyze_response(self, content):
-        self.current_state = "执行响应"
+        self._set_state("执行响应")
         mylog.debug(LOGGER_NAME, "执行“响应”")
         block = self._extract_block(content, "响应")
         if block:
@@ -743,6 +743,30 @@ class LogParser:
         self._pause_event.set()  # 恢复运行
         mylog.info(LOGGER_NAME, "测试流程已恢复。")
         print("测试已恢复。")
+
+    # 为外部（GUI）提供状态变化回调
+    def set_state_callback(self, callback):
+        """
+        注册一个回调函数，当 ``current_state`` 发生改变时自动调用。
+        callback 必须接受一个 ``str`` 参数（新的状态）。
+        """
+        self._state_callback = callback
+
+    # 统一的状态更新入口，负责保存状态并触发回调
+    def _set_state(self, new_state):
+        """
+        统一修改 ``self.current_state`` 并在有回调时通知 UI。
+        """
+        self.current_state = new_state
+        # 若 GUI 已注册回调则立即调用（在同一线程里）
+        if hasattr(self, "_state_callback") and self._state_callback:
+            try:
+                self._state_callback(new_state)
+            except Exception as e:
+                # 回调异常不应影响主流程，记录即可
+                mylog.error(LOGGER_NAME,
+                            f"状态回调异常: {e}")
+
 
 
 # ==================== 使用示例 ====================
