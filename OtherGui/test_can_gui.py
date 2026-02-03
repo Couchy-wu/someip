@@ -681,11 +681,20 @@ class CANFDGUI:
             return self._apply_perspective_auto(frame_rgb)
 
         elif option == "变换B":
-            # 灰度化：保持 3 通道，便于后续 resize / PhotoImage
-            img = Image.fromarray(cv2.cvtColor(frame_rgb, cv2.COLOR_BGR2RGB))  # BGR→RGB
-            gray = img.convert("L")                     # 单通道灰度
-            gray_rgb = Image.merge("RGB", (gray, gray, gray))
-            return gray_rgb
+            # 根据当前工况决定是否进行灰度化
+            # 若 parser 存在且当前状态为 “执行响应”，则返回灰度图；
+            # 否则直接返回原始图像
+            if (hasattr(self, "parser") and self.parser
+                    and self.parser.get_current_state() == "执行响应"):
+                # ---------- 灰度化（保持 3 通道） ----------
+                # 直接把 RGB ndarray 转为 Pillow Image，再转为灰度
+                img = Image.fromarray(frame_rgb)
+                gray = img.convert("L")                              # 单通道灰度
+                gray_rgb = Image.merge("RGB", (gray, gray, gray))    # 复原 3 通道
+                return gray_rgb
+            else:
+                # ---------- 其它工况：保持原始 RGB 图像 ----------
+                return Image.fromarray(frame_rgb)
 
         elif option == "变换C":                         # 先透视校正 → 再图像增强
             # 1️⃣ 透视校正（使用已有的自动函数），得到 Pillow Image (RGB)
