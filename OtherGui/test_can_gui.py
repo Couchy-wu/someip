@@ -146,7 +146,7 @@ class CANFDGUI:
         self.exposure_cb = ttk.Combobox(
             root,
             textvariable=self.exposure_var,
-            values=[2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11, -12],
+            values=[0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11, -12],
             state="readonly",
             width=6,
             font=("微软雅黑", 10)
@@ -358,7 +358,13 @@ class CANFDGUI:
         """
         try:
             # 创建并启动可自行停止的摄像头实例
-            self._camera_viewer = CameraViewer(display_callback=self._camera_frame_callback)
+            self._camera_viewer = CameraViewer(
+                display_callback=self._camera_frame_callback,
+                is_standalone=False,
+                exposure=-4,  # 可调整
+                enable_timestamp=False
+                )
+
             self._camera_viewer.start()          # 在后台 daemon 线程里运行
             while not getattr(self, "_stop_camera_thread", False):
                 time.sleep(0.1)
