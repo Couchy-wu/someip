@@ -142,7 +142,7 @@ class CANFDGUI:
         self.exposure_var = tk.IntVar(value=-4)                     # 默认值
         # 下拉框，选项为 0、-1 … -10
         ttk.Label(root, text="曝光值:", font=("微软雅黑", 10)).grid(
-            row=0, column=3, sticky='w', padx=5, pady=5)
+            row=1, column=3, sticky='w', padx=5, pady=5)
         self.exposure_cb = ttk.Combobox(
             root,
             textvariable=self.exposure_var,
@@ -151,7 +151,7 @@ class CANFDGUI:
             width=6,
             font=("微软雅黑", 10)
         )
-        self.exposure_cb.grid(row=0, column=4, sticky='w', padx=5, pady=5)
+        self.exposure_cb.grid(row=1, column=4, sticky='w', padx=5, pady=5)
         # 绑定选择事件，实时更新摄像头曝光
         self.exposure_cb.bind("<<ComboboxSelected>>", self._on_exposure_change)
 
@@ -306,6 +306,25 @@ class CANFDGUI:
             command=self.stop_testing
         )
         self.stop_btn.grid(row=0, column=2, pady=5, padx=10, sticky='ew')
+
+
+        # 工况显示区域
+        self.state_label = tk.Label(
+            root,
+            text="当前工况: 等待",               # 初始显示
+            font=("微软雅黑", 12),
+            bg="#222222",
+            fg="#00FF00",
+            anchor="w"
+        )
+        self.state_label.grid(row=0, column=3, sticky="ew", padx=10, pady=5)
+        #root.grid_columnconfigure(0, weight=1)
+        # 实时刷新工况的线程
+        self._stop_state_thread = False          # 线程停止标识
+        self._state_thread = threading.Thread(
+            target=self._state_updater_loop, daemon=True
+        )
+        self._state_thread.start()
 
 
         # 输入框：用例重复测试次数
@@ -990,6 +1009,22 @@ class CANFDGUI:
         except ValueError:
             return False
 
+    def _state_updater_loop(self):
+        """
+        在后台循环读取 LogParser 的当前工况并通过 ``after`` 更新 UI。
+        每 20 ms执行一次, 期间会检测 ``self._stop_state_thread`` 
+        """
+        while not getattr(self, "_stop_state_thread", False):
+            try:
+                # 若 parser 已创建则获取实时状态，否则保持 “等待”
+                state = self.parser.get_current_state() if hasattr(self, "parser") and self.parser else "等待"
+                # 使用 ``after`` 把 UI 更新放到主线程
+                self.root.after(0, lambda s=state: self.state_label.config(text=f"当前工况: {s}"))
+            except Exception as e:
+                # 防止线程因异常退出，记录但继续循环
+                print(f"[WARN] 状态刷新线程异常: {e}")
+            time.sleep(0.02)                     # 20 ms 间隔
+
     def _update_repeat_entry_state(self):
         """根据按钮状态决定是否允许编辑重复次数和完整轮数输入框"""
         init_btn_disabled = self.init_btn['state'] == tk.DISABLED
@@ -1030,12 +1065,13 @@ class CANFDGUI:
         安全关闭主窗口的统一入口。
 
         主要职责：
-        1️⃣ 防止在 CAN 设备仍未关闭的情况下退出程序；
-        2️⃣ 正常结束摄像头采集线程，防止 after 回调在窗口销毁后继续执行；
-        3️⃣ 取消所有已安排的 `after` 回调（包括原来的 video_label 和 video_label2）
-        4️⃣ 最终销毁根窗口。
+        1 防止在 CAN 设备仍未关闭的情况下退出程序；
+        2 正常结束摄像头采集线程，防止 after 回调在窗口销毁后继续执行；
+        3 取消所有已安排的 `after` 回调（包括原来的 video_label 和 video_label2）
+        4 终止实时工况刷新线程
+        5 最终销毁根窗口。
         """
-        # 1.检查 CAN 设备是否已经关闭
+        # 检查 CAN 设备是否已经关闭
         if self.close_btn.winfo_exists() and str(self.close_btn['state']) == 'normal':
             import tkinter.messagebox as messagebox
             messagebox.showwarning(
@@ -1048,7 +1084,7 @@ class CANFDGUI:
             self.root.after(0, lambda: self.root.attributes("-topmost", False))
             return
 
-        # 2.让摄像头线程自行退出，标记回调函数不再处理新帧
+        # 让摄像头线程自行退出，标记回调函数不再处理新帧
         self._stop_camera_thread = True
         # 若已经创建了 CameraViewer 实例，调用它的 stop()
         if hasattr(self, "_camera_viewer") and self._camera_viewer is not None:
@@ -1057,7 +1093,7 @@ class CANFDGUI:
             except Exception as e:
                 print(f"[WARN] 停止 CameraViewer 时异常: {e}")
 
-        # 3.取消可能已经排好的 after 回调
+        # 取消可能已经排好的 after 回调
         for aid in (getattr(self, "_after_id", None),
                     getattr(self, "_after_id2", None)):
             if aid:
@@ -1069,11 +1105,16 @@ class CANFDGUI:
         self._after_id  = None
         self._after_id2 = None
 
-        # 4.等待摄像头子线程自行结束（最多 1 秒）
+        # 终止实时工况刷新线程
+        self._stop_state_thread = True               # 标记线程退出
+        if hasattr(self, "_state_thread") and self._state_thread.is_alive():
+            self._state_thread.join(timeout=1.0)     # 最多等待 1 s        
+
+        # 等待摄像头子线程自行结束（最多 1 秒）
         if hasattr(self, "_camera_thread") and self._camera_thread.is_alive():
             self._camera_thread.join(timeout=1.0)
 
-        # 5.最后销毁窗口
+        # 最后销毁窗口
         self.root.destroy()
 
 
