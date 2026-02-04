@@ -205,13 +205,15 @@ class CameraViewer:
         if self.cap.isOpened():
             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 4)
 
+        # 调试用帧率开关
+        DEBUG_FPS = False
         fps_counter = 0
         fps_timer = time.time()
 
         try:
             while not self._stop_event.is_set():
                 loop_start = time.time()
-
+                # 读取帧
                 if self.cap.isOpened():
                     ret, frame = self.cap.read()
                     if not ret or frame is None:
@@ -220,22 +222,23 @@ class CameraViewer:
                     frame = np.zeros((self.capture_h, self.capture_w, 3), dtype=np.uint8)
 
                 frame = cv2.flip(frame, 1)  # 镜像
-
                 ts = time.time()
-                timed_frame = TimedFrame(img=frame, timestamp=ts, cam_index=self.cam_index)
 
-                if self.enable_timestamp:
+                # 是否在画面上绘制时间戳
+                if self.draw_timestamp:
                     draw_timestamp_on_frame(frame, ts)
-
+                #  生成 TimedFrame（供回调使用）
+                timed_frame = TimedFrame(img=frame, timestamp=ts, cam_index=self.cam_index)
+                # 摄像头未找到的文字提示
                 if self.cam_index is None:
                     draw_centered_text(frame, "Camera Not Found", color=(0, 0, 255), scale=2, thickness=6)
-
+                # 调整显示尺寸
                 display_frame = resize_with_aspect_ratio(
                     frame,
                     self.OUTPUT_WIDTH if self.display_callback else self.DISPLAY_WINDOW_WIDTH,
                     self.OUTPUT_HEIGHT if self.display_callback else self.DISPLAY_WINDOW_HEIGHT,
                 )
-
+                # 交给回调或直接显示
                 if self.display_callback is None:
                     cv2.imshow(win_name, display_frame)
                     key = cv2.waitKey(self.FRAME_DELAY_MS) & 0xFF
@@ -253,13 +256,14 @@ class CameraViewer:
                     except Exception as e:
                         print(f"[ERROR] display_callback error: {e}")
                         traceback.print_exc()
-
-                fps_counter += 1
-                if time.time() - fps_timer >= 1.0:
-                    # print(f"[INFO] FPS: {fps_counter}")   # 真实的帧数！
-                    fps_counter = 0
-                    fps_timer = time.time()
-
+                # FPS 统计
+                if DEBUG_FPS:
+                    fps_counter += 1
+                    if time.time() - fps_timer >= 1.0:
+                        print(f"[INFO] FPS: {fps_counter}")   # 真实的帧数！
+                        fps_counter = 0
+                        fps_timer = time.time()
+                # 控制帧率
                 elapsed = time.time() - loop_start
                 sleep_time = max(0.0, (1.0 / self.TARGET_FPS) - elapsed)
                 time.sleep(sleep_time)
@@ -309,11 +313,16 @@ def main(display_callback=None):
         display_callback=display_callback,
         is_standalone=True,
         exposure=-4,  # 可调整
-        enable_timestamp=False
+        draw_timestamp=True,
+        enable_timestamp=True
     )
     viewer.run()
 
 # 备注：如果曝光时间较高，受限于物理因素，摄像头帧速会达不到30fps
+# 备注2：目前设置30帧是ok的，设置60帧的时候只能输出45帧左右，可能是图像变换的计算量的限制。
+# 备注3：draw_timestamp 改动的是图像本身，建议仅调试时开启
+# 备注4：enable_timestamp 只控制数值的传递，决定是否把 timestamp（浮点数）作为参数传递给 display_callback ，
+#        以及是否在 TimedFrame 对象里保存该时间戳。不影响 frame 本身是否被绘制文字
 
 if __name__ == "__main__":
     main()

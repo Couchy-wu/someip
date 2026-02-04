@@ -362,7 +362,8 @@ class CANFDGUI:
                 display_callback=self._camera_frame_callback,
                 is_standalone=False,
                 exposure=-4,  # 可调整
-                enable_timestamp=False
+                draw_timestamp = False,
+                enable_timestamp = True
                 )
 
             self._camera_viewer.start()          # 在后台 daemon 线程里运行
