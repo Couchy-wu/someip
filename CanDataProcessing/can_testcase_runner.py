@@ -52,10 +52,11 @@ class LogParser:
         self.current_state = "等待"      # 可取值：执行状态 / 执行动作 / 执行响应 / 等待        
 
         #  统一的延迟参数
-        self.delay_between_repeats = 3          # 每次重复检测结束后的等待（秒）
-        self.delay_between_cases   = 3          # 用例间的等待（秒）
-        self.delay_between_rounds = 2          # 轮次之间的等待（秒）
-        self.delay_after_disable  = 0.2        # 禁用 index 后的短暂等待（秒）        
+        self.delay_between_repeats = 1          # 每次重复检测结束后的等待（秒）
+        self.delay_between_cases   = 1          # 用例间的等待（秒）
+        self.delay_between_rounds = 1          # 轮次之间的等待（秒）
+        self.delay_after_disable  = 0.2        # 禁用 index 后的短暂等待（秒）  
+        # 备注：响应模块触发完成后有2秒的延迟，该阶段视为“执行等待”      
 
         mylog.setup_logger(
             logger_name=LOGGER_NAME,
@@ -274,7 +275,7 @@ class LogParser:
         if block:
             self._process_block_lines(block)
 
-    def _analyze_action(self, content):
+    def _analyze_action(self, content): 
         self._set_state("执行动作")
         mylog.debug(LOGGER_NAME, "执行“动作”")
         block = self._extract_block(content, "动作")
@@ -287,6 +288,9 @@ class LogParser:
         block = self._extract_block(content, "响应")
         if block:
             self._process_block_lines(block)
+        # 响应模块全部解析并触发完成后，延迟 2 秒（视为“触发响应中”）
+        # print(LOGGER_NAME, "响应处理完成，进入 2 秒延时（触发响应中）")
+        self._safe_wait(2)
 
     def _extract_block(self, content, block_name):
         """提取指定块内容"""
