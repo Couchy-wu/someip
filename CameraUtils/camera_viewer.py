@@ -14,6 +14,7 @@ import platform
 from dataclasses import dataclass
 import datetime
 import inspect
+import random
 
 # ----------------------------------------------------------------------
 # 数据结构
@@ -117,7 +118,6 @@ def take_screenshot(frame, save_path="Resources/Picture"):
     else:
         print(f"[WARN] 截图保存失败: {filepath}")
 
-# ★ MOD: 直接设置曝光，不验证、不等待、不打印中间过程
 def set_exposure(cap, exposure_val, verbose=True):
     """
     直接尝试设置曝光值，不进行任何验证或反馈。
@@ -145,7 +145,10 @@ class CameraViewer:
                  screenshot_path="Resources/Picture",
                  exposure=-4,               # 曝光值
                  draw_timestamp=False,      # 绘制时间戳文字
-                 enable_timestamp=True):    # 启用时间戳功能
+                 enable_timestamp=True,     # 启用时间戳功能
+                 simulate_error=False,      # 是否开启异常帧模拟
+                 error_probability=0.01     # 异常帧出现概率               
+                ):   
         self.display_callback = display_callback
         self.is_standalone = is_standalone
         self.screenshot_path = screenshot_path
@@ -159,6 +162,9 @@ class CameraViewer:
             params = list(sig.parameters.values())
             if len(params) >= 2:
                 self._callback_wants_timestamp = True
+
+        self.simulate_error = simulate_error          # 是否启用异常帧
+        self.error_probability = error_probability    # 触发概率 (0~1)        
 
         self.CAMERA_INDICES = (0, 1)
         self.CAPTURE_TARGET_WIDTH = 1280
@@ -221,6 +227,11 @@ class CameraViewer:
                 else:
                     frame = np.zeros((self.capture_h, self.capture_w, 3), dtype=np.uint8)
 
+                # 模拟摄像头异常——随机把帧替换成全白图像
+                if self.simulate_error and random.random() < self.error_probability:
+                    frame = np.full_like(frame, 255, dtype=np.uint8)
+
+                # 镜像翻转
                 frame = cv2.flip(frame, 1)  # 镜像
                 ts = time.time()
 
@@ -314,7 +325,9 @@ def main(display_callback=None):
         is_standalone=True,
         exposure=-4,  # 可调整
         draw_timestamp=True,
-        enable_timestamp=True
+        enable_timestamp=True,
+        simulate_error=True,      # 是否开启异常帧模拟
+        error_probability=0.01     # 异常帧出现概率 
     )
     viewer.run()
 
