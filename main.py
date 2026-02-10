@@ -13,19 +13,40 @@ import GuiFunction.image_player  # 导入 image_player 模块
 import GuiFunction.matrix_to_csv
 import GuiFunction.binhex_gui
 from OtherGui.test_can_gui import CANFDGUI
+import queue
 
-# 重定向输出类
 class TextRedirector:
-    def __init__(self, widget):
-        self.widget = widget
-
-    def write(self, string):
-        self.widget.insert(tk.END, string)
-        self.widget.see(tk.END)  # 自动滚动到底部
-        self.widget.update_idletasks()  # 强制刷新
-
+    """
+    将任何线程的 print 输出安全地转发到 Tkinter Text 小部件。
+    通过内部 queue + root.after 实现在主线程中写入，避免跨线程直接操作 UI。
+    """
+    def __init__(self, widget, root, poll_interval: int = 50):
+        self.widget = widget          # tk.Text 实例
+        self.root   = root            # 主窗口 (tk.Tk)
+        self._queue = queue.Queue()   # 线程安全的 FIFO
+        self._poll_interval = poll_interval
+        self._start_poll()            # 启动轮询任务
+    def write(self, string: str):
+        """所有线程都会调用此方法，只负责把字符串放入队列。"""
+        if string:                     # 过滤空字符串
+            self._queue.put(string)
     def flush(self):
-        pass  # 兼容性方法，标准输出需要
+        """保持文件对象接口兼容，实际不需要实现。"""
+        pass
+    # 私有：在主线程周期性取出队列内容并写入 Text
+    def _start_poll(self):
+        """使用 root.after 循环轮询队列并写入 Text。"""
+        self._flush_queue()
+        self.root.after(self._poll_interval, self._start_poll)
+    def _flush_queue(self):
+        """一次性写出队列中所有待打印的字符串。"""
+        try:
+            while True:                       # 直至队列为空抛异常
+                line = self._queue.get_nowait()
+                self.widget.insert(tk.END, line)
+                self.widget.see(tk.END)      # 自动滚动到底部
+        except queue.Empty:
+            pass
 
 
 # 创建主窗口
@@ -102,7 +123,9 @@ log_text.config(yscrollcommand=scrollbar.set)
 
 # 重定向 stdout 到文本框
 import sys
-sys.stdout = TextRedirector(log_text)
+sys.stdout = TextRedirector(log_text, root)
+# 如需同时捕获 stderr 也可以这样做（可选）：
+# sys.stderr = TextRedirector(log_text, root)
 
 # ====== 实时更新时间函数 ======
 def update_time():
