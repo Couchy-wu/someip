@@ -14,6 +14,9 @@ from CameraUtils.camera_viewer import CameraViewer, rotate_image_180, set_exposu
 import cv2
 from CameraUtils.perspective_calibrator import PerspectiveCalibrator
 import tempfile, glob
+import numpy as np
+from CameraUtils.error_image_detection import is_error_image
+import datetime
 
 # 判断是否被 import 调用
 IS_STANDALONE = __name__ == "__main__"
@@ -362,8 +365,10 @@ class CANFDGUI:
                 display_callback=self._camera_frame_callback,
                 is_standalone=False,
                 exposure=-4,  # 可调整
-                draw_timestamp = False,
-                enable_timestamp = True
+                draw_timestamp = True,
+                enable_timestamp = True,
+                simulate_error=True,      # 是否开启异常帧模拟
+                error_probability=0.01     # 异常帧出现概率                 
                 )
 
             self._camera_viewer.start()          # 在后台 daemon 线程里运行
@@ -377,7 +382,7 @@ class CANFDGUI:
     def toggle_rotate(self):
         self.rotate_flag = not self.rotate_flag
 
-    def _camera_frame_callback(self, frame_rgb):
+    def _camera_frame_callback(self, frame_rgb, timestamp=None):
         """
         camera_viewer 通过此回调把每帧 RGB 的 numpy 数组送进来。
         1️⃣ 首先根据 “是否开启图像测试” 与 “图像旋转，镜面翻转” 等标记，生成 **第一块**画面；
@@ -389,6 +394,7 @@ class CANFDGUI:
             return
         # 先把原始（未做任何处理的）帧保存下来，以便后续 “透视变换校正” 使用
         self.latest_frame = frame_rgb.copy()   # 保留最新的原始帧
+
         try:
             # 1) 显示摄像头画面（并可选 180° 旋转）
             if self.image_test_var.get() == 1:
@@ -408,7 +414,7 @@ class CANFDGUI:
             # 2) 变换后的画面
             if (self.transform_enable_var.get() == 1 and self.image_test_var.get() == 1 and img_arr is not None):
                 # 这里调用占位的变换函数；实际项目中换成真正的算法
-                img2 = self._apply_transform(img_arr)
+                img2 = self._apply_transform(img_arr, timestamp) # 把时间戳一起传入
             else:
                 img2 = self._make_no_camera_image(text="Not activated transformation")
 
@@ -667,9 +673,20 @@ class CANFDGUI:
         else:
             pass
 
+    def _ts_to_fname(self, ts: float) -> str:
+        """
+        把 Unix epoch 秒（float）转为适合文件名的字符串：
+        "YYYYMMDD_HHMMSS_mmm.jpg"（毫秒精度）。
+
+        例子： 2023‑06‑05 17:29:51.975 → "20230605_172951_975.jpg"
+        """
+        # 这里直接使用已经在文件顶部 import 的 datetime
+        dt = datetime.datetime.fromtimestamp(ts)
+        # %f 给出微秒，取前 3 位即毫秒
+        return dt.strftime("%Y%m%d_%H%M%S_%f")[:-3]
 
     # --------------------- 图像变换相关功能 ---------------------
-    def _apply_transform(self, frame_rgb):
+    def _apply_transform(self, frame_rgb, timestamp=None):
         """
         根据下拉框当前选项返回不同的处理结果。
         - 变换A → 透视自动校正（原来的变换C）；
@@ -684,8 +701,18 @@ class CANFDGUI:
         option = self.transform_option_var.get()
 
         if option == "变换A":
-            # 直接返回 Pillow Image（已在内部完成 BGR→RGB）
-            return self._apply_perspective_auto(frame_rgb)
+            # 先得到透视校正结果
+            result_img = self._apply_perspective_auto(frame_rgb)         # 透视自动校正
+            # 在解析器存在且当前工况为 “执行响应” 时启动检查线程
+            if (hasattr(self, "parser") and self.parser
+                    and getattr(self.parser, "get_current_state", None) 
+                    and self.parser.get_current_state() == "执行响应"):
+                threading.Thread(
+                    target=self._check_and_save_error_image,
+                    args=(result_img, timestamp),
+                    daemon=True
+                ).start()
+            return result_img
 
         elif option == "变换B":
             # 根据当前工况决定是否进行灰度化
@@ -760,6 +787,34 @@ class CANFDGUI:
                 return Image.fromarray(frame_rgb)
         finally:
             self._cleanup_temp_files("tmp_cam_")  # 清理临时占位文件
+
+    # --------------------- 图像变换相关功能 ---------------------
+    def _check_and_save_error_image(self, pil_img, timestamp=None):
+        """
+        在单独线程中检查 ``pil_img``（Pillow Image）是否为异常图像，
+        若是则以统一的时间戳格式保存为 JPG。
+        """
+        ENABLE_ERROR_CHECK = True
+        if not ENABLE_ERROR_CHECK:
+            return
+        try:
+            img_np = np.array(pil_img)
+            if is_error_image(img_np):
+                project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+                save_dir = os.path.join(project_root, "error_image")
+                os.makedirs(save_dir, exist_ok=True)
+
+                if timestamp is None:
+                    timestamp = time.time()
+                    print("[INFO] 未传入时间戳则使用当前时间")
+                # 调用实例方法得到文件名（不含扩展名）
+                filename = f"{self._ts_to_fname(timestamp)}.jpg"
+                save_path = os.path.join(save_dir, filename)
+
+                pil_img.save(save_path, format="JPEG")
+                print(f"[INFO] 异常图像已保存 → {save_path}")
+        except Exception as e:
+            print(f"[WARN] 检查/保存异常图像时出错: {e}")
 
     # --------------------- CAN设备初始化 ---------------------
     def start_init(self):

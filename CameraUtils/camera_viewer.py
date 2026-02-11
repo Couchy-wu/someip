@@ -6,15 +6,18 @@
 import os
 import cv2
 import numpy as np
-import sys
-import traceback
-import threading
-import time
-import platform
+import sys, traceback, threading, time, platform, datetime, inspect, random
 from dataclasses import dataclass
-import datetime
-import inspect
-import random
+from PIL import Image
+
+# 帮助函数
+def _fmt_ts(ts: float) -> str:
+    """
+    把 Unix epoch 秒统一格式化为 “YYYY‑MM‑DD HH:MM:SS.mmm”
+    （毫秒精度），用于日志打印。
+    """
+    dt = datetime.datetime.fromtimestamp(ts)
+    return dt.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
 # ----------------------------------------------------------------------
 # 数据结构
@@ -211,7 +214,7 @@ class CameraViewer:
         if self.cap.isOpened():
             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 4)
 
-        # 调试用帧率开关
+        # 调试用帧率开关（fps统计开关）
         DEBUG_FPS = False
         fps_counter = 0
         fps_timer = time.time()
@@ -219,21 +222,27 @@ class CameraViewer:
         try:
             while not self._stop_event.is_set():
                 loop_start = time.time()
+
+                # 先获取时间戳，后面异常帧和绘制都会使用同一个 ts
+                ts = time.time()
+
                 # 读取帧
                 if self.cap.isOpened():
                     ret, frame = self.cap.read()
                     if not ret or frame is None:
+                        # 读取失败 → 用全黑帧代替
                         frame = np.zeros((self.capture_h, self.capture_w, 3), dtype=np.uint8)
                 else:
+                    # 摄像头未打开 → 同样使用黑帧
                     frame = np.zeros((self.capture_h, self.capture_w, 3), dtype=np.uint8)
 
                 # 模拟摄像头异常——随机把帧替换成全白图像
                 if self.simulate_error and random.random() < self.error_probability:
                     frame = np.full_like(frame, 255, dtype=np.uint8)
+                    print(f"[INFO] 生成了一帧异常图像，时间戳为 {_fmt_ts(ts)}")
 
                 # 镜像翻转
                 frame = cv2.flip(frame, 1)  # 镜像
-                ts = time.time()
 
                 # 是否在画面上绘制时间戳
                 if self.draw_timestamp:
