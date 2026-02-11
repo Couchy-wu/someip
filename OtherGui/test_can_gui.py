@@ -90,7 +90,7 @@ class CANFDGUI:
 
 
         # 图像测试勾选框状态
-        self.image_test_var = tk.IntVar(value=0)   # 默认开关项 0 – 关闭， 1 – 开启
+        self.image_test_var = tk.IntVar(value=1)   # 默认开关项 0 – 关闭， 1 – 开启
         # 勾选框，勾选即开启
         tk.Checkbutton(
             root,
@@ -500,12 +500,14 @@ class CANFDGUI:
             return
 
         # --------------------------------------------------------------
-        # 2️⃣ 根据当前选项生成对应的变换图像
-        # --------------------------------------------------------------
         try:
-            # self._apply_transform 会根据 self.transform_option_var 的值返回
-            # Pillow.Image（已完成所有必要的颜色空间转换）
-            transformed_img = self._apply_transform(self.latest_frame)
+            proc_frame = self.latest_frame.copy()          # 复制原始帧
+            if self.rotate_flag:                           # 根据旋转标记处理
+                proc_frame = rotate_image_180(proc_frame)
+            if self.mirror_enable_var.get() == 1:          # 根据镜面开关处理
+                proc_frame = proc_frame[:, ::-1, :]
+            # 3️⃣ 根据当前选项生成对应的变换图像
+            transformed_img = self._apply_transform(proc_frame)  # 使用处理后的帧
             if transformed_img is None:
                 raise RuntimeError("变换函数返回了 None")
         except Exception as e:

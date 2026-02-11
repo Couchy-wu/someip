@@ -239,7 +239,7 @@ class CameraViewer:
                 # 模拟摄像头异常——随机把帧替换成全白图像
                 if self.simulate_error and random.random() < self.error_probability:
                     frame = np.full_like(frame, 255, dtype=np.uint8)
-                    print(f"[INFO] 生成了一帧异常图像，时间戳为 {_fmt_ts(ts)}")
+                    # print(f"[INFO] 生成了一帧异常图像 {_fmt_ts(ts)}")
 
                 # 镜像翻转
                 frame = cv2.flip(frame, 1)  # 镜像
