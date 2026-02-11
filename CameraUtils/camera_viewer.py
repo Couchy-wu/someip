@@ -142,6 +142,13 @@ def set_exposure(cap, exposure_val, verbose=True):
 # 3️⃣ 摄像头封装（线程化）
 # ----------------------------------------------------------------------
 class CameraViewer:
+    """
+    exposure=-4,               # 曝光值
+    draw_timestamp=False,      # 绘制时间戳文字
+    enable_timestamp=True,     # 启用时间戳功能
+    simulate_error=False,      # 是否开启异常帧模拟
+    error_probability=0.01     # 异常帧出现概率     
+    """
     def __init__(self,
                  display_callback=None,     # 回调函数 ，用于在捕获到每一帧图像后，把图像数据传递给外部处理函数
                  is_standalone=False,       # 是否是独立程序

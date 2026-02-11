@@ -364,10 +364,10 @@ class CANFDGUI:
             self._camera_viewer = CameraViewer(
                 display_callback=self._camera_frame_callback,
                 is_standalone=False,
-                exposure=-4,  # 可调整
-                draw_timestamp = True,
-                enable_timestamp = True,
-                simulate_error=True,      # 是否开启异常帧模拟
+                exposure=-4,               # 曝光值
+                draw_timestamp = False,    # 绘制时间戳文字
+                enable_timestamp = True,   # 启用时间戳功能
+                simulate_error=False,      # 是否开启异常帧模拟
                 error_probability=0.01     # 异常帧出现概率                 
                 )
 
