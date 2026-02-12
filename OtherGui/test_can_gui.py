@@ -368,7 +368,8 @@ class CANFDGUI:
                 draw_timestamp = False,    # 绘制时间戳文字
                 enable_timestamp = True,   # 启用时间戳功能
                 simulate_error=False,      # 是否开启异常帧模拟
-                error_probability=0.01     # 异常帧出现概率                 
+                error_probability=0.01,    # 异常帧出现概率    
+                target_fps=30              # 摄像头目标帧率             
                 )
 
             self._camera_viewer.start()          # 在后台 daemon 线程里运行
