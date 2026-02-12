@@ -147,9 +147,7 @@ class CameraViewer:
     draw_timestamp=False,      # 绘制时间戳文字
     enable_timestamp=True,     # 启用时间戳功能
     simulate_error=False,      # 是否开启异常帧模拟
-    error_probability=0.01     # 异常帧出现概率
-    target_fps=30              # 摄像头目标帧率     
-
+    error_probability=0.01     # 异常帧出现概率     
     """
     def __init__(self,
                  display_callback=None,     # 回调函数 ，用于在捕获到每一帧图像后，把图像数据传递给外部处理函数
@@ -159,8 +157,7 @@ class CameraViewer:
                  draw_timestamp=False,      # 绘制时间戳文字
                  enable_timestamp=True,     # 启用时间戳功能
                  simulate_error=False,      # 是否开启异常帧模拟
-                 error_probability=0.01,    # 异常帧出现概率   
-                 target_fps=30              # 摄像头目标帧率           
+                 error_probability=0.01     # 异常帧出现概率               
                 ):   
         self.display_callback = display_callback
         self.is_standalone = is_standalone
@@ -186,7 +183,7 @@ class CameraViewer:
         self.DISPLAY_WINDOW_HEIGHT = 360
         self.OUTPUT_WIDTH = 640
         self.OUTPUT_HEIGHT = 360
-        self.TARGET_FPS = target_fps
+        self.TARGET_FPS = 30
         self.FRAME_DELAY_MS = 1
 
         self._stop_event = threading.Event()
@@ -342,12 +339,11 @@ def main(display_callback=None):
     viewer = CameraViewer(
         display_callback=display_callback,
         is_standalone=True,
-        exposure=-9,  # 可调整
+        exposure=-4,  # 可调整
         draw_timestamp=True,
         enable_timestamp=True,
-        simulate_error=False,      # 是否开启异常帧模拟
-        error_probability=0.01,     # 异常帧出现概率 
-        target_fps=30
+        simulate_error=True,      # 是否开启异常帧模拟
+        error_probability=0.01     # 异常帧出现概率 
     )
     viewer.run()
 

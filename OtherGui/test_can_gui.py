@@ -39,13 +39,10 @@ class CANFDGUI:
         # ---------- 线程控制 ----------
         self._stop_camera_thread = False          # 用来在关闭窗口时让摄像头回调提前退出
         self._after_id = None                     # 用来保存 after 的 id
-        self._after_id2 = None                    # 第二块视频的 after id
-        self._camera_thread = None                # 先设为 None，稍后再启动
-        self._camera_viewer = None                # 同上
-        
-        # ---------- 保存最近一帧原始图像 ----------
-        self.latest_frame = None                  # 用于透视校正时取帧
-        
+
+        # ---------- 、保存最近一帧原始图像 ----------
+        self.latest_frame = None                  # 、用于透视校正时取帧
+
         # 一些变量
         self.repeat_var = tk.StringVar(value="1")   # 用例重复检测次数
         self.rounds_var = tk.StringVar(value="1")   # 完整测试执行轮数
@@ -71,7 +68,13 @@ class CANFDGUI:
         self._no_cam_placeholder = ImageTk.PhotoImage(no_cam_img)
         self.video_label.configure(image=self._no_cam_placeholder)
         self.video_label.image = self._no_cam_placeholder   # 防止被 GC
-        
+
+        # 启动摄像头采集线程（始终运行，内部回调自行判断是否显示）
+        self._camera_thread = threading.Thread(
+            target=self._run_camera_viewer, daemon=True
+        )
+        self._camera_thread.start()
+
         # ---------- 第二块视频显示：变换相关 ----------
         self.transform_enable_var = tk.IntVar(value=0)          # 勾选框：是否开启变换
         self.transform_option_var = tk.StringVar(value="变换A") # 下拉框当前选项
@@ -154,24 +157,6 @@ class CANFDGUI:
         self.exposure_cb.grid(row=1, column=4, sticky='w', padx=5, pady=5)
         # 绑定选择事件，实时更新摄像头曝光
         self.exposure_cb.bind("<<ComboboxSelected>>", self._on_exposure_change)
-
-        #  帧率下拉菜单
-        self.fps_var = tk.IntVar(value=30)  # 默认值30
-        ttk.Label(root, text="帧率:", font=("微软雅黑", 10)).grid(
-            row=2, column=3, sticky='w', padx=5, pady=5)
-        self.fps_cb = ttk.Combobox(
-            root,
-            textvariable=self.fps_var,
-            values=[10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,
-                    26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,45,50,55,60],
-            state="readonly",
-            width=10,
-            font=("微软雅黑", 10)
-        )
-        self.fps_cb.grid(row=2, column=4, sticky='w', padx=5, pady=5)
-        self.fps_cb.bind("<<ComboboxSelected>>", self._on_fps_change)
-
-
 
         # ---------- 变换控制 ----------
         # 勾选框：是否启用变换
@@ -363,14 +348,7 @@ class CANFDGUI:
         self.rounds_entry.grid(row=4, column=1, sticky='w', padx=10, pady=5)
         # 为新输入框绑定验证功能（只允许大于0的整数）
         self.rounds_entry.configure(validate='key', validatecommand=(root.register(self._validate_positive_integer), '%P'))
-        
-        # 所有 UI 创建完成后，启动摄像头线程
-        # 这样可以确保 exposure_var 等变量已经完全初始化
-        self._camera_thread = threading.Thread(
-            target=self._run_camera_viewer, daemon=True
-        )
-        self._camera_thread.start()
-        
+
         # 拦截窗口关闭事件：必须先关闭设备
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
@@ -386,43 +364,19 @@ class CANFDGUI:
             self._camera_viewer = CameraViewer(
                 display_callback=self._camera_frame_callback,
                 is_standalone=False,
-                exposure=self.exposure_var.get(),               # 从下拉菜单UI中读取当前曝光值
+                exposure=-4,               # 曝光值
                 draw_timestamp = False,    # 绘制时间戳文字
                 enable_timestamp = True,   # 启用时间戳功能
                 simulate_error=False,      # 是否开启异常帧模拟
-                error_probability=0.01,    # 异常帧出现概率
-                target_fps=self.fps_var.get()                 # 从下拉菜单UI中读取当前摄像头采集帧速
+                error_probability=0.01     # 异常帧出现概率                 
                 )
+
             self._camera_viewer.start()          # 在后台 daemon 线程里运行
             while not getattr(self, "_stop_camera_thread", False):
                 time.sleep(0.1)
         except Exception as e:
             # 若摄像头初始化失败，保持黑屏并打印错误
             print(f"[WARN] CameraViewer 运行异常: {e}")
-
-    # 帧率变化回调函数
-    def _on_fps_change(self, event=None):
-        """
-        当用户在帧率下拉框中选择新值时调用。
-        现在支持动态修改摄像头帧率，无需重启。
-        """
-        try:
-            new_fps = int(self.fps_var.get())
-        except Exception:
-            new_fps = 30
-            self.fps_var.set(new_fps)
-
-        # 如果摄像头正在运行，调用新的 set_fps 方法动态更新
-        if hasattr(self, "_camera_viewer") and self._camera_viewer is not None:
-            if hasattr(self._camera_viewer, "set_fps"):  # 检查新方法是否存在
-                self._camera_viewer.set_fps(new_fps)   # 调用线程安全的帧率设置方法
-                print(f"[INFO] 已动态更新摄像头帧率至 {new_fps}")
-            else:
-                # 兼容旧版本（直接修改属性）
-                self._camera_viewer.target_fps = new_fps
-                print(f"[INFO] 已尝试动态更新摄像头帧率至 {new_fps}（旧方式）")
-        else:
-            print(f"[INFO] 帧率已设置为: {new_fps}（将在下次启动时生效）")
 
     # 切换是否在显示前旋转图像的标记。
     def toggle_rotate(self):
