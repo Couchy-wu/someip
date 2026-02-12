@@ -6,9 +6,9 @@
 import os
 import cv2
 import numpy as np
-import sys, traceback, threading, time, platform, datetime, inspect, random
+import sys, traceback, threading, time, platform, datetime, random
 from dataclasses import dataclass
-from PIL import Image
+import queue
 
 # 帮助函数
 def _fmt_ts(ts: float) -> str:
@@ -79,6 +79,9 @@ def get_camera_resolution(cap):
 def resize_with_aspect_ratio(frame, target_width, target_height, interpolation=cv2.INTER_LINEAR):
     """等比缩放 + 黑边填充"""
     h, w = frame.shape[:2]
+    # 提前检查是否需要缩放，避免不必要的计算
+    if w == target_width and h == target_height:
+        return frame
     target_ratio = target_width / target_height
     img_ratio = w / h
     if img_ratio > target_ratio:
@@ -107,15 +110,10 @@ def draw_centered_text(img, text, color=(0, 255, 0), font=cv2.FONT_HERSHEY_SIMPL
 def take_screenshot(frame, save_path="Resources/Picture"):
     if not os.path.exists(save_path):
         os.makedirs(save_path)
-    existing = [f for f in os.listdir(save_path) if f.startswith("screenshot_") and f.endswith(".png")]
-    numbers = []
-    for f in existing:
-        try:
-            numbers.append(int(f.replace("screenshot_", "").replace(".png", "")))
-        except:
-            pass
-    next_num = max(numbers) + 1 if numbers else 1
-    filepath = os.path.join(save_path, f"screenshot_{next_num}.png")
+    # 使用 UUID 避免竞争条件
+    import uuid
+    filename = f"screenshot_{uuid.uuid4().hex[:8]}.png"
+    filepath = os.path.join(save_path, filename)
     if cv2.imwrite(filepath, frame):
         print(f"[INFO] 截图已保存: {filepath}")
     else:
@@ -127,16 +125,14 @@ def set_exposure(cap, exposure_val, verbose=True):
     """
     if not cap.isOpened():
         return False
-
     # 关闭自动曝光
     cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)  # Windows MSMF 手动模式
-
     # 直接设置曝光值（不关心是否成功）
     cap.set(cv2.CAP_PROP_EXPOSURE, float(exposure_val))
-
     if verbose:
         print(f"[INFO] 已尝试设置曝光值为 {exposure_val}")
-    return True  # 假设成功
+    # 返回更真实的成功状态
+    return cap.get(cv2.CAP_PROP_EXPOSURE) == float(exposure_val)
 
 # ----------------------------------------------------------------------
 # 3️⃣ 摄像头封装（线程化）
@@ -167,17 +163,9 @@ class CameraViewer:
         self.exposure = exposure
         self.draw_timestamp = draw_timestamp
         self.enable_timestamp = enable_timestamp
-
-        self._callback_wants_timestamp = False
-        if callable(display_callback):
-            sig = inspect.signature(display_callback)
-            params = list(sig.parameters.values())
-            if len(params) >= 2:
-                self._callback_wants_timestamp = True
-
+        self._callback_wants_timestamp = enable_timestamp
         self.simulate_error = simulate_error          # 是否启用异常帧
         self.error_probability = error_probability    # 触发概率 (0~1)        
-
         self.CAMERA_INDICES = (0, 1)
         self.CAPTURE_TARGET_WIDTH = 1280
         self.CAPTURE_TARGET_HEIGHT = 720
@@ -187,14 +175,16 @@ class CameraViewer:
         self.OUTPUT_HEIGHT = 360
         self.TARGET_FPS = target_fps
         self.FRAME_DELAY_MS = 1
-
         self._stop_event = threading.Event()
         self._thread = None
         self.cap = None
         self.cam_index = None
         self.capture_w = 1280
         self.capture_h = 720
-
+        # 创建队列用于线程间通信
+        self.frame_queue = queue.Queue(maxsize=2)  # 限制队列大小避免内存暴涨
+        # 预分配黑帧避免重复创建
+        self._black_frame = None
 
     def _init_camera(self):
         self.cap, self.cam_index = try_open_camera(
@@ -203,106 +193,118 @@ class CameraViewer:
             target_height=self.CAPTURE_TARGET_HEIGHT,
             target_fps=self.TARGET_FPS,
         )
-
+        # 优化分辨率获取逻辑
         if self.cam_index is not None and self.cap.isOpened():
-            resolution = get_camera_resolution(self.cap)
-            if resolution:
-                self.capture_w, self.capture_h = resolution
+            self.capture_w, self.capture_h = get_camera_resolution(self.cap)
+            # 预分配黑帧
+            self._black_frame = np.zeros((self.capture_h, self.capture_w, 3), dtype=np.uint8)
         else:
             print("[WARN] 使用默认分辨率 1280x720")
-
         # 直接设置曝光（不验证）
         if self.exposure is not None and self.cap.isOpened():
             set_exposure(self.cap, self.exposure, verbose=True)
 
     def _run_loop(self):
-        win_name = "Camera"
-        if self.display_callback is None:
-            cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
-            cv2.resizeWindow(win_name, self.DISPLAY_WINDOW_WIDTH, self.DISPLAY_WINDOW_HEIGHT)
-
-        if self.cap.isOpened():
-            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 4)
 
         # 调试用帧率开关（fps统计开关）
-        DEBUG_FPS = True
+        DEBUG_FPS = False
         fps_counter = 0
-        fps_timer = time.time()
-
-        try:
-            while not self._stop_event.is_set():
-                loop_start = time.time()
-
-                # 先获取时间戳，后面异常帧和绘制都会使用同一个 ts
-                ts = time.time()
-
-                # 读取帧
-                if self.cap.isOpened():
-                    ret, frame = self.cap.read()
-                    if not ret or frame is None:
-                        # 读取失败 → 用全黑帧代替
-                        frame = np.zeros((self.capture_h, self.capture_w, 3), dtype=np.uint8)
+        fps_timer = time.perf_counter()  # 使用更高精度的时钟
+        # 成功帧数统计
+        success_frame_count = 0
+        
+        while not self._stop_event.is_set():
+            loop_start = time.perf_counter()  # 使用 perf_counter
+            # 先获取时间戳，后面异常帧和绘制都会使用同一个 ts
+            ts = time.time()
+            frame = None
+            success_read = False
+            
+            # 读取帧
+            if self.cap is not None and self.cap.isOpened():
+                ret, frame = self.cap.read()
+                if ret and frame is not None:
+                    success_read = True
+                    success_frame_count += 1
                 else:
-                    # 摄像头未打开 → 同样使用黑帧
-                    frame = np.zeros((self.capture_h, self.capture_w, 3), dtype=np.uint8)
-
-                # 模拟摄像头异常——随机把帧替换成全白图像
-                if self.simulate_error and random.random() < self.error_probability:
-                    frame = np.full_like(frame, 255, dtype=np.uint8)
-                    # print(f"[INFO] 生成了一帧异常图像 {_fmt_ts(ts)}")
-
-                # 镜像翻转
-                frame = cv2.flip(frame, 1)  # 镜像
-
+                    # 读取失败 → 用预分配的黑帧代替
+                    frame = self._black_frame
+            else:
+                # 摄像头未打开 → 使用黑帧
+                frame = self._black_frame
+            
+            # 模拟摄像头异常——随机把帧替换成全白图像
+            if self.simulate_error and random.random() < self.error_probability:
+                # 避免创建新数组，使用高效填充
+                frame.fill(255)
+            
+            # 镜像翻转（原地操作）使用 dst 参数避免新分配
+            if frame is not None and frame.size > 0:
+                cv2.flip(frame, 1, dst=frame)
+                
                 # 是否在画面上绘制时间戳
                 if self.draw_timestamp:
                     draw_timestamp_on_frame(frame, ts)
-                #  生成 TimedFrame（供回调使用）
+                
+                # 生成 TimedFrame（供回调使用）
                 timed_frame = TimedFrame(img=frame, timestamp=ts, cam_index=self.cam_index)
+                
                 # 摄像头未找到的文字提示
                 if self.cam_index is None:
                     draw_centered_text(frame, "Camera Not Found", color=(0, 0, 255), scale=2, thickness=6)
+                
                 # 调整显示尺寸
                 display_frame = resize_with_aspect_ratio(
                     frame,
                     self.OUTPUT_WIDTH if self.display_callback else self.DISPLAY_WINDOW_WIDTH,
                     self.OUTPUT_HEIGHT if self.display_callback else self.DISPLAY_WINDOW_HEIGHT,
                 )
-                # 交给回调或直接显示
+                
+                # 处理回调或放入队列
                 if self.display_callback is None:
-                    cv2.imshow(win_name, display_frame)
-                    key = cv2.waitKey(self.FRAME_DELAY_MS) & 0xFF
-                    if self.is_standalone and key == ord('s'):
-                        take_screenshot(frame, self.screenshot_path)
-                    if cv2.getWindowProperty(win_name, cv2.WND_PROP_VISIBLE) < 1 or key == 27:
-                        break
+                    # 放入队列供主线程显示
+                    try:
+                        # 非阻塞放入，避免队列满时阻塞捕获线程
+                        self.frame_queue.put_nowait((display_frame, frame))
+                    except queue.Full:
+                        # 队列满时丢弃旧帧，保持实时性
+                        try:
+                            self.frame_queue.get_nowait()
+                            self.frame_queue.put_nowait((display_frame, frame))
+                        except:
+                            pass
                 else:
                     rgb = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
                     try:
-                        if self._callback_wants_timestamp and self.enable_timestamp:
+                        if self._callback_wants_timestamp:
                             self.display_callback(rgb, timed_frame.timestamp)
                         else:
                             self.display_callback(rgb)
                     except Exception as e:
                         print(f"[ERROR] display_callback error: {e}")
                         traceback.print_exc()
-                # FPS 统计
-                if DEBUG_FPS:
-                    fps_counter += 1
-                    if time.time() - fps_timer >= 1.0:
-                        print(f"[INFO] FPS: {fps_counter}")   # 真实的帧数！
-                        fps_counter = 0
-                        fps_timer = time.time()
-                # 控制帧率
-                elapsed = time.time() - loop_start
-                sleep_time = max(0.0, (1.0 / self.TARGET_FPS) - elapsed)
+            
+            # FPS 统计（基于成功读取的帧）
+            if DEBUG_FPS:
+                fps_counter += 1
+                if time.perf_counter() - fps_timer >= 1.0:
+                    # 显示实际成功帧率
+                    print(f"[INFO] FPS: {success_frame_count} (循环: {fps_counter})")
+                    fps_counter = 0
+                    success_frame_count = 0
+                    fps_timer = time.perf_counter()
+            
+            # 控制帧率（更精确）
+            elapsed = time.perf_counter() - loop_start
+            sleep_time = max(0.0, (1.0 / self.TARGET_FPS) - elapsed)
+            # 使用更精确的睡眠
+            if sleep_time > 0:
                 time.sleep(sleep_time)
-
-        finally:
-            if self.cap:
-                self.cap.release()
-            if self.display_callback is None:
-                cv2.destroyAllWindows()
+        
+        # 确保资源释放
+        if self.cap is not None:
+            self.cap.release()
+            self.cap = None
 
     def start(self):
         if self._thread and self._thread.is_alive():
@@ -316,12 +318,41 @@ class CameraViewer:
         self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=2.0)
+        # 即使超时也尝试释放资源
+        if self.cap is not None:
+            self.cap.release()
+            self.cap = None
         self._thread = None
 
     def run(self):
         self.start()
-        if self._thread:
-            self._thread.join()
+        # 在主线程中处理GUI显示
+        if self.display_callback is None:
+            win_name = "Camera"
+            cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
+            cv2.resizeWindow(win_name, self.DISPLAY_WINDOW_WIDTH, self.DISPLAY_WINDOW_HEIGHT)
+            
+            try:
+                while self._thread and self._thread.is_alive():
+                    try:
+                        # 从队列获取帧，超时检查线程状态
+                        display_frame, original_frame = self.frame_queue.get(timeout=0.1)
+                        cv2.imshow(win_name, display_frame)
+                        
+                        key = cv2.waitKey(self.FRAME_DELAY_MS) & 0xFF
+                        if self.is_standalone and key == ord('s'):
+                            take_screenshot(original_frame, self.screenshot_path)
+                        if cv2.getWindowProperty(win_name, cv2.WND_PROP_VISIBLE) < 1 or key == 27:
+                            break
+                    except queue.Empty:
+                        continue
+            finally:
+                self.stop()  # 确保停止捕获线程
+                cv2.destroyAllWindows()
+        else:
+            # 使用回调模式时直接等待线程结束
+            if self._thread:
+                self._thread.join()
 
 # ----------------------------------------------------------------------
 # 工具函数
@@ -342,10 +373,10 @@ def main(display_callback=None):
     viewer = CameraViewer(
         display_callback=display_callback,
         is_standalone=True,
-        exposure=-4,  # 可调整
+        exposure=-6,  # 可调整
         draw_timestamp=True,
         enable_timestamp=True,
-        simulate_error=True,      # 是否开启异常帧模拟
+        simulate_error=False,      # 是否开启异常帧模拟
         error_probability=0.01,     # 异常帧出现概率 
         target_fps=30              # 摄像头目标帧率
     )
