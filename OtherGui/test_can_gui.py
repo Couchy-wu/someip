@@ -669,8 +669,8 @@ class CANFDGUI:
             if cap is not None and cap.isOpened():
                 # 调用 camera_viewer 中封装好的 set_exposure
                 success = set_exposure(cap, new_exp, verbose=True)
-                if not success:
-                    print(f"[WARN] 曝光值 {new_exp} 设置失败，保持原值")
+                # if not success:
+                #     print(f"[WARN] 曝光值 {new_exp} 设置失败，保持原值")
             # 同时更新实例内部的 exposure 属性，防止后续 restart 时使用旧值
             self._camera_viewer.exposure = new_exp
         else:
