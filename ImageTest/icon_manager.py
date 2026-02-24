@@ -9,12 +9,16 @@ from PIL import Image, ImageTk
 # 数据类
 # ========================================
 class IconData:
-    def __init__(self, name="", width=0, height=0, top=0, left=0):
+    def __init__(self, name="", width=0, height=0, top=0, left=0, reuse=False, reuse_name="", reuse_top=0, reuse_left=0):
         self.name = name
         self.width = width
         self.height = height
         self.top = top
         self.left = left
+        self.reuse = reuse
+        self.reuse_name = reuse_name
+        self.reuse_top = reuse_top
+        self.reuse_left = reuse_left
     
     @classmethod
     def from_dict(cls, data):
@@ -23,17 +27,27 @@ class IconData:
             width=data.get("width", 0),
             height=data.get("height", 0),
             top=data.get("top", 0),
-            left=data.get("left", 0)
+            left=data.get("left", 0),
+            reuse=data.get("reuse", False),
+            reuse_name=data.get("reuse_name", ""),
+            reuse_top=data.get("reuse_top", 0),
+            reuse_left=data.get("reuse_left", 0)
         )
     
     def to_dict(self):
-        return {
+        result = {
             "name": self.name,
             "width": self.width,
             "height": self.height,
             "top": self.top,
-            "left": self.left
+            "left": self.left,
+            "reuse": self.reuse
         }
+        if self.reuse:
+            result["reuse_name"] = self.reuse_name
+            result["reuse_top"] = self.reuse_top
+            result["reuse_left"] = self.reuse_left
+        return result
 
 # ========================================
 # 主应用类
@@ -72,6 +86,7 @@ class IconManagerApp:
         self.config_data = {}
         self.thumbnail_images = {}
         self.highlight_frames = {}
+        self.reuse_labels = {}  # 存储复用状态标签
         self.current_index = 0
         self.unsaved_changes = False
         
@@ -100,7 +115,7 @@ class IconManagerApp:
     def generate_config_path(self, subfolder):
         """根据子文件夹生成对应的配置文件路径"""
         config_name = f"ui_config_{subfolder}.json"
-        # 将所有配置文件集中放在UI_Config文件夹中
+        # 修改：将所有配置文件集中放在UI_Config文件夹中
         return os.path.join(self.project_root, "ImageTest", "UI_Config", config_name)
     
     def load_image_files(self):
@@ -169,6 +184,9 @@ class IconManagerApp:
         for icon_data in self.config_data.values():
             icon_data.top = 0
             icon_data.left = 0
+            if icon_data.reuse:
+                icon_data.reuse_top = 0
+                icon_data.reuse_left = 0
         
         self.unsaved_changes = True
         
@@ -254,7 +272,7 @@ class IconManagerApp:
             font=("微软雅黑", 12),
             background="lightgray"
         )
-        self.image_label.grid(row=0, column=0, rowspan=6, padx=(0, 10), sticky="nsew")
+        self.image_label.grid(row=0, column=0, rowspan=10, padx=(0, 10), sticky="nsew")
         
         # 右侧：表单
         form_frame = ttk.LabelFrame(content_frame, text="图标信息", padding="10")
@@ -264,7 +282,7 @@ class IconManagerApp:
         content_frame.columnconfigure(1, weight=1)
         content_frame.rowconfigure(0, weight=1)
         
-        # 表单内容
+        # 主配置表单内容
         ttk.Label(form_frame, text="图像文件名:").grid(row=0, column=0, sticky="w", pady=2)
         self.filename_var = tk.StringVar()
         ttk.Label(form_frame, textvariable=self.filename_var).grid(row=0, column=1, sticky="w", pady=2)
@@ -292,12 +310,45 @@ class IconManagerApp:
         self.left_var = tk.IntVar()
         ttk.Entry(form_frame, textvariable=self.left_var, width=20).grid(row=5, column=1, sticky="w", pady=2, padx=(0, 10))
         
+        # 分隔线
+        separator = ttk.Separator(form_frame, orient='horizontal')
+        separator.grid(row=6, column=0, columnspan=2, sticky="ew", pady=10)
+        
+        # 复用配置
+        self.reuse_var = tk.BooleanVar()
+        reuse_check = ttk.Checkbutton(form_frame, text="启用复用", variable=self.reuse_var, 
+                                     command=self.toggle_reuse_fields)
+        reuse_check.grid(row=7, column=0, columnspan=2, sticky="w", pady=(0, 5))
+        
+        # 复用表单字段（初始隐藏）
+        ttk.Label(form_frame, text="复用名称:").grid(row=8, column=0, sticky="w", pady=2)
+        self.reuse_name_var = tk.StringVar()
+        self.reuse_name_entry = ttk.Entry(form_frame, textvariable=self.reuse_name_var, width=40)
+        self.reuse_name_entry.grid(row=8, column=1, sticky="ew", pady=2)
+        
+        ttk.Label(form_frame, text="复用顶部 (px):").grid(row=9, column=0, sticky="w", pady=2)
+        self.reuse_top_var = tk.IntVar()
+        self.reuse_top_entry = ttk.Entry(form_frame, textvariable=self.reuse_top_var, width=20)
+        self.reuse_top_entry.grid(row=9, column=1, sticky="w", pady=2, padx=(0, 10))
+        
+        ttk.Label(form_frame, text="复用左侧 (px):").grid(row=10, column=0, sticky="w", pady=2)
+        self.reuse_left_var = tk.IntVar()
+        self.reuse_left_entry = ttk.Entry(form_frame, textvariable=self.reuse_left_var, width=20)
+        self.reuse_left_entry.grid(row=10, column=1, sticky="w", pady=2, padx=(0, 10))
+        
+        # 初始隐藏复用字段
+        self.toggle_reuse_fields()
+        
         form_frame.columnconfigure(1, weight=1)
         
         # 绑定变量变化事件
         self.name_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
         self.top_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
         self.left_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
+        self.reuse_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
+        self.reuse_name_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
+        self.reuse_top_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
+        self.reuse_left_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
         
         # 第 3 行：按钮
         btn_frame = ttk.Frame(main_frame)
@@ -308,6 +359,22 @@ class IconManagerApp:
         
         # 保存按钮
         ttk.Button(btn_frame, text="保存配置", command=self.save_config).pack(side="right")
+    
+    def toggle_reuse_fields(self):
+        """切换复用字段的显示/隐藏，并在启用时自动填写默认复用名称"""
+        if self.reuse_var.get():
+            self.reuse_name_entry.grid()
+            self.reuse_top_entry.grid()
+            self.reuse_left_entry.grid()
+
+            # 当复用被勾选且复用名称为空时，自动填充 “原名称_2”
+            if not self.reuse_name_var.get().strip():
+                base_name = self.name_var.get().strip() or os.path.splitext(self.filename_var.get())[0]
+                self.reuse_name_var.set(f"{base_name}_2")
+        else:
+            self.reuse_name_entry.grid_remove()
+            self.reuse_top_entry.grid_remove()
+            self.reuse_left_entry.grid_remove()
     
     def on_folder_change(self, event):
         """处理文件夹切换"""
@@ -352,6 +419,7 @@ class IconManagerApp:
         self.unsaved_changes = False
         self.thumbnail_images.clear()
         self.highlight_frames.clear()
+        self.reuse_labels.clear()
         
         # 清空缩略图区域
         for widget in self.scroll_frame.winfo_children():
@@ -376,6 +444,10 @@ class IconManagerApp:
             item_frame = tk.Frame(self.scroll_frame, width=self.ITEM_WIDTH, height=self.ITEM_HEIGHT, padx=2, pady=2)
             item_frame.pack(side="left", padx=6, pady=6)
             item_frame.pack_propagate(False)
+            
+            # 创建复用状态标签（初始隐藏）
+            reuse_label = tk.Label(item_frame, text="复用", bg="lightgreen", font=("微软雅黑", 7))
+            self.reuse_labels[filename] = reuse_label
             
             highlight_frame = tk.Frame(
                 item_frame,
@@ -418,21 +490,39 @@ class IconManagerApp:
             return None
     
     def should_highlight(self, filename):
-        """判断是否高亮"""
+        """判断是否高亮 - 主位置或复用位置为0,0时高亮"""
         if filename not in self.config_data:
             return True
+        
         data = self.config_data[filename]
-        return data.top == 0 and data.left == 0
+        # 主位置为0,0
+        main_invalid = data.top == 0 and data.left == 0
+        
+        # 如果启用了复用，复用位置为0,0也需要高亮
+        reuse_invalid = False
+        if data.reuse:
+            reuse_invalid = data.reuse_top == 0 and data.reuse_left == 0
+        
+        return main_invalid or reuse_invalid
     
     def update_thumbnail_highlights(self):
-        """更新高亮状态"""
+        """更新高亮状态和复用标签显示"""
         for filename in self.image_files:
             frame = self.highlight_frames.get(filename)
+            reuse_label = self.reuse_labels.get(filename)
+            
             if frame:
                 if self.should_highlight(filename):
                     frame.configure(highlightbackground="red", highlightthickness=3)
                 else:
                     frame.configure(highlightbackground="gray", highlightthickness=1)
+            
+            # 更新复用标签显示
+            if reuse_label:
+                if filename in self.config_data and self.config_data[filename].reuse:
+                    reuse_label.pack(side="top", fill="x")
+                else:
+                    reuse_label.pack_forget()
     
     def select_image(self, filename):
         """选择图标（切换前自动保存）"""
@@ -455,14 +545,44 @@ class IconManagerApp:
         new_name = self.name_var.get().strip()
         new_top = self.top_var.get()
         new_left = self.left_var.get()
+        
+        # 复用配置
+        has_reuse = self.reuse_var.get()
+        new_reuse_name = self.reuse_name_var.get().strip() if has_reuse else ""
+        new_reuse_top = self.reuse_top_var.get() if has_reuse else 0
+        new_reuse_left = self.reuse_left_var.get() if has_reuse else 0
+
+        # 验证名称不能为空
+        if has_reuse and not new_reuse_name:
+            messagebox.showwarning("警告", "复用名称不能为空！请填写后再保存。")
+            return
+
+        # 验证名称不重复
+        if has_reuse and new_name == new_reuse_name:
+            messagebox.showwarning("警告", "主名称和复用名称不能相同！")
+            return
+        
         old_data = self.config_data[filename]
         
-        if (old_data.name != new_name or 
+        # 检查是否有更改
+        has_changes = (
+            old_data.name != new_name or 
             old_data.top != new_top or 
-            old_data.left != new_left):
+            old_data.left != new_left or
+            old_data.reuse != has_reuse or
+            old_data.reuse_name != new_reuse_name or
+            old_data.reuse_top != new_reuse_top or
+            old_data.reuse_left != new_reuse_left
+        )
+        
+        if has_changes:
             self.config_data[filename].name = new_name
             self.config_data[filename].top = new_top
             self.config_data[filename].left = new_left
+            self.config_data[filename].reuse = has_reuse
+            self.config_data[filename].reuse_name = new_reuse_name
+            self.config_data[filename].reuse_top = new_reuse_top
+            self.config_data[filename].reuse_left = new_reuse_left
             self.unsaved_changes = True
             self.update_thumbnail_highlights()
     
@@ -523,7 +643,11 @@ class IconManagerApp:
             self.config_data[filename] = IconData(
                 name=os.path.splitext(filename)[0],
                 width=w,
-                height=h
+                height=h,
+                reuse=False,
+                reuse_name="",
+                reuse_top=0,
+                reuse_left=0
             )
         
         icon_data = self.config_data[filename]
@@ -532,6 +656,15 @@ class IconManagerApp:
         self.height_var.set(icon_data.height)
         self.top_var.set(icon_data.top)
         self.left_var.set(icon_data.left)
+        
+        # 更新复用相关变量
+        self.reuse_var.set(icon_data.reuse)
+        self.reuse_name_var.set(icon_data.reuse_name)
+        self.reuse_top_var.set(icon_data.reuse_top)
+        self.reuse_left_var.set(icon_data.reuse_left)
+        
+        # 根据复用状态显示/隐藏复用字段
+        self.toggle_reuse_fields()
         
         try:
             image = Image.open(filepath)
