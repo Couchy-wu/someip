@@ -53,8 +53,15 @@ class IconManagerApp:
         
         # 路径配置作为实例变量
         self.project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.resources_dir = os.path.join(self.project_root, "Resources", "ImageUI")
-        self.config_file = os.path.join(self.project_root, "ImageTest", "ui_config.json")
+        self.base_resources_dir = os.path.join(self.project_root, "Resources", "ImageUI")
+        
+        # 获取子文件夹列表
+        self.subfolders = self.get_subfolders()
+        self.current_subfolder = self.subfolders[0] if self.subfolders else ""
+        
+        # 初始化当前文件夹路径
+        self.resources_dir = os.path.join(self.base_resources_dir, self.current_subfolder)
+        self.config_file = self.generate_config_path(self.current_subfolder)
         
         # 创建必要目录
         os.makedirs(self.resources_dir, exist_ok=True)
@@ -77,19 +84,43 @@ class IconManagerApp:
         # 拦截关闭事件
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
     
+    def get_subfolders(self):
+        """获取ImageUI下的所有子文件夹"""
+        if not os.path.exists(self.base_resources_dir):
+            return []
+        
+        subfolders = []
+        for item in os.listdir(self.base_resources_dir):
+            item_path = os.path.join(self.base_resources_dir, item)
+            if os.path.isdir(item_path):
+                subfolders.append(item)
+        
+        return sorted(subfolders)
+    
+    def generate_config_path(self, subfolder):
+        """根据子文件夹生成对应的配置文件路径"""
+        config_name = f"ui_config_{subfolder}.json"
+        return os.path.join(self.project_root, "ImageTest", config_name)
+    
     def load_image_files(self):
-        """扫描 ImageUI 目录中的图像文件"""
+        """扫描当前子文件夹中的图像文件"""
         extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff'}
+        
+        if not os.path.exists(self.resources_dir):
+            self.image_files = []
+            return
+        
         self.image_files = sorted([
             f for f in os.listdir(self.resources_dir)
             if os.path.isfile(os.path.join(self.resources_dir, f))
             and os.path.splitext(f.lower())[1] in extensions
         ])
+        
         if not self.image_files:
-            messagebox.showwarning("警告", "未在 ImageUI 目录中找到图像文件！")
+            messagebox.showwarning("警告", f"未在 {self.current_subfolder} 目录中找到图像文件！")
     
     def load_config(self):
-        """加载 JSON 配置文件"""
+        """加载当前子文件夹对应的JSON配置文件"""
         if os.path.exists(self.config_file):
             try:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
@@ -149,6 +180,31 @@ class IconManagerApp:
         main_frame = ttk.Frame(self.root)
         main_frame.pack(fill="both", expand=True, padx=10, pady=10)
         
+        # 第 0 行：平台选择下拉菜单
+        platform_frame = ttk.LabelFrame(main_frame, text="选择平台文件夹", padding="10")
+        platform_frame.pack(fill="x", pady=(0, 10))
+        
+        # 下拉菜单标签和说明
+        select_frame = ttk.Frame(platform_frame)
+        select_frame.pack(fill="x")
+        
+        ttk.Label(select_frame, text="当前平台:").pack(side="left")
+        
+        # 创建下拉菜单
+        self.folder_combobox = ttk.Combobox(
+            select_frame, 
+            values=self.subfolders,
+            state="readonly",
+            width=30
+        )
+        self.folder_combobox.pack(side="left", padx=(10, 0))
+        
+        if self.current_subfolder:
+            self.folder_combobox.set(self.current_subfolder)
+        
+        # 绑定选择事件
+        self.folder_combobox.bind("<<ComboboxSelected>>", self.on_folder_change)
+        
         # 第 1 行：缩略图预览条
         preview_frame = ttk.LabelFrame(main_frame, text="选择图标（红色边框为未设置位置）", 
                                      height=self.PREVIEW_HEIGHT)
@@ -180,7 +236,6 @@ class IconManagerApp:
                              command=lambda: self.thumb_canvas.xview_scroll(-3, "units"))
         btn_left.pack(side="left", padx=(0, 3))
         
-        # 向左滚动时，内容向右移动，应使用正数
         btn_right = ttk.Button(preview_frame, text="▶", width=5, 
                               command=lambda: self.thumb_canvas.xview_scroll(3, "units"))
         btn_right.pack(side="left", padx=(0, 8))
@@ -252,6 +307,63 @@ class IconManagerApp:
         
         # 保存按钮
         ttk.Button(btn_frame, text="保存配置", command=self.save_config).pack(side="right")
+    
+    def on_folder_change(self, event):
+        """处理文件夹切换"""
+        new_subfolder = self.folder_combobox.get()
+        
+        if new_subfolder == self.current_subfolder:
+            return
+        
+        # 检查是否有未保存的更改
+        if self.unsaved_changes:
+            result = messagebox.askyesnocancel(
+                "切换平台确认",
+                f"是否保存后再切换到 {new_subfolder}？\n\n"
+                "“是”：保存并切换\n"
+                "“否”：不保存，直接切换\n"
+                "“取消”：返回继续编辑"
+            )
+            if result is True:
+                self.save_config()
+                self.switch_to_folder(new_subfolder)
+            elif result is False:
+                self.unsaved_changes = False
+                self.switch_to_folder(new_subfolder)
+            # 如果取消，则不切换，恢复下拉菜单的值为当前文件夹
+            else:
+                self.folder_combobox.set(self.current_subfolder)
+        else:
+            self.switch_to_folder(new_subfolder)
+    
+    def switch_to_folder(self, new_subfolder):
+        """切换到新文件夹"""
+        self.current_subfolder = new_subfolder
+        self.resources_dir = os.path.join(self.base_resources_dir, self.current_subfolder)
+        self.config_file = self.generate_config_path(self.current_subfolder)
+        
+        # 创建必要目录
+        os.makedirs(self.resources_dir, exist_ok=True)
+        os.makedirs(os.path.dirname(self.config_file), exist_ok=True)
+        
+        # 重置状态
+        self.current_index = 0
+        self.unsaved_changes = False
+        self.thumbnail_images.clear()
+        self.highlight_frames.clear()
+        
+        # 清空缩略图区域
+        for widget in self.scroll_frame.winfo_children():
+            widget.destroy()
+        
+        # 重新加载数据
+        self.load_image_files()
+        self.load_config()
+        self.create_thumbnail_strip()
+        self.update_display()
+        
+        # 更新窗口标题
+        self.root.title(f"UI 图标管理器 - {self.current_subfolder}")
     
     def mark_unsaved_changes(self):
         """标记有未保存的更改"""
