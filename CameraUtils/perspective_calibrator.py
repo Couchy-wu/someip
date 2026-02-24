@@ -47,7 +47,7 @@ class _GlobalWatcher:
             def on_modified(self, event):
                 p = Path(event.src_path).resolve()
                 if p in parent._handlers:
-                    # ★ MOD: 防抖 0.3 s，防止一次保存触发多次加载
+                    # 防抖 0.3 s，防止一次保存触发多次加载
                     if hasattr(self, "_timer") and self._timer:
                         self._timer.cancel()
                     self._timer = Timer(0.3,
@@ -122,8 +122,10 @@ class PerspectiveCalibrator:
 
         # ---------- 缓存 ----------
         self.original_corners = None      # 原始检测到的角点（用于缩放基准）
+        self.corners = None               # 初始化 corners 属性
         self.perspective_matrix = None    # 计算好的透视矩阵（热更新直接使用）
-
+        # ---------- Canny边缘显示标志 ----------
+        self.show_canny = False  # 控制是否显示Canny边缘
         # ---------- 启动配置文件监听 ----------
         # self.watcher = self.ConfigFileWatcher(self, self.config_path)
         # self.watcher.start()
@@ -145,10 +147,10 @@ class PerspectiveCalibrator:
         if len(self.points) < 4:
             if event == cv2.EVENT_LBUTTONDOWN:
                 # 保存 **显示坐标**（float，防止后续累计误差）
-                self.points.append((float(x), float(y)))                # ★ MOD
+                self.points.append((float(x), float(y)))
                 # 显示坐标 → 原始坐标（考虑当前整体缩放）
-                real_x = int(x * self.base_scale_x / self.current_scale)  # ★ MOD
-                real_y = int(y * self.base_scale_y / self.current_scale)  # ★ MOD
+                real_x = int(x * self.base_scale_x / self.current_scale)
+                real_y = int(y * self.base_scale_y / self.current_scale)
                 self.real_points.append((real_x, real_y))
                 # 在图像上标记
                 cv2.circle(self.working_image, (x, y), 5, (0, 255, 0), -1)
@@ -167,7 +169,6 @@ class PerspectiveCalibrator:
         # 2.2 鼠标移动且处于拖拽状态 → 实时更新坐标并重绘
         elif event == cv2.EVENT_MOUSEMOVE and self.dragging:
             idx = self.drag_point_idx
-            # ---------- ★ MOD ----------
             # 更新 **显示坐标**（float）
             self.points[idx] = (float(x), float(y))
             # 计算对应的 **原始坐标**（考虑整体缩放）
@@ -206,8 +207,6 @@ class PerspectiveCalibrator:
         bl = left_group[np.argsort(left_group[:, 1])][1]   # 左下
         tr = right_group[np.argsort(right_group[:, 1])][0] # 右上
         br = right_group[np.argsort(right_group[:, 1])][1] # 右下
-
-        # ---------- ★ MOD ----------
         # 将原始坐标映射回显示坐标（考虑当前缩放比例），并统一保存顺序
         def to_display(pt):
             return (int(pt[0] / self.base_scale_x * self.current_scale),
@@ -451,6 +450,20 @@ class PerspectiveCalibrator:
     def _redraw_with_corners(self):
         """根据当前 corners（原始坐标）重新绘制显示图像"""
         self.working_image = self.display_image.copy()
+        
+        # 检查角点是否存在，避免未选择角点时调用报错
+        if self.corners is None:
+            # 仅显示Canny边缘（如果开启）
+            if self.show_canny:
+                gray = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2GRAY)
+                edges = cv2.Canny(gray, 50, 150)
+                edges_colored = np.zeros_like(self.original_image)
+                edges_colored[edges > 0] = [0, 255, 0]
+                edges_display = cv2.resize(edges_colored, (self.display_width, self.display_height))
+                self.working_image = cv2.addWeighted(self.working_image, 1.0, edges_display, 1.0, 0)
+            cv2.imshow(self._win_main, self.working_image)
+            return
+        
         pts_disp = {}
         for key, (rx, ry) in self.corners.items():
             # 原始 → 显示（**不再乘以 self.current_scale**，因为 corners 已经是
@@ -485,7 +498,16 @@ class PerspectiveCalibrator:
             cv2.putText(self.working_image, label,
                         (pt[0] + offset_x, pt[1] + offset_y),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-
+        
+        # 叠加Canny边缘（辅助角点选择）
+        if hasattr(self, 'show_canny') and self.show_canny:
+            gray = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2GRAY)
+            edges = cv2.Canny(gray, 50, 150)
+            edges_colored = np.zeros_like(self.original_image)
+            edges_colored[edges > 0] = [0, 255, 0]
+            edges_display = cv2.resize(edges_colored, (self.display_width, self.display_height))
+            self.working_image = cv2.addWeighted(self.working_image, 1.0, edges_display, 1.0, 0)
+        
         cv2.imshow(self._win_main, self.working_image)
 
     # -----------------------------------------------------------------
@@ -512,6 +534,7 @@ class PerspectiveCalibrator:
         print("   - 'e' 键: 重置缩放比例至100%")
         print("   - 'z' 键: 扩大5%")
         print("   - 'x' 键: 缩小5%")
+        print("   - 't' 键: 切换Canny边缘显示（辅助角点选择）")
         # print("   - 'w' 键: 保存拉直后的图像")
         print(f"   - 当前输出分辨率: {current_res_name}")
         # ---------- 主循环 ----------
@@ -529,6 +552,10 @@ class PerspectiveCalibrator:
                 self.scale_quad(1.05)
             elif key == ord('x'):             # 缩小5%
                 self.scale_quad(0.95)
+            elif key == ord('t'):             # 切换Canny边缘显示
+                self.show_canny = not self.show_canny
+                print(f"Canny边缘显示: {'开启' if self.show_canny else '关闭'}")
+                self._redraw_with_corners()
             # elif key == ord('w'):             # 保存变换后的图像
             #     if hasattr(self, 'warped_image') and self.warped_image is not None:
             #         output_path = self.image_path.parent / f"{self.image_path.stem}_warped.jpg"
@@ -546,8 +573,8 @@ class PerspectiveCalibrator:
                 break
         # ---------- 清理 ----------
         cv2.destroyAllWindows()
-        return self.corners if hasattr(self, 'corners') and self.corners else None
-
+        return self.corners if self.corners else None
+        
     # -----------------------------------------------------------------
     # 10️⃣ 自动模式（仅使用已有矩阵）
     # -----------------------------------------------------------------
@@ -632,7 +659,7 @@ class PerspectiveCalibrator:
     # -----------------------------------------------------------------
     def apply_perspective_transform(self):
         """根据四个角点进行透视变换，将四边形区域拉直"""
-        if not hasattr(self, 'corners') or not self.corners:
+        if not self.corners:
             print("没有可用的角点数据，无法进行透视变换")
             return
         # 若已有缓存矩阵且未被手动清除，则直接使用
@@ -731,7 +758,7 @@ class PerspectiveCalibrator:
 # 示例入口（保持原样）
 # --------------------------------------------------------------
 if __name__ == "__main__":
-    image_path = "CameraUtils/test_image2.jpg"  # 替换为你的图像路径
+    image_path = "Resources/Captured/3.png"  # 替换为你的图像路径
     # 可选值："720p" | "1080p" | "original"
     OUTPUT_RESOLUTION = "720p"  # ←←← 在这里修改输出分辨率
 
