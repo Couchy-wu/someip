@@ -100,7 +100,8 @@ class IconManagerApp:
     def generate_config_path(self, subfolder):
         """根据子文件夹生成对应的配置文件路径"""
         config_name = f"ui_config_{subfolder}.json"
-        return os.path.join(self.project_root, "ImageTest", config_name)
+        # 将所有配置文件集中放在UI_Config文件夹中
+        return os.path.join(self.project_root, "ImageTest", "UI_Config", config_name)
     
     def load_image_files(self):
         """扫描当前子文件夹中的图像文件"""
