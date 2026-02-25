@@ -90,6 +90,9 @@ class IconManagerApp:
         self.current_index = 0
         self.unsaved_changes = False
         
+        # 确保 background.png 存在
+        self.ensure_background_image()
+        
         self.load_image_files()
         self.load_config()
         self.setup_gui()
@@ -118,6 +121,17 @@ class IconManagerApp:
         # 修改：将所有配置文件集中放在UI_Config文件夹中
         return os.path.join(self.project_root, "ImageTest", "UI_Config", config_name)
     
+    def ensure_background_image(self):
+        """确保 background.png 存在，不存在则创建 100x100 黑色图片"""
+        bg_path = os.path.join(self.resources_dir, 'background.png')
+        if not os.path.exists(bg_path):
+            try:
+                img = Image.new('RGB', (100, 100), color='black')
+                img.save(bg_path)
+                print(f"已创建 background.png (100x100) 在 {self.resources_dir}")
+            except Exception as e:
+                print(f"创建 background.png 失败: {e}")
+    
     def load_image_files(self):
         """扫描当前子文件夹中的图像文件"""
         extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff'}
@@ -131,6 +145,11 @@ class IconManagerApp:
             if os.path.isfile(os.path.join(self.resources_dir, f))
             and os.path.splitext(f.lower())[1] in extensions
         ])
+        
+        # 确保 background.png 在列表第一位
+        if 'background.png' in self.image_files:
+            self.image_files.remove('background.png')
+            self.image_files.insert(0, 'background.png')
         
         if not self.image_files:
             messagebox.showwarning("警告", f"未在 {self.current_subfolder} 目录中找到图像文件！")
@@ -155,7 +174,17 @@ class IconManagerApp:
     def save_config(self):
         """手动保存配置"""
         self.save_current_form()
-        export_data = {fn: ic.to_dict() for fn, ic in self.config_data.items()}
+        
+        # 确保 background.png 在 JSON 首位
+        export_data = {}
+        if 'background.png' in self.config_data:
+            export_data['background.png'] = self.config_data['background.png'].to_dict()
+        
+        # 添加其他文件
+        for fn, ic in self.config_data.items():
+            if fn != 'background.png':
+                export_data[fn] = ic.to_dict()
+        
         try:
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(export_data, f, indent=4, ensure_ascii=False)
@@ -193,6 +222,78 @@ class IconManagerApp:
         # 刷新显示
         self.update_display()
         messagebox.showinfo("完成", "所有位置数据已重置为 0，请记得保存！")
+    
+    def delete_icon(self):
+        """删除当前图标"""
+        if not self.image_files:
+            return
+        
+        filename = self.image_files[self.current_index]
+        
+        # 禁止删除 background.png
+        if filename == 'background.png':
+            messagebox.showwarning("警告", "该图标不可删除")
+            return
+        
+        # 二次确认
+        result = messagebox.askyesno(
+            "删除确认",
+            f"确定要删除图标 '{filename}' 吗？\n\n"
+            "此操作将同时删除图像文件和配置数据。\n"
+            "点击“是”确认删除。"
+        )
+        
+        if not result:
+            return
+        
+        # 删除文件
+        file_path = os.path.join(self.resources_dir, filename)
+        try:
+            os.remove(file_path)
+        except Exception as e:
+            messagebox.showerror("错误", f"删除文件失败：{e}")
+            return
+        
+        # 从配置数据中删除
+        self.config_data.pop(filename, None)
+        
+        # 从缩略图缓存中删除
+        self.thumbnail_images.pop(filename, None)
+        self.highlight_frames.pop(filename, None)
+        self.reuse_labels.pop(filename, None)
+        
+        # 从列表中删除
+        self.image_files.pop(self.current_index)
+        
+        # 调整当前索引
+        if self.current_index >= len(self.image_files):
+            self.current_index = len(self.image_files) - 1
+        
+        self.unsaved_changes = True
+        
+        # 重新创建缩略图条
+        for widget in self.scroll_frame.winfo_children():
+            widget.destroy()
+        self.create_thumbnail_strip()
+        
+        # 更新显示
+        if self.image_files:
+            self.update_display()
+        else:
+            # 如果没有图标了，清空显示
+            self.image_label.config(text="无图像可显示", image="")
+            self.filename_var.set("")
+            self.name_var.set("")
+            self.width_var.set(0)
+            self.height_var.set(0)
+            self.top_var.set(0)
+            self.left_var.set(0)
+            self.reuse_var.set(False)
+            self.reuse_name_var.set("")
+            self.reuse_top_var.set(0)
+            self.reuse_left_var.set(0)
+        
+        messagebox.showinfo("完成", f"'{filename}' 已删除！")
     
     def setup_gui(self):
         """构建主界面"""
@@ -289,18 +390,19 @@ class IconManagerApp:
         
         ttk.Label(form_frame, text="UI 名称:").grid(row=1, column=0, sticky="w", pady=2)
         self.name_var = tk.StringVar()
-        name_entry = ttk.Entry(form_frame, textvariable=self.name_var, width=40)
-        name_entry.grid(row=1, column=1, sticky="ew", pady=2)
+        self.name_entry = ttk.Entry(form_frame, textvariable=self.name_var, width=40)
+        self.name_entry.grid(row=1, column=1, sticky="ew", pady=2)
         
         ttk.Label(form_frame, text="宽度 (px):").grid(row=2, column=0, sticky="w", pady=2)
         self.width_var = tk.IntVar()
-        width_entry = ttk.Entry(form_frame, textvariable=self.width_var, width=20, state="readonly")
-        width_entry.grid(row=2, column=1, sticky="w", pady=2, padx=(0, 10))
+        # 修改为可编辑的 Entry，在 update_display 中动态控制状态
+        self.width_entry = ttk.Entry(form_frame, textvariable=self.width_var, width=20)
+        self.width_entry.grid(row=2, column=1, sticky="w", pady=2, padx=(0, 10))
         
         ttk.Label(form_frame, text="高度 (px):").grid(row=3, column=0, sticky="w", pady=2)
         self.height_var = tk.IntVar()
-        height_entry = ttk.Entry(form_frame, textvariable=self.height_var, width=20, state="readonly")
-        height_entry.grid(row=3, column=1, sticky="w", pady=2, padx=(0, 10))
+        self.height_entry = ttk.Entry(form_frame, textvariable=self.height_var, width=20)
+        self.height_entry.grid(row=3, column=1, sticky="w", pady=2, padx=(0, 10))
         
         ttk.Label(form_frame, text="顶部 (px):").grid(row=4, column=0, sticky="w", pady=2)
         self.top_var = tk.IntVar()
@@ -343,6 +445,8 @@ class IconManagerApp:
         
         # 绑定变量变化事件
         self.name_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
+        self.width_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
+        self.height_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
         self.top_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
         self.left_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
         self.reuse_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
@@ -354,7 +458,10 @@ class IconManagerApp:
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill="x", pady=(10, 0))
         
-        # 清除按钮（在保存按钮左侧）
+        # 删除图标按钮（新增）
+        ttk.Button(btn_frame, text="删除图标", command=self.delete_icon, style="Danger.TButton").pack(side="right", padx=(0, 10))
+        
+        # 清除按钮
         ttk.Button(btn_frame, text="清除所有位置", command=self.clear_all, style="Danger.TButton").pack(side="right", padx=(0, 10))
         
         # 保存按钮
@@ -366,8 +473,7 @@ class IconManagerApp:
             self.reuse_name_entry.grid()
             self.reuse_top_entry.grid()
             self.reuse_left_entry.grid()
-
-            # 当复用被勾选且复用名称为空时，自动填充 “原名称_2”
+            # 当复用被勾选且复用名称为空时，自动填充 "原名称_2"
             if not self.reuse_name_var.get().strip():
                 base_name = self.name_var.get().strip() or os.path.splitext(self.filename_var.get())[0]
                 self.reuse_name_var.set(f"{base_name}_2")
@@ -413,6 +519,9 @@ class IconManagerApp:
         # 创建必要目录
         os.makedirs(self.resources_dir, exist_ok=True)
         os.makedirs(os.path.dirname(self.config_file), exist_ok=True)
+        
+        # 确保 background.png 存在
+        self.ensure_background_image()
         
         # 重置状态
         self.current_index = 0
@@ -533,6 +642,21 @@ class IconManagerApp:
         except ValueError:
             pass
     
+    def resize_background_image(self, width, height):
+        """调整 background.png 的尺寸"""
+        try:
+            bg_path = os.path.join(self.resources_dir, 'background.png')
+            img = Image.open(bg_path)
+            img = img.resize((width, height), Image.Resampling.LANCZOS)
+            img.save(bg_path)
+            # 清除缩略图缓存，使其重新加载
+            if 'background.png' in self.thumbnail_images:
+                del self.thumbnail_images['background.png']
+            print(f"background.png 已调整为 {width}x{height}")
+        except Exception as e:
+            print(f"调整 background.png 尺寸失败: {e}")
+            messagebox.showerror("错误", f"调整背景图片尺寸失败：{e}")
+    
     def save_current_form(self):
         """保存当前表单，检测是否更改"""
         if not self.image_files:
@@ -542,21 +666,28 @@ class IconManagerApp:
         if filename not in self.config_data:
             return
         
-        new_name = self.name_var.get().strip()
+        # 强制 background.png 名称为 "background"
+        if filename == 'background.png':
+            new_name = "background"
+        else:
+            new_name = self.name_var.get().strip()
+        
         new_top = self.top_var.get()
         new_left = self.left_var.get()
+        new_width = self.width_var.get()
+        new_height = self.height_var.get()
         
         # 复用配置
         has_reuse = self.reuse_var.get()
         new_reuse_name = self.reuse_name_var.get().strip() if has_reuse else ""
         new_reuse_top = self.reuse_top_var.get() if has_reuse else 0
         new_reuse_left = self.reuse_left_var.get() if has_reuse else 0
-
+        
         # 验证名称不能为空
         if has_reuse and not new_reuse_name:
             messagebox.showwarning("警告", "复用名称不能为空！请填写后再保存。")
             return
-
+        
         # 验证名称不重复
         if has_reuse and new_name == new_reuse_name:
             messagebox.showwarning("警告", "主名称和复用名称不能相同！")
@@ -569,6 +700,8 @@ class IconManagerApp:
             old_data.name != new_name or 
             old_data.top != new_top or 
             old_data.left != new_left or
+            old_data.width != new_width or
+            old_data.height != new_height or
             old_data.reuse != has_reuse or
             old_data.reuse_name != new_reuse_name or
             old_data.reuse_top != new_reuse_top or
@@ -576,9 +709,15 @@ class IconManagerApp:
         )
         
         if has_changes:
+            # 如果是 background.png，且尺寸改变，则调整图片
+            if filename == 'background.png' and (old_data.width != new_width or old_data.height != new_height):
+                self.resize_background_image(new_width, new_height)
+            
             self.config_data[filename].name = new_name
             self.config_data[filename].top = new_top
             self.config_data[filename].left = new_left
+            self.config_data[filename].width = new_width
+            self.config_data[filename].height = new_height
             self.config_data[filename].reuse = has_reuse
             self.config_data[filename].reuse_name = new_reuse_name
             self.config_data[filename].reuse_top = new_reuse_top
@@ -651,7 +790,13 @@ class IconManagerApp:
             )
         
         icon_data = self.config_data[filename]
-        self.name_var.set(icon_data.name)
+        
+        # 强制 background.png 名称为 background
+        if filename == 'background.png':
+            self.name_var.set("background")
+        else:
+            self.name_var.set(icon_data.name)
+        
         self.width_var.set(icon_data.width)
         self.height_var.set(icon_data.height)
         self.top_var.set(icon_data.top)
@@ -662,6 +807,16 @@ class IconManagerApp:
         self.reuse_name_var.set(icon_data.reuse_name)
         self.reuse_top_var.set(icon_data.reuse_top)
         self.reuse_left_var.set(icon_data.reuse_left)
+        
+        # 控制 width 和 height 输入框状态（background.png 可编辑）
+        if filename == 'background.png':
+            self.width_entry.config(state="normal")
+            self.height_entry.config(state="normal")
+            self.name_entry.config(state="readonly")
+        else:
+            self.width_entry.config(state="readonly")
+            self.height_entry.config(state="readonly")
+            self.name_entry.config(state="normal")
         
         # 根据复用状态显示/隐藏复用字段
         self.toggle_reuse_fields()
