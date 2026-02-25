@@ -687,14 +687,35 @@ class IconManagerApp:
         if has_reuse and not new_reuse_name:
             messagebox.showwarning("警告", "复用名称不能为空！请填写后再保存。")
             return
-        
-        # 验证名称不重复
+
+        # 验证主名称和复用名称不能相同
         if has_reuse and new_name == new_reuse_name:
             messagebox.showwarning("警告", "主名称和复用名称不能相同！")
             return
-        
+
+        # 全局名称唯一性验证，检查新名称是否与已有名称冲突（排除当前文件本身）
+        for other_filename, other_data in self.config_data.items():
+            if other_filename == filename:
+                continue  # 跳过当前文件
+            # 检查主名称冲突
+            if new_name == other_data.name:
+                messagebox.showwarning("警告", f"主名称 '{new_name}' 已存在于 '{other_filename}' 中！\n所有UI名称必须唯一。")
+                return
+            # 检查主名称是否与他人的复用名称冲突
+            if other_data.reuse and new_name == other_data.reuse_name:
+                messagebox.showwarning("警告", f"主名称 '{new_name}' 已作为复用名称存在于 '{other_filename}' 中！\n所有UI名称必须唯一。")
+                return
+            # 检查复用名称冲突
+            if has_reuse:
+                if new_reuse_name == other_data.name:
+                    messagebox.showwarning("警告", f"复用名称 '{new_reuse_name}' 已存在于 '{other_filename}' 中！\n所有UI名称必须唯一。")
+                    return
+
+                if other_data.reuse and new_reuse_name == other_data.reuse_name:
+                    messagebox.showwarning("警告", f"复用名称 '{new_reuse_name}' 已作为复用名称存在于 '{other_filename}' 中！\n所有UI名称必须唯一。")
+                    return
         old_data = self.config_data[filename]
-        
+
         # 检查是否有更改
         has_changes = (
             old_data.name != new_name or 
