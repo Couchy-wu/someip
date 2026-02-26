@@ -435,6 +435,7 @@ class ImageGeneratorApp:
                 button.config(relief="raised")
         
         self.update_status_label(filename, status_label)
+        self.update_listbox_item_color(self.current_image_index)
         
         # 更新工具提示
         tooltip_text = self.get_status_tooltip_text(filename)
@@ -511,10 +512,11 @@ class ImageGeneratorApp:
                     if not matched:
                         print(f"警告：无法匹配图标 '{name}' 在位置 {top_left}")
                 
-                # 只添加有内容的配置
+                # 只添加有内容的配置，若无图标也要保留以显示为红色
                 if new_config["icon_states"]:
                     self.image_configs.append(new_config)
                     self.image_listbox.insert(tk.END, image_name)
+                    self.update_listbox_item_color(len(self.image_configs) - 1)
                     loaded_count += 1
             
             # 读取完毕后恢复当前索引与界面状态
@@ -546,8 +548,9 @@ class ImageGeneratorApp:
         self.image_configs.append(new_config)
         self.current_image_index = len(self.image_configs) - 1
         
-        # 更新列表框
+        # 更新列表框并设置颜色（若为空则为红色）
         self.image_listbox.insert(tk.END, default_name)
+        self.update_listbox_item_color(self.current_image_index)
         self.image_listbox.selection_clear(0, tk.END)
         self.image_listbox.selection_set(self.current_image_index)
         self.image_listbox.see(self.current_image_index)
@@ -557,7 +560,23 @@ class ImageGeneratorApp:
         
         # 立即刷新预览，显示空白背景（新图像是空的）
         self.redraw_preview()
-    
+
+    def update_listbox_item_color(self, idx):
+        """根据图像是否只有背景来设置列表项颜色。没有任何图标（icon_states 为空）时使用红色，否则使用默认黑色。"""
+        if idx < 0 or idx >= len(self.image_configs):
+            return
+        # 是否仅有背景
+        has_icons = bool(self.image_configs[idx]["icon_states"])
+        fg_color = "red" if not has_icons else "black"
+        # 同时设置普通前景和选中前景
+        self.image_listbox.itemconfig(
+            idx,
+            {
+                "fg": fg_color,                # 普通文字颜色
+                "selectforeground": fg_color   # 选中时的文字颜色
+            }
+        )
+
     def rename_current_image(self):
         """重命名当前选中的图像"""
         if self.current_image_index < 0:
@@ -574,6 +593,7 @@ class ImageGeneratorApp:
             # 更新列表框
             self.image_listbox.delete(self.current_image_index)
             self.image_listbox.insert(self.current_image_index, new_name)
+            self.update_listbox_item_color(self.current_image_index)
             self.image_listbox.selection_set(self.current_image_index)
     
     def delete_current_image(self):
@@ -676,6 +696,7 @@ class ImageGeneratorApp:
                     status_label.config(bg=self.status_colors[None])
         
         self.redraw_preview()
+        self.update_listbox_item_color(self.current_image_index)
     
     def redraw_preview(self):
         """重新绘制预览图像：背景 + 已选图标（支持主/复用位置）"""
