@@ -25,7 +25,9 @@ class TextRedirector:
         self.root   = root            # 主窗口 (tk.Tk)
         self._queue = queue.Queue()   # 线程安全的 FIFO
         self._poll_interval = poll_interval
+        self._after_id = None         # 用于保存 after ID，以便取消
         self._start_poll()            # 启动轮询任务
+
     def write(self, string: str):
         """所有线程都会调用此方法，只负责把字符串放入队列。"""
         if string:                     # 过滤空字符串
@@ -37,7 +39,8 @@ class TextRedirector:
     def _start_poll(self):
         """使用 root.after 循环轮询队列并写入 Text。"""
         self._flush_queue()
-        self.root.after(self._poll_interval, self._start_poll)
+        self._after_id = self.root.after(self._poll_interval, self._start_poll)  # 保存 after ID
+
     def _flush_queue(self):
         """一次性写出队列中所有待打印的字符串。"""
         try:
@@ -47,6 +50,12 @@ class TextRedirector:
                 self.widget.see(tk.END)      # 自动滚动到底部
         except queue.Empty:
             pass
+
+    # 停止轮询的方法，用于窗口关闭时调用
+    def stop_polling(self):
+        if self._after_id is not None:
+            self.root.after_cancel(self._after_id)
+            self._after_id = None
 
 
 # 创建主窗口
@@ -132,7 +141,7 @@ def update_time():
     from datetime import datetime
     current_time = datetime.now().strftime("%H:%M:%S")
     time_label.config(text=f"当前时间: {current_time}")
-    root.after(1000, update_time)  # 每隔1000毫秒（1秒）调用一次自己
+    update_time.after_id = root.after(1000, update_time)  # 每隔1000毫秒（1秒）调用一次自己
 
 # 启动时间刷新
 update_time()
@@ -358,6 +367,20 @@ can_control_button = tk.Button(
     height=2
 )
 can_control_button.grid(row=1, column=2, padx=20, pady=20)
+
+
+# 定义主窗口关闭时的清理函数
+def on_closing():
+    # 停止日志重定向器的轮询
+    if isinstance(sys.stdout, TextRedirector):
+        sys.stdout.stop_polling()  # 取消 _start_poll 的 after 任务
+    # 取消时间更新任务
+    root.after_cancel(update_time.after_id)
+    # 销毁主窗口
+    root.destroy()
+
+# 绑定窗口关闭事件，安全退出
+root.protocol("WM_DELETE_WINDOW", on_closing)
 
 
 # 运行主循环
