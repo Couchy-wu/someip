@@ -47,6 +47,7 @@ class TestCaseProcessor:
         self.total_cases = 0          # 总用例数
         self.processed_count = 0      # 已处理用例数
         self._use_main_thread_dialog = use_main_thread_dialog
+        self._has_internal_error: bool = False   # 用来记录在 _generate_can_data_from_call 中捕获的异常
 
         # 同一 CAN ID 的累计帧缓存 + CAN ID → index 映射
         self._frame_cache: Dict[str, List[int]] = {}
@@ -99,11 +100,20 @@ class TestCaseProcessor:
                 # 可选：在日志中记录完整 traceback
                 mylog.error(self.logger_name, f"[用例 {case_id}] 解析时发生异常: {e}")
 
+        # 将内部生成信息的异常也计入 failed_cases（方便后面统一判断）
+        if self._has_internal_error:
+            # 这里不关联具体的 case_id，直接标记为“内部错误”
+            self.failed_cases.append({
+                "index": "N/A",
+                "case_id": "内部错误",
+                "error": "在生成 CAN 数据时出现异常"
+            })
+
         # === 所有用例处理完成后，打印汇总错误 ===
         if self.failed_cases:
-            print("\n" + "="*50)
+            print("\n" + "="*10)
             print("❌ 以下测试用例解析失败：")
-            print("="*50)
+            print("="*10)
             for fail in self.failed_cases:
                 print(f"❌ 用例 {fail['case_id']} (索引: {fail['index']}) → 错误: {fail['error']}")
             print(f"\n共 {len(self.failed_cases)} 个用例解析失败。")
@@ -465,6 +475,7 @@ class TestCaseProcessor:
                 return
 
         except Exception as e:
+            self._has_internal_error = True
             mylog.error(self.logger_name, f"          → 生成信息时异常: {e}")
 
 
