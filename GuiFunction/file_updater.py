@@ -7,6 +7,10 @@ from tkinter import ttk, messagebox
 from GuiFunction.file_handler import handle_file_upload, refresh_json_file
 from GuiFunction.delete_handler import delete_test_case
 
+# 主要功能：更新 JSON 文件列表
+    # 用于在 Tkinter 界面中管理 test_cases.json：
+    # - 上传文件后解析并写入 JSON；
+    # - 删除已存在的测试用例；
 
 class FileUpdater:
     # 锁，防止并发读写 test_cases.json

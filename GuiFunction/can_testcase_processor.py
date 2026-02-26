@@ -9,6 +9,8 @@ import pandas as pd
 from typing import List, Dict, Any, Tuple, Optional
 from CanDataProcessing.find_can_from_csv import create_can_data_by_signal
 import logging
+import tkinter as tk
+from tkinter import messagebox
 
 class TestCaseProcessor:
     """
@@ -29,6 +31,7 @@ class TestCaseProcessor:
         target_funcs: Optional[set] = None,
         prefix_patterns: Optional[List[str]] = None,
         logger_name: str = "processor",  # 日志标识名，用于区分不同 logger 实例
+        use_main_thread_dialog: bool = True   #  是否强制在主线程弹框（默认 True，安全）
     ):
         """
         初始化处理器
@@ -43,6 +46,7 @@ class TestCaseProcessor:
         self.logger_name = logger_name
         self.total_cases = 0          # 总用例数
         self.processed_count = 0      # 已处理用例数
+        self._use_main_thread_dialog = use_main_thread_dialog
 
         # 同一 CAN ID 的累计帧缓存 + CAN ID → index 映射
         self._frame_cache: Dict[str, List[int]] = {}
@@ -105,6 +109,30 @@ class TestCaseProcessor:
             print(f"\n共 {len(self.failed_cases)} 个用例解析失败。")
         print("\n✅ 所有用例解析完成")
 
+        # 内部辅助函数：弹框入口
+        def _show_dialog():
+            """实际弹窗的实现，放在内部函数方便主线程调度"""
+            title = "解析完成"
+            if self.failed_cases:
+                msg = "已解析完成（解析过程中发现异常）"
+            else:
+                msg = "已解析完成（解析过程中未发现异常）"
+            # 使用默认根窗口（已经在主程序里创建），不再自己 new Tk()
+            messagebox.showinfo(title, msg)
+
+        # 根据是否要求在主线程弹框决定调用方式
+        if self._use_main_thread_dialog:
+            root = tk._default_root   # 这是 Tkinter 自动缓存的唯一根窗口
+            if root is None:
+                # 仍然找不到根窗口时，退回直接弹框（不推荐但防止崩溃）
+                _show_dialog()
+            else:
+                # 通过 after 把弹框任务放到根窗口的事件循环里执行
+                root.after(0, _show_dialog)
+        else:
+            tmp_root = tk.Tk()
+            _show_dialog()
+            tmp_root.destroy()
 
     def _load_json_data(self) -> Optional[List[Dict[str, Any]]]:
         """
