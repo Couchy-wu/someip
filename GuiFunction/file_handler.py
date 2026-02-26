@@ -92,7 +92,6 @@ def refresh_json_file(uploaded_file=None):
     target_folder = os.path.join(os.getcwd(), "TestcaseCollection")
     json_file = os.path.join(target_folder, "test_cases.json")
     file_list = []
-
     # 扫描目录下所有 Excel 文件，更新 test_cases.json
     for file in os.listdir(target_folder):
         if file.lower().endswith(('.xls', '.xlsx')):
@@ -107,11 +106,45 @@ def refresh_json_file(uploaded_file=None):
             # 读取 Excel 数据
             df = pd.read_excel(excel_path, header=0)
             df = df.reset_index(drop=True)
+
+            # 检查每个测试用例块的 “用例编号”
+            # ① 用例编号位于每块第一行的第一列
+            # ② 必须非空且在整个文件中唯一
+            case_ids = []
+            num_rows = len(df)
+            for i in range(0, num_rows, 4):                # 每 4 行为一个块
+                case_id = df.iloc[i, 0]                    # 块首行第 0 列
+                if pd.isnull(case_id) or str(case_id).strip() == "":
+                    messagebox.showwarning(
+                        "警告",
+                        "检测到用例编号存在异常，请检查是否每个用例均有用例编号且唯一。"
+                    )
+                    # 删除异常的 Excel 文件
+                    try:
+                        os.remove(excel_path)
+                        print("检测到用例编号存在异常，已删除对应表格文件")
+                    except Exception as rm_err:
+                        print(f"删除文件时出错: {rm_err}")
+                    return
+                case_ids.append(str(case_id).strip())
+            if len(set(case_ids)) != len(case_ids):        # 检测重复
+                messagebox.showwarning(
+                    "警告",
+                    "检测到用例编号存在异常，请检查是否每个用例均有用例编号且唯一。"
+                )
+                # 删除异常的 Excel 文件
+                try:
+                    os.remove(excel_path)
+                    print("检测到用例编号存在异常，已删除对应表格文件")
+                except Exception as rm_err:
+                    print(f"删除文件时出错: {rm_err}")
+                return
+
+            # 将 NaN 替换为 None，方便后面 JSON 序列化
             df = df.replace({np.nan: None})
 
             # 按每 4 行分组并构建结构化数据
             grouped_data = []
-            num_rows = len(df)
             for i in range(0, num_rows, 4):
                 group = df.iloc[i:i + 4].to_dict(orient='records')
                 group = _replace_nan(group)
@@ -155,6 +188,5 @@ def refresh_json_file(uploaded_file=None):
                 print(f"解析完成 → 日志已写入: {log_path}")
             except Exception as e:
                 print(f"解析测试用例时出错: {str(e)}")
-
         except Exception as e:
             print(f"处理文件 {uploaded_file} 时出错: {str(e)}")
