@@ -468,16 +468,38 @@ class ImageGeneratorApp:
             return
         # 记录路径并更新显示框
         self.current_testcase_path = file_path
-        self.current_case_var.set(filename)  # 更新显示框
-        # 记录当前测试用例文件路径，供后续生成输出文件名使用
-        self.current_testcase_path = file_path
+        self.current_case_var.set(filename)
+        # 先加载测试用例（但先不生成图像配置）
+        self.load_test_cases_from_json(file_path)
         # 尝试加载对应的 XX_ImageData.json 配置文件
         base_name = filename.replace("_data.json", "_ImageData.json")
         config_path = os.path.join(os.path.dirname(file_path), base_name)
-        # 先加载测试用例
-        self.load_test_cases_from_json(file_path)
-        self.generate_images_from_test_cases()  # 此时图像为空白状态
-        # 检查是否存在已保存的图像配置文件
+        # 预检查平台一致性，在生成图像列表之前进行
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    saved_data_raw = f.read().strip()
+                    if saved_data_raw:
+                        saved_data = json.loads(saved_data_raw)
+                        # 检查 platform 字段是否存在且与当前平台匹配
+                        if "platform" in saved_data:
+                            saved_platform = saved_data["platform"]
+                            if saved_platform != self.current_platform:
+                                messagebox.showerror(
+                                    "平台不匹配",
+                                    f"检测到 {base_name} 应属于 '{saved_platform}' 平台，\n"
+                                    f"但当前选择的是 '{self.current_platform}' 平台。\n\n"
+                                    "请检查是否平台选择有误！"
+                                )
+                                # 清空测试用例数据，不生成图像列表
+                                self.test_cases = []
+                                return  # 中断整个加载流程
+            except Exception as e:
+                # 如果配置文件检查失败，继续正常流程（兼容旧格式）
+                print(f"⚠️ 配置文件预检查失败: {e}")
+        # 只有在平台匹配或无配置文件时，才生成图像配置
+        self.generate_images_from_test_cases()
+        # 如果配置文件存在且平台匹配，执行恢复逻辑
         if os.path.exists(config_path):
             try:
                 with open(config_path, 'r', encoding='utf-8') as f:
@@ -680,8 +702,10 @@ class ImageGeneratorApp:
         all_configs = self.image_configs
         try:
             # 构建 JSON 内容
-            output_lines = ["{"]
-            image_entries = []
+            output_parts = []
+            # 添加平台信息（新添加的行）
+            output_parts.append(f'  "platform": "{self.current_platform}"')
+            # 添加图像条目
             for config in all_configs:
                 image_name = config["name"]
                 items = []
@@ -716,11 +740,10 @@ class ImageGeneratorApp:
                     items.append(item_str)
                 # 即使 items 为空，也保留该图像项（值为空数组）
                 image_entry = f'  "{image_name}": [\n    ' + ',\n    '.join(items) + '\n  ]'
-                image_entries.append(image_entry)
-            # 即使所有图像都为空，也写入 {}
-            if image_entries:
-                output_lines.append(',\n'.join(image_entries))
-            output_lines.append("}")
+                output_parts.append(image_entry)
+            # 合并所有部分
+            output_content = ',\n'.join(output_parts)
+            output_lines = ["{", output_content, "}"]
             # 写入文件（自动覆盖）
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write('\n'.join(output_lines))
