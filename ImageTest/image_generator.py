@@ -140,6 +140,7 @@ class ImageGeneratorApp:
             default_config = {
                 "name": "默认图像",
                 "icon_states": {},
+                "icon_values": {},      # 用于存放每个图标的“数值”
                 "preview": None
             }
             self.image_configs.append(default_config)
@@ -153,6 +154,7 @@ class ImageGeneratorApp:
                 new_config = {
                     "name": case_id,
                     "icon_states": {},  # 初始无图标
+                    "icon_values": {},
                     "preview": None
                 }
                 self.image_configs.append(new_config)
@@ -212,7 +214,7 @@ class ImageGeneratorApp:
         self.load_config_btn.pack(side="left", padx=(20, 0))
         # ========== 当前测试用例显示框（只读） ==========
         self.current_case_var = tk.StringVar()
-        self.current_case_var.set("待上传")  # 初始状态
+        self.current_case_var.set("待上传")          # 初始状态
         self.current_case_entry = tk.Entry(
             top_frame,
             textvariable=self.current_case_var,
@@ -236,10 +238,14 @@ class ImageGeneratorApp:
         # ========== 主内容区域 ==========
         content_frame = ttk.Frame(main_frame)
         content_frame.pack(fill="both", expand=True)
+        # 为左右两列设置权重（左 65%，右 35%），让它们按比例伸缩
+        content_frame.columnconfigure(0, weight=65)
+        content_frame.columnconfigure(1, weight=35)
+        content_frame.rowconfigure(0, weight=1)
         # ========== 左侧：图像列表、用例表格、预览 ==========
         left_panel = ttk.Frame(content_frame)
-        left_panel.pack(side="left", fill="both", expand=True, padx=(0, 10))
-        # 图像列表区域
+        left_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
+        # ---- 图像列表区域 ----
         image_list_frame = ttk.LabelFrame(left_panel, text="图像列表 (自动从测试用例生成)", padding="5")
         image_list_frame.pack(fill="x", pady=(0, 10))
         self.image_listbox = tk.Listbox(image_list_frame, height=5, font=("微软雅黑", 9), exportselection=False)
@@ -248,34 +254,32 @@ class ImageGeneratorApp:
         self.image_scrollbar.pack(side="right", fill="y")
         self.image_listbox.config(yscrollcommand=self.image_scrollbar.set)
         self.image_listbox.bind("<<ListboxSelect>>", self.on_image_selection_change)
-        # ---------- 测试用例详情表格 ----------
+        # ---- 测试用例详情表格 ----
         case_table_frame = ttk.LabelFrame(left_panel, text="测试用例详情", padding="5")
-        case_table_frame.pack(fill="x", expand=False, pady=(0, 10))  # expand=False 保持高度不拉伸
-        # 使用 ttk.Treeview 显示表格（列名取自 JSON 的键）
+        case_table_frame.pack(fill="x", expand=False, pady=(0, 10))
         self.case_tree = ttk.Treeview(case_table_frame, show="headings", height=4)
-        self.case_tree.pack(side="left", fill="x", expand=True)  # fill="x" 而非 "both"，避免高度拉伸
-        # 竖向滚动条
+        self.case_tree.pack(side="left", fill="x", expand=True)
         case_scroll_y = ttk.Scrollbar(case_table_frame, orient="vertical", command=self.case_tree.yview)
         case_scroll_y.pack(side="right", fill="y")
         self.case_tree.configure(yscrollcommand=case_scroll_y.set)
-        # -----------OSD 预览画布------------------
+        # ---- OSD 预览画布 ----
         self.canvas_frame = ttk.LabelFrame(left_panel, text="OSD 预览", padding="5")
         self.canvas_frame.pack(fill="both", expand=True)
         self.canvas = tk.Canvas(self.canvas_frame, width=800, height=480, bg="lightgray", relief="sunken")
         self.canvas.pack(expand=True, fill="both")
         # ========== 右侧：图标选择面板 ==========
-        self.icon_panel_frame = ttk.LabelFrame(content_frame, text="选择图标", padding="10", width=300)  # 添加width参数确保面板有固定宽度
-        self.icon_panel_frame.pack(side="right", fill="y", expand=False)  # 明确expand=False防止左侧挤压
-        self.icon_panel_frame.pack_propagate(False)
+        # 直接放在 content_frame 的右侧列，保持固定宽度
+        self.icon_panel_frame = ttk.LabelFrame(content_frame, text="选择图标", padding="10", width=300)
+        self.icon_panel_frame.grid(row=0, column=1, sticky="nsew")
+        self.icon_panel_frame.grid_propagate(False)                 # 防止内部控件撑宽
         self.icon_canvas = tk.Canvas(self.icon_panel_frame, width=250)
         self.icon_canvas.pack(side="left", fill="both", expand=True)
         self.icon_scrollbar = ttk.Scrollbar(self.icon_panel_frame, orient="vertical", command=self.icon_canvas.yview)
         self.icon_scrollbar.pack(side="right", fill="y")
         self.icon_canvas.configure(yscrollcommand=self.icon_scrollbar.set)
         self.icons_inner_frame = ttk.Frame(self.icon_canvas)
-        self.icon_canvas.create_window((0, 0), window=self.icons_inner_frame, anchor="nw", width=250)  # 添加width参数确保内部框架宽度
+        self.icon_canvas.create_window((0, 0), window=self.icons_inner_frame, anchor="nw", width=250)
         self.icons_inner_frame.bind("<Configure>", self.on_icon_frame_configure)
-        # 支持鼠标滚轮滚动
         self.icon_canvas.bind_all("<MouseWheel>", self.on_mousewheel)
     def populate_case_table(self, case_index: int):
         """把 JSON rows 渲染为表格，仅显示第1-5列和第7列，并按比例填充宽度"""
@@ -406,7 +410,7 @@ class ImageGeneratorApp:
             messagebox.showerror("错误", f"加载背景图失败：{e}")
             self.bg_image = Image.new("RGBA", (self.bg_width, self.bg_height), (0, 0, 0, 0))
     def load_icons_and_create_buttons(self):
-        """加载所有非背景图标，创建按钮和状态指示"""
+        """加载所有非背景图标，创建按钮、状态指示以及数值输入框"""
         for widget in self.icons_inner_frame.winfo_children():
             widget.destroy()
         icon_files = [fn for fn in self.config_data.keys() if fn != "background.png"]
@@ -424,6 +428,7 @@ class ImageGeneratorApp:
                 continue
             row_frame = ttk.Frame(self.icons_inner_frame)
             row_frame.pack(fill="x", pady=4)
+            # ---------- 图标按钮 ----------
             btn = tk.Button(
                 row_frame,
                 image=photo,
@@ -436,6 +441,7 @@ class ImageGeneratorApp:
             )
             btn.image = photo
             btn.filename = filename
+            # ---------- 状态指示块 ----------
             status_label = tk.Label(
                 row_frame,
                 width=3,
@@ -444,11 +450,33 @@ class ImageGeneratorApp:
                 relief="flat",
                 borderwidth=2
             )
+            # ---------- 数值输入框 ----------
+            value_entry = tk.Entry(
+                row_frame,
+                width=8,
+                font=("微软雅黑", 9),
+                justify="center"
+            )
+            value_entry.insert(0, "")
+            value_entry.config(state="disabled")
+            # 将 entry 与按钮关联，后面方便取到
+            btn.value_entry = value_entry
+            # 绑定图标点击事件（切换启用状态）
             btn.bind("<Button-1>", lambda e, f=filename, b=btn, s=status_label: 
                      self.on_icon_click(f, b, s))
-            Tooltip(status_label, self.get_status_tooltip_text(filename))
+            # 绑定数值变化事件，实时写入 image_configs
+            def on_value_change(ev, fn=filename, entry=value_entry):
+                if self.current_image_index < 0:
+                    return
+                val = entry.get().strip()
+                # 空字符串视为“未提供数值”，不写入或写入空串均可，这里统一存空串
+                self.image_configs[self.current_image_index]["icon_values"][fn] = val
+            value_entry.bind("<KeyRelease>", on_value_change)
+            # ---------- 布局 ----------
             btn.pack(side="left", padx=(0, 10))
             status_label.pack(side="left", padx=(0, 5))
+            value_entry.pack(side="left", padx=(0, 5))
+            Tooltip(status_label, self.get_status_tooltip_text(filename))
             self.update_status_label(filename, status_label)
     def get_status_tooltip_text(self, filename):
         """获取状态提示文字（用于工具提示）"""
@@ -483,7 +511,7 @@ class ImageGeneratorApp:
                 color = self.status_colors["enabled"] if state == "enabled" else self.status_colors[None]
         label.config(bg=color)
     def on_icon_click(self, filename, button, status_label):
-        """点击图标按钮：循环切换启用状态"""
+        """点击图标按钮：循环切换启用状态，并控制数值输入框"""
         if self.current_image_index < 0:
             messagebox.showwarning("警告", "请先创建或选择一个图像！")
             return
@@ -491,6 +519,7 @@ class ImageGeneratorApp:
         current_state = current_states.get(filename, None)
         config = self.config_data[filename]
         has_reuse = config.get("reuse", False)
+        # ---------- 状态切换 ----------
         if current_state is None:
             current_states[filename] = "main" if has_reuse else "enabled"
             button.config(relief="sunken")
@@ -505,6 +534,22 @@ class ImageGeneratorApp:
             if current_state == "enabled":
                 current_states.pop(filename, None)
                 button.config(relief="raised")
+        # ---------- 同步数值框 ----------
+        # button.value_entry 在 load_icons_and_create_buttons 中创建
+        entry = getattr(button, "value_entry", None)
+        if entry:
+            if current_states.get(filename) is None:   # 已被清除（不启用）
+                entry.delete(0, tk.END)
+                entry.config(state="disabled")
+                # 同时把之前可能保存的数值删掉
+                self.image_configs[self.current_image_index]["icon_values"].pop(filename, None)
+            else:                                      # 已启用
+                entry.config(state="normal")
+                # 若之前已经有保存的数值，回写到 entry
+                saved_val = self.image_configs[self.current_image_index]["icon_values"].get(filename, "")
+                entry.delete(0, tk.END)
+                entry.insert(0, saved_val)
+        # ---------- 其余 UI 同步 ----------
         self.update_status_label(filename, status_label)
         self.update_listbox_item_color(self.current_image_index)
         Tooltip(status_label, self.get_status_tooltip_text(filename))
@@ -570,56 +615,70 @@ class ImageGeneratorApp:
                 print(f"⚠️ 配置文件预检查失败: {e}")
         # 只有在平台匹配或无配置文件时，才生成图像配置
         self.generate_images_from_test_cases()
-        # 如果配置文件存在且平台匹配，执行恢复逻辑
+        # ---------- 恢复已保存的图标状态 ----------
         if os.path.exists(config_path):
             try:
                 with open(config_path, 'r', encoding='utf-8') as f:
                     saved_data = json.load(f)
                 print(f"✅ 检测到配置文件，正在恢复图像状态：{base_name}")
-                # 遍历每个图像配置，尝试恢复
-                for config in self.image_configs:
-                    image_name = config["name"]
+                # 遍历每个图像配置，恢复所有图标（而不是仅恢复当前索引的图标）
+                for img_idx, img_cfg in enumerate(self.image_configs):
+                    image_name = img_cfg["name"]
                     if image_name not in saved_data:
                         continue  # 该图像无保存记录
-                    items = saved_data[image_name]
+                    items = saved_data[image_name]  # 该图像的所有图标项列表
                     for item in items:
                         icon_name = item.get("name")
                         top_left = item.get("top_left", [])
                         if not icon_name or len(top_left) < 2:
                             continue
-                        # 查找匹配的图标文件（通过 name 或 reuse_name）
                         matched = False
                         for filename, data in self.config_data.items():
                             if filename == "background.png":
                                 continue
-                            # 主位置匹配
+                            # 仅匹配后退出当前 filename 循环，继续遍历后续 item
+                            # -------- 主位置匹配 ----------
                             if data.get("name") == icon_name:
-                                if abs(top_left[0] - data["left"]) < 5 and abs(top_left[1] - data["top"]) < 5:
-                                    config["icon_states"][filename] = "main" if data.get("reuse", False) else "enabled"
+                                if (abs(top_left[0] - data["left"]) < 5 and
+                                    abs(top_left[1] - data["top"]) < 5):
+                                    img_cfg["icon_states"][filename] = (
+                                        "main" if data.get("reuse", False) else "enabled"
+                                    )
                                     matched = True
-                                    break
-                            # 复用位置匹配
+                                    break  # 结束对该 filename 的检查，进入下一个 item
+                            # -------- 复用位置匹配 ----------
                             elif data.get("reuse", False) and data.get("reuse_name") == icon_name:
-                                if abs(top_left[0] - data["reuse_left"]) < 5 and abs(top_left[1] - data["reuse_top"]) < 5:
-                                    config["icon_states"][filename] = "reuse"
+                                if (abs(top_left[0] - data["reuse_left"]) < 5 and
+                                    abs(top_left[1] - data["reuse_top"]) < 5):
+                                    img_cfg["icon_states"][filename] = "reuse"
                                     matched = True
                                     break
                         if not matched:
                             print(f"⚠️ 无法匹配图标: {icon_name} @ {top_left}")
+                        # 若配置里携带数值，则同步到 icon_values
+                        if "value" in item and item["value"] != "":
+                            img_cfg["icon_values"][filename] = str(item["value"])
                 # 恢复完成后刷新 UI
                 self.refresh_icon_buttons()
                 self.redraw_preview()
-                # 加载完毕后，若已有图像配置则直接显示对应的用例表格
-                if self.image_configs:
-                    # 当前索引若已设置则使用，否则默认 0
-                    idx = self.current_image_index if self.current_image_index >= 0 else 0
-                    self.populate_case_table(idx)
-                # 恢复图像配置
+                # 更新列表项的颜色（有/无图标）
                 for idx in range(len(self.image_configs)):
                     self.update_listbox_item_color(idx)
-                messagebox.showinfo("恢复成功", f"已从 {base_name} 恢复图像配置！\n共恢复 {len(self.image_configs)} 个图像的状态。")
+                # 选中第一张图像（或保持之前的选中），并展示对应的用例表格
+                if self.image_configs:
+                    self.current_image_index = 0
+                    self.image_listbox.selection_clear(0, tk.END)
+                    self.image_listbox.selection_set(0)
+                    self.populate_case_table(0)
+                messagebox.showinfo(
+                    "恢复成功",
+                    f"已从 {base_name} 恢复图像配置！\n共恢复 {len(self.image_configs)} 个图像的状态。"
+                )
             except Exception as e:
-                messagebox.showwarning("警告", f"加载配置文件失败，将使用空白配置：\n{e}")
+                messagebox.showwarning(
+                    "警告",
+                    f"加载配置文件失败，将使用空白配置：\n{e}"
+                )
                 print(f"❌ 恢复配置失败: {e}")
         # 最终刷新 UI
         self.refresh_icon_buttons()
@@ -644,19 +703,30 @@ class ImageGeneratorApp:
         self.redraw_preview()
         self.populate_case_table(new_index)
     def refresh_icon_buttons(self):
-        """刷新所有图标按钮的显示状态（根据当前图像配置）"""
+        """刷新所有图标按钮的显示状态（根据当前图像配置），并同步数值输入框"""
         if self.current_image_index < 0:
             return
         current_states = self.image_configs[self.current_image_index]["icon_states"]
+        current_values = self.image_configs[self.current_image_index]["icon_values"]
         for row_frame in self.icons_inner_frame.winfo_children():
             children = row_frame.winfo_children()
-            if len(children) >= 2:
+            if len(children) >= 3:                     # btn, status_label, entry
                 btn = children[0]
                 status_label = children[1]
+                entry = children[2]
                 if isinstance(btn, tk.Button) and hasattr(btn, 'filename'):
                     filename = btn.filename
                     state = current_states.get(filename)
                     btn.config(relief="sunken" if state else "raised")
+                    # ----- 数值框状态 -----
+                    if state:
+                        entry.config(state="normal")
+                        entry.delete(0, tk.END)
+                        entry.insert(0, current_values.get(filename, ""))
+                    else:
+                        entry.delete(0, tk.END)
+                        entry.config(state="disabled")
+                    # ----- 状态指示块 -----
                     self.update_status_label(filename, status_label)
                     Tooltip(status_label, self.get_status_tooltip_text(filename))
     def clear_current_selection(self):
@@ -760,33 +830,30 @@ class ImageGeneratorApp:
         直接输出到 TestcaseCollection 目录，文件名格式为 XX_ImageData.json
         如果文件已存在，则直接覆盖更新
         """
-        # 检查是否已加载测试用例
+        # ---------- 检查 ----------
         if not self.test_cases:
             messagebox.showwarning("警告", "尚未加载任何测试用例文件，无法生成配置文件！")
             return
-        # 检查是否已记录原始路径
         if not hasattr(self, 'current_testcase_path') or not self.current_testcase_path:
             messagebox.showwarning("警告", "无法确定原始测试用例文件路径，无法生成配置文件！")
             return
         input_path = self.current_testcase_path
         input_filename = os.path.basename(input_path)
-        # 检查是否是 *_data.json 格式
         if not input_filename.endswith("_data.json"):
             messagebox.showwarning("警告", "当前加载的文件不符合 *_data.json 格式，无法生成输出文件名！")
             return
-        # 生成输出文件名：XX_data.json → XX_ImageData.json
         base_name = input_filename.replace("_data.json", "_ImageData.json")
         output_path = os.path.join(os.path.dirname(input_path), base_name)
-        all_configs = self.image_configs
+        # ---------- 构造 JSON ----------
         try:
-            # 构建 JSON 内容
             output_parts = []
-            # 添加平台信息（新添加的行）
+            # 平台信息
             output_parts.append(f'  "platform": "{self.current_platform}"')
-            # 添加图像条目
-            for config in all_configs:
+            for config in self.image_configs:
                 image_name = config["name"]
                 items = []
+                # 读取该图像对应的数值字典（若不存在则为空 dict）
+                values_dict = config.get("icon_values", {})
                 for filename, state in config["icon_states"].items():
                     if filename not in self.config_data:
                         continue
@@ -814,15 +881,16 @@ class ImageGeneratorApp:
                         "top_left": [pos_x, pos_y],
                         "bottom_right": [pos_x + width, pos_y + height]
                     }
-                    item_str = json.dumps(item, ensure_ascii=False, separators=(',', ':'))
-                    items.append(item_str)
-                # 即使 items 为空，也保留该图像项（值为空数组）
+                    # 如果该图标有数值且非空，则写入 "value"
+                    val = values_dict.get(filename, "")
+                    if val:                                   # 仅在有实际数值时写入
+                        item["value"] = val
+                    items.append(json.dumps(item, ensure_ascii=False, separators=(',', ':')))
                 image_entry = f'  "{image_name}": [\n    ' + ',\n    '.join(items) + '\n  ]'
                 output_parts.append(image_entry)
-            # 合并所有部分
+            # ---------- 合并并写文件 ----------
             output_content = ',\n'.join(output_parts)
             output_lines = ["{", output_content, "}"]
-            # 写入文件（自动覆盖）
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write('\n'.join(output_lines))
             action = "更新" if os.path.exists(output_path) else "生成"
