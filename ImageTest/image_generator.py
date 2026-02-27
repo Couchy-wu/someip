@@ -486,8 +486,11 @@ class ImageGeneratorApp:
                 if self.current_image_index < 0:
                     return
                 val = entry.get().strip()
-                # 空字符串视为“未提供数值”，不写入或写入空串均可，这里统一存空串
-                self.image_configs[self.current_image_index]["icon_values"][fn] = val
+                # 如果值为空，则从icon_values中删除该键
+                if not val:
+                    self.image_configs[self.current_image_index]["icon_values"].pop(fn, None)
+                else:
+                    self.image_configs[self.current_image_index]["icon_values"][fn] = val
             value_entry.bind("<KeyRelease>", on_value_change)
             # ---------- 布局 ----------
             btn.pack(side="left", padx=(0, 10))
@@ -678,7 +681,7 @@ class ImageGeneratorApp:
                             print(f"⚠️ 无法匹配图标: {icon_name} @ {top_left}")
                         # 若配置里携带数值，则同步到 icon_values
                         if "value" in item and item["value"] != "":
-                            img_cfg["icon_values"][filename] = str(item["value"])
+                            img_cfg["icon_values"][filename] = item["value"]
                 # 恢复完成后刷新 UI
                 self.refresh_icon_buttons()
                 self.redraw_preview()
@@ -911,9 +914,19 @@ class ImageGeneratorApp:
                         "bottom_right": [pos_x + width, pos_y + height]
                     }
                     # 如果该图标有数值且非空，则写入 "value"
-                    val = values_dict.get(filename, "")
-                    if val:                                   # 仅在有实际数值时写入
-                        item["value"] = val
+                    val = values_dict.get(filename)
+                    # 非空检查，避免生成空value字段
+                    if val is not None and str(val).strip() != "":
+                        # 尝试转换为数值类型（int或float）
+                        try:
+                            # 先尝试转为int
+                            if '.' in str(val):
+                                item["value"] = float(val)
+                            else:
+                                item["value"] = int(val)
+                        except ValueError:
+                            # 转换失败则保持原字符串
+                            item["value"] = val
                     items.append(json.dumps(item, ensure_ascii=False, separators=(',', ':')))
                 image_entry = f'  "{image_name}": [\n    ' + ',\n    '.join(items) + '\n  ]'
                 output_parts.append(image_entry)
