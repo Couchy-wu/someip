@@ -148,7 +148,8 @@ class ImageGeneratorApp:
         else:
             # 为每个测试用例创建一个图像配置项
             for i, test_case in enumerate(self.test_cases):
-                case_id = test_case.get("test_case_id", f"TC_{i+1}")
+                # 直接取第一行的 "*用例编号" 作为图像名称（理论上用例编号必定存在且唯一，已通过其他手段限制了，这里不再进行检查）
+                case_id = test_case["rows"][0]["*用例编号"]
                 new_config = {
                     "name": case_id,
                     "icon_states": {},  # 初始无图标
