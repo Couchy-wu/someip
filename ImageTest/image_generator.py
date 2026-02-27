@@ -5,17 +5,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from PIL import Image, ImageTk
 from datetime import datetime
-# ========================================
-# 项目路径定义
-# ========================================
-# 获取项目根目录（ImageTest 的上一级）
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# 图标资源目录：Resources/ImageUI/{platform}/
-RESOURCES_DIR = os.path.join(PROJECT_ROOT, "Resources", "ImageUI")
-# UI 配置文件目录：ImageTest/UI_Config/
-CONFIG_DIR = os.path.join(PROJECT_ROOT, "ImageTest", "UI_Config")
-# 测试用例目录：ImageTest/TestcaseCollection/
-TESTCASE_DIR = os.path.join(PROJECT_ROOT, "TestcaseCollection")
+
+# 图像生成器，输出XX_ImageData.json
 
 class Tooltip:
     """工具提示类：为任意 Tkinter 控件添加鼠标悬停提示"""
@@ -62,11 +53,27 @@ class ImageGeneratorApp:
     - 预览合成图像
     - 批量导出图像与配置文件
     """
-    def __init__(self, root, json_file_path=None):
+    def __init__(self, root, json_file_path=None, project_root=None):
         self.root = root
         self.root.title("OSD 图像生成器")
         self.root.geometry("1400x700")
         self.root.minsize(1000, 600)
+        
+        # ========== 路径配置 =========
+        # 初始化路径配置
+        if project_root is None:
+            # 默认使用原逻辑获取项目根目录
+            self.project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        else:
+            self.project_root = project_root  # 允许外部传入自定义路径
+        
+        # 图标资源目录：Resources/ImageUI/{platform}/
+        self.resources_dir = os.path.join(self.project_root, "Resources", "ImageUI")
+        # UI 配置文件目录：ImageTest/UI_Config/
+        self.config_dir = os.path.join(self.project_root, "ImageTest", "UI_Config")
+        # 测试用例目录：ImageTest/TestcaseCollection/
+        self.testcase_dir = os.path.join(self.project_root, "TestcaseCollection")
+        
         # ========== 当前平台相关 ==========
         self.current_platform = ""          # 当前选择的平台名称（如：A5）
         self.current_platform_dir = ""      # 当前平台资源目录路径
@@ -107,6 +114,7 @@ class ImageGeneratorApp:
         if json_file_path and os.path.exists(json_file_path):
             self.load_test_cases_from_json(json_file_path)
             self.generate_images_from_test_cases()
+    
     def load_test_cases_from_json(self, json_file_path):
         """
         从指定 JSON 文件加载测试用例数据
@@ -128,6 +136,7 @@ class ImageGeneratorApp:
         except Exception as e:
             messagebox.showerror("错误", f"加载测试用例文件失败：\n{e}")
             self.test_cases = []
+    
     def generate_images_from_test_cases(self):
         """
         根据当前加载的测试用例，自动生成图像配置
@@ -169,18 +178,20 @@ class ImageGeneratorApp:
             self.refresh_icon_buttons()
             self.redraw_preview()
             self.populate_case_table(0)
+    
     def get_platforms(self):
         """
         获取 Resources/ImageUI 下的所有子文件夹名称（即平台名）
         返回排序后的列表
         """
-        if not os.path.exists(RESOURCES_DIR):
+        if not os.path.exists(self.resources_dir):
             return []
         folders = [
-            f for f in os.listdir(RESOURCES_DIR)
-            if os.path.isdir(os.path.join(RESOURCES_DIR, f))
+            f for f in os.listdir(self.resources_dir)
+            if os.path.isdir(os.path.join(self.resources_dir, f))
         ]
         return sorted(folders)
+    
     def setup_gui(self):
         """
         构建主图形用户界面
@@ -281,6 +292,7 @@ class ImageGeneratorApp:
         self.icon_canvas.create_window((0, 0), window=self.icons_inner_frame, anchor="nw", width=250)
         self.icons_inner_frame.bind("<Configure>", self.on_icon_frame_configure)
         self.icon_canvas.bind_all("<MouseWheel>", self.on_mousewheel)
+    
     def populate_case_table(self, case_index: int):
         """把 JSON rows 渲染为表格，仅显示第1-5列和第7列，并按比例填充宽度"""
         # 清空旧数据
@@ -338,12 +350,14 @@ class ImageGeneratorApp:
         self.case_tree.update_idletasks()
         for idx, k in enumerate(filtered_keys):
             self.case_tree.column(k, width=col_widths[idx], stretch=True)
+    
     def on_icon_frame_configure(self, event):
         """当图标面板内容变化时，更新滚动区域"""
         self.icon_canvas.configure(scrollregion=self.icon_canvas.bbox("all"))
     def on_mousewheel(self, event):
         """处理鼠标滚轮事件，实现垂直滚动"""
         self.icon_canvas.yview_scroll(-1 * (event.delta // 120), "units")
+    
     def on_platform_change(self, event):
         """平台切换事件：加载新平台并重新生成图像配置"""
         new_platform = self.platform_var.get()
@@ -362,10 +376,11 @@ class ImageGeneratorApp:
         # 清空预览画布
         self.canvas.delete("all")
         self.canvas.config(bg="lightgray")
+    
     def load_platform(self, platform):
         """加载指定平台的配置和资源"""
-        self.current_platform_dir = os.path.join(RESOURCES_DIR, platform)
-        self.config_file = os.path.join(CONFIG_DIR, f"ui_config_{platform}.json")
+        self.current_platform_dir = os.path.join(self.resources_dir, platform)
+        self.config_file = os.path.join(self.config_dir, f"ui_config_{platform}.json")
         if not os.path.exists(self.config_file):
             messagebox.showerror("错误", f"未找到配置文件：\n{self.config_file}")
             return
@@ -383,6 +398,7 @@ class ImageGeneratorApp:
             return
         self.load_background()
         self.load_icons_and_create_buttons()
+    
     def load_background(self):
         """加载背景图并设置画布尺寸"""
         bg_filename = "background.png"
@@ -409,6 +425,7 @@ class ImageGeneratorApp:
         except Exception as e:
             messagebox.showerror("错误", f"加载背景图失败：{e}")
             self.bg_image = Image.new("RGBA", (self.bg_width, self.bg_height), (0, 0, 0, 0))
+    
     def load_icons_and_create_buttons(self):
         """加载所有非背景图标，创建按钮、状态指示以及数值输入框"""
         for widget in self.icons_inner_frame.winfo_children():
@@ -478,6 +495,7 @@ class ImageGeneratorApp:
             value_entry.pack(side="left", padx=(0, 5))
             Tooltip(status_label, self.get_status_tooltip_text(filename))
             self.update_status_label(filename, status_label)
+    
     def get_status_tooltip_text(self, filename):
         """获取状态提示文字（用于工具提示）"""
         # 添加越界检查（修复错误关键）
@@ -493,6 +511,7 @@ class ImageGeneratorApp:
             return "启用位置1" if state == "main" else "启用位置2"
         else:
             return "启用"
+    
     def update_status_label(self, filename, label):
         """更新状态指示色块的颜色"""
         # 添加越界检查（修复错误关键）
@@ -510,6 +529,7 @@ class ImageGeneratorApp:
             else:
                 color = self.status_colors["enabled"] if state == "enabled" else self.status_colors[None]
         label.config(bg=color)
+    
     def on_icon_click(self, filename, button, status_label):
         """点击图标按钮：循环切换启用状态，并控制数值输入框"""
         if self.current_image_index < 0:
@@ -554,6 +574,7 @@ class ImageGeneratorApp:
         self.update_listbox_item_color(self.current_image_index)
         Tooltip(status_label, self.get_status_tooltip_text(filename))
         self.redraw_preview()
+    
     def load_testcase_file(self):
         """
         【核心功能】加载测试用例文件
@@ -565,13 +586,13 @@ class ImageGeneratorApp:
           5. 刷新 UI 显示
         """
         # 检查测试用例目录是否存在
-        if not os.path.exists(TESTCASE_DIR):
-            messagebox.showerror("错误", f"测试用例目录不存在：\n{TESTCASE_DIR}")
+        if not os.path.exists(self.testcase_dir):
+            messagebox.showerror("错误", f"测试用例目录不存在：\n{self.testcase_dir}")
             return
         # 打开文件选择对话框
         file_path = filedialog.askopenfilename(
             title="选择测试用例文件",
-            initialdir=TESTCASE_DIR,
+            initialdir=self.testcase_dir,
             filetypes=[("测试用例文件 (*_data.json)", "*_data.json"), ("JSON 文件", "*.json")],
             parent=self.root
         )
@@ -683,6 +704,7 @@ class ImageGeneratorApp:
         # 最终刷新 UI
         self.refresh_icon_buttons()
         self.redraw_preview()
+    
     def update_listbox_item_color(self, idx):
         """根据图像是否启用了图标，设置列表项文字颜色（无图标为红色）"""
         if idx < 0 or idx >= len(self.image_configs):
@@ -690,6 +712,7 @@ class ImageGeneratorApp:
         has_icons = bool(self.image_configs[idx]["icon_states"])
         fg_color = "red" if not has_icons else "black"
         self.image_listbox.itemconfig(idx, {"fg": fg_color, "selectforeground": fg_color})
+    
     def on_image_selection_change(self, event):
         """图像列表选择变化事件"""
         selection = self.image_listbox.curselection()
@@ -702,6 +725,7 @@ class ImageGeneratorApp:
         self.refresh_icon_buttons()
         self.redraw_preview()
         self.populate_case_table(new_index)
+    
     def refresh_icon_buttons(self):
         """刷新所有图标按钮的显示状态（根据当前图像配置），并同步数值输入框"""
         if self.current_image_index < 0:
@@ -729,6 +753,7 @@ class ImageGeneratorApp:
                     # ----- 状态指示块 -----
                     self.update_status_label(filename, status_label)
                     Tooltip(status_label, self.get_status_tooltip_text(filename))
+    
     def clear_current_selection(self):
         """清除当前图像的所有图标选择"""
         if self.current_image_index < 0:
@@ -745,6 +770,7 @@ class ImageGeneratorApp:
                     status_label.config(bg=self.status_colors[None])
         self.redraw_preview()
         self.update_listbox_item_color(self.current_image_index)
+    
     def redraw_preview(self):
         """重新绘制预览图像：背景 + 已选图标（支持主/复用位置）"""
         if self.bg_image is None or self.current_image_index < 0:
@@ -775,6 +801,7 @@ class ImageGeneratorApp:
         self.image_configs[self.current_image_index]["preview"] = preview_img
         self.canvas.create_image(0, 0, image=preview_img, anchor="nw")
         self.canvas.image = preview_img
+    
     def save_single_image(self):
         """保存当前选中的单张图像"""
         if self.current_image_index < 0:
@@ -799,6 +826,7 @@ class ImageGeneratorApp:
             messagebox.showinfo("成功", f"图像已保存：\n{file_path}")
         except Exception as e:
             messagebox.showerror("错误", f"保存失败：{e}")
+    
     def _compose_image(self, icon_states):
         """合成最终图像（用于保存）"""
         if self.bg_image is None:
@@ -824,6 +852,7 @@ class ImageGeneratorApp:
             except Exception as e:
                 print(f"绘制失败: {filename}, {e}")
         return composite_img
+    
     def generate_unified_config_file(self):
         """
         生成或更新统一配置文件（JSON 格式）
@@ -898,6 +927,7 @@ class ImageGeneratorApp:
             messagebox.showinfo("成功", f"配置文件已{action}：\n{base_name}\n路径：{os.path.dirname(output_path)}")
         except Exception as e:
             messagebox.showerror("错误", f"生成配置文件失败：\n{e}")
+    
     def batch_export_images(self):
         """批量导出所有启用了图标的图像"""
         if not self.image_configs:
@@ -936,5 +966,5 @@ class ImageGeneratorApp:
 # ============ 启动 ============
 if __name__ == "__main__":
     root = tk.Tk()
-    app = ImageGeneratorApp(root)
+    app = ImageGeneratorApp(root)  # 可传入自定义 project_root 参数，如：project_root="/path/to/your/project"
     root.mainloop()
