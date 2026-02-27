@@ -237,9 +237,8 @@ class ImageGeneratorApp:
         content_frame = ttk.Frame(main_frame)
         content_frame.pack(fill="both", expand=True)
         # ========== 左侧：图像列表、用例表格、预览 ==========
-        left_panel = ttk.Frame(content_frame, width=950)   # 固定左侧整体宽度
+        left_panel = ttk.Frame(content_frame)
         left_panel.pack(side="left", fill="both", expand=True, padx=(0, 10))
-        left_panel.pack_propagate(False)                  # 防止内部 widget 拉伸导致右侧被挤出
         # 图像列表区域
         image_list_frame = ttk.LabelFrame(left_panel, text="图像列表 (自动从测试用例生成)", padding="5")
         image_list_frame.pack(fill="x", pady=(0, 10))
@@ -251,10 +250,10 @@ class ImageGeneratorApp:
         self.image_listbox.bind("<<ListboxSelect>>", self.on_image_selection_change)
         # ---------- 测试用例详情表格 ----------
         case_table_frame = ttk.LabelFrame(left_panel, text="测试用例详情", padding="5")
-        case_table_frame.pack(fill="x", expand=False, pady=(0, 10))
+        case_table_frame.pack(fill="x", expand=False, pady=(0, 10))  # expand=False 保持高度不拉伸
         # 使用 ttk.Treeview 显示表格（列名取自 JSON 的键）
         self.case_tree = ttk.Treeview(case_table_frame, show="headings", height=4)
-        self.case_tree.pack(side="left", fill="both", expand=False)
+        self.case_tree.pack(side="left", fill="x", expand=True)  # fill="x" 而非 "both"，避免高度拉伸
         # 竖向滚动条
         case_scroll_y = ttk.Scrollbar(case_table_frame, orient="vertical", command=self.case_tree.yview)
         case_scroll_y.pack(side="right", fill="y")
@@ -306,14 +305,15 @@ class ImageGeneratorApp:
                 filtered_keys.append(all_keys[i])
         # 设置表格列
         self.case_tree["columns"] = filtered_keys
-        # 计算列宽
-        # 动态获取Treeview父容器的实际宽度
-        self.case_tree.update_idletasks()
-        scrollbar_width = 20  # 预留滚动条宽度
-        padding = 10  # 预留边距
-        parent_width = self.case_tree.master.winfo_width()
-        available_width = parent_width - scrollbar_width - padding
-        width_ratio = [3,3,3,2,10,10]  # 每列的宽度比例
+        # 动态计算可用宽度，确保响应式
+        self.case_tree.update_idletasks()  # 确保几何信息最新
+        parent_width = self.case_tree.winfo_width()
+        if parent_width <= 1:
+            parent_width = 800  # 合理默认值
+        scrollbar_width = 20
+        padding = 10
+        available_width = max(300, parent_width - scrollbar_width - padding)
+        width_ratio = [3, 3, 3, 2, 10, 10]
         col_widths = [
             int(available_width * width_ratio[0] / sum(width_ratio)),   # 第1列
             int(available_width * width_ratio[1] / sum(width_ratio)),   # 第2列
