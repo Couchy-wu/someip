@@ -166,6 +166,7 @@ class ImageGeneratorApp:
             self.image_listbox.see(0)
             self.refresh_icon_buttons()
             self.redraw_preview()
+            self.populate_case_table(0)
     def get_platforms(self):
         """
         获取 Resources/ImageUI 下的所有子文件夹名称（即平台名）
@@ -187,6 +188,7 @@ class ImageGeneratorApp:
           - 图像列表
           - 预览画布
           - 图标选择面板
+          - 测试用例表格
         """
         main_frame = ttk.Frame(self.root)
         main_frame.pack(fill="both", expand=True, padx=10, pady=10)
@@ -234,9 +236,10 @@ class ImageGeneratorApp:
         # ========== 主内容区域 ==========
         content_frame = ttk.Frame(main_frame)
         content_frame.pack(fill="both", expand=True)
-        # ========== 左侧：图像列表 + 预览 ==========
-        left_panel = ttk.Frame(content_frame)
+        # ========== 左侧：图像列表、用例表格、预览 ==========
+        left_panel = ttk.Frame(content_frame, width=950)   # 固定左侧整体宽度
         left_panel.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        left_panel.pack_propagate(False)                  # 防止内部 widget 拉伸导致右侧被挤出
         # 图像列表区域
         image_list_frame = ttk.LabelFrame(left_panel, text="图像列表 (自动从测试用例生成)", padding="5")
         image_list_frame.pack(fill="x", pady=(0, 10))
@@ -246,24 +249,91 @@ class ImageGeneratorApp:
         self.image_scrollbar.pack(side="right", fill="y")
         self.image_listbox.config(yscrollcommand=self.image_scrollbar.set)
         self.image_listbox.bind("<<ListboxSelect>>", self.on_image_selection_change)
-        # 预览画布
+        # ---------- 测试用例详情表格 ----------
+        case_table_frame = ttk.LabelFrame(left_panel, text="测试用例详情", padding="5")
+        case_table_frame.pack(fill="x", expand=False, pady=(0, 10))
+        # 使用 ttk.Treeview 显示表格（列名取自 JSON 的键）
+        self.case_tree = ttk.Treeview(case_table_frame, show="headings", height=4)
+        self.case_tree.pack(side="left", fill="both", expand=False)
+        # 竖向滚动条
+        case_scroll_y = ttk.Scrollbar(case_table_frame, orient="vertical", command=self.case_tree.yview)
+        case_scroll_y.pack(side="right", fill="y")
+        self.case_tree.configure(yscrollcommand=case_scroll_y.set)
+        # -----------OSD 预览画布------------------
         self.canvas_frame = ttk.LabelFrame(left_panel, text="OSD 预览", padding="5")
         self.canvas_frame.pack(fill="both", expand=True)
         self.canvas = tk.Canvas(self.canvas_frame, width=800, height=480, bg="lightgray", relief="sunken")
         self.canvas.pack(expand=True, fill="both")
         # ========== 右侧：图标选择面板 ==========
-        self.icon_panel_frame = ttk.LabelFrame(content_frame, text="选择图标", padding="10")
-        self.icon_panel_frame.pack(side="right", fill="y")
+        self.icon_panel_frame = ttk.LabelFrame(content_frame, text="选择图标", padding="10", width=300)  # 添加width参数确保面板有固定宽度
+        self.icon_panel_frame.pack(side="right", fill="y", expand=False)  # 明确expand=False防止左侧挤压
+        self.icon_panel_frame.pack_propagate(False)
         self.icon_canvas = tk.Canvas(self.icon_panel_frame, width=250)
-        self.icon_canvas.pack(side="left", fill="y", expand=True)
+        self.icon_canvas.pack(side="left", fill="both", expand=True)
         self.icon_scrollbar = ttk.Scrollbar(self.icon_panel_frame, orient="vertical", command=self.icon_canvas.yview)
         self.icon_scrollbar.pack(side="right", fill="y")
         self.icon_canvas.configure(yscrollcommand=self.icon_scrollbar.set)
         self.icons_inner_frame = ttk.Frame(self.icon_canvas)
-        self.icon_canvas.create_window((0, 0), window=self.icons_inner_frame, anchor="nw")
+        self.icon_canvas.create_window((0, 0), window=self.icons_inner_frame, anchor="nw", width=250)  # 添加width参数确保内部框架宽度
         self.icons_inner_frame.bind("<Configure>", self.on_icon_frame_configure)
         # 支持鼠标滚轮滚动
         self.icon_canvas.bind_all("<MouseWheel>", self.on_mousewheel)
+    def populate_case_table(self, case_index: int):
+        """把 JSON rows 渲染为表格，仅显示第1-5列和第7列，并按比例填充宽度"""
+        # 清空旧数据
+        for col in self.case_tree["columns"]:
+            self.case_tree.heading(col, text="")
+        self.case_tree.delete(*self.case_tree.get_children())
+        # 防护：若没有加载用例直接返回
+        if not self.test_cases or case_index < 0 or case_index >= len(self.test_cases):
+            return
+        rows = self.test_cases[case_index].get("rows", [])
+        if not rows:
+            return
+        # 获取所有列名并确定要显示的列（第1-5列索引0-4，第7列索引6）
+        base_keys = list(rows[0].keys())
+        extra_keys = []
+        for r in rows[1:]:
+            for k in r.keys():
+                if k not in base_keys and k not in extra_keys:
+                    extra_keys.append(k)
+        all_keys = base_keys + extra_keys
+        # 选择要显示的列索引（0-based）
+        display_indices = [0, 1, 2, 3, 4, 6]
+        filtered_keys = []
+        for i in display_indices:
+            if i < len(all_keys):
+                filtered_keys.append(all_keys[i])
+        # 设置表格列
+        self.case_tree["columns"] = filtered_keys
+        # 计算列宽
+        # 动态获取Treeview父容器的实际宽度
+        self.case_tree.update_idletasks()
+        scrollbar_width = 20  # 预留滚动条宽度
+        padding = 10  # 预留边距
+        parent_width = self.case_tree.master.winfo_width()
+        available_width = parent_width - scrollbar_width - padding
+        width_ratio = [3,3,3,2,10,10]  # 每列的宽度比例
+        col_widths = [
+            int(available_width * width_ratio[0] / sum(width_ratio)),   # 第1列
+            int(available_width * width_ratio[1] / sum(width_ratio)),   # 第2列
+            int(available_width * width_ratio[2] / sum(width_ratio)),   # 第3列
+            int(available_width * width_ratio[3] / sum(width_ratio)),   # 第4列
+            int(available_width * width_ratio[4] / sum(width_ratio)),   # 第5列
+            int(available_width * width_ratio[5] / sum(width_ratio))    # 第7列
+        ]
+        # 配置列（设置stretch=True使列自动填充）
+        for idx, k in enumerate(filtered_keys):
+            self.case_tree.heading(k, text=k, anchor="w")
+            self.case_tree.column(k, width=col_widths[idx], anchor="w", stretch=True)
+        # 填充行数据（仅显示过滤后的列）
+        for r in rows:
+            values = [r.get(k, "") if r.get(k) is not None else "" for k in filtered_keys]
+            self.case_tree.insert("", "end", values=values)
+        # 强制更新Treeview并重新应用列宽（修复首次加载比例问题）
+        self.case_tree.update_idletasks()
+        for idx, k in enumerate(filtered_keys):
+            self.case_tree.column(k, width=col_widths[idx], stretch=True)
     def on_icon_frame_configure(self, event):
         """当图标面板内容变化时，更新滚动区域"""
         self.icon_canvas.configure(scrollregion=self.icon_canvas.bbox("all"))
@@ -539,6 +609,12 @@ class ImageGeneratorApp:
                 # 恢复完成后刷新 UI
                 self.refresh_icon_buttons()
                 self.redraw_preview()
+                # 加载完毕后，若已有图像配置则直接显示对应的用例表格
+                if self.image_configs:
+                    # 当前索引若已设置则使用，否则默认 0
+                    idx = self.current_image_index if self.current_image_index >= 0 else 0
+                    self.populate_case_table(idx)
+                # 恢复图像配置
                 for idx in range(len(self.image_configs)):
                     self.update_listbox_item_color(idx)
                 messagebox.showinfo("恢复成功", f"已从 {base_name} 恢复图像配置！\n共恢复 {len(self.image_configs)} 个图像的状态。")
@@ -566,6 +642,7 @@ class ImageGeneratorApp:
         self.current_image_index = new_index
         self.refresh_icon_buttons()
         self.redraw_preview()
+        self.populate_case_table(new_index)
     def refresh_icon_buttons(self):
         """刷新所有图标按钮的显示状态（根据当前图像配置）"""
         if self.current_image_index < 0:
