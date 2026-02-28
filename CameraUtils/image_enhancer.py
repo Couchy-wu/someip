@@ -44,7 +44,7 @@ class ImageEnhancer:
         self.output_dir   = Path("./output")       # 只保存 final_color.png
 
         # ---------- 其余处理 ----------
-        self.iterations   = 10                     # 自适应中位数阈值的最大迭代次数
+        self.iterations   = 20                     # 自适应中位数阈值的最大迭代次数
         self.guided_radius = 12                     # 导向滤波的局部窗口半径（越大越平滑）
         self.guided_eps    = 1e-3                  # 导向滤波的正则化项，控制平滑强度
         self.canny_low          = 50               # Canny 边缘检测的低阈值
@@ -169,41 +169,27 @@ class ImageEnhancer:
     def _adaptive_median_threshold(self, y: np.ndarray) -> Tuple[List[int], int]:
         """
         在可选的下采样图像上求取自适应中位数阈值序列。
-        返回 (thresholds, best_iter)。若 downscale == 1.0，则行为与原实现完全相同。
-        
-        参数说明
-        ----------
-        y : np.ndarray
-            输入灰度图，dtype 必须是 uint8（0‑255）。
-        max_iter : int
-            最大迭代次数（默认 ITERATIONS）。
-        stop_median : int
-            当中位数 > stop_median 时提前退出（默认 STOP_MEDIAN）。
-        downscale : float
-            缩放系数，<1 表示把宽高都乘以该系数（即像素数约为系数²）。
-            典型取值 0.5 → 总像素数约为原来的 1/4。
-        interp : int
-            已弃用，不再影响下采样方式。现在使用切片下采样，计算量最小。
+        返回 (thresholds, best_iter)。。
         """
         max_iter = self.iterations
-        stop_median = 200
-        downscale = 0.25
+        stop_median = 200   # 停止迭代的最大中位数阈值
+        downscale = 0.25    # 下采样参数
 
         # -------------------------------------------------
-        # 1️⃣ 使用切片进行快速下采样（无需插值，计算量最小）
+        # 1️⃣ 使用切片进行快速下采样
         # -------------------------------------------------
         if downscale < 1.0:
             step = max(1, int(round(1.0 / downscale)))
             y_small = y[::step, ::step]
         else:
-            y_small = y                     # 不下采样，直接使用原图
+            y_small = y
 
         # -------------------------------------------------
         # 2️⃣ 直方图一次性统计（固定 256 桶）
         # -------------------------------------------------
         hist = np.bincount(y_small.ravel(), minlength=256).astype(np.int64)
         total_pixels = y_small.size
-        thresholds: List[int] = []          # 每轮得到的阈值（中位数）
+        thresholds: List[int] = []
         cur_len = total_pixels
         iter_cnt = 0
 
@@ -211,36 +197,105 @@ class ImageEnhancer:
         # 3️⃣ 主循环：向量化累计 + 搜索中位数
         # -------------------------------------------------
         while cur_len > 0 and iter_cnt < max_iter:
-            # (cur_len-1)//2 = 0‑based 中位数索引（从大到小累计时的目标位置）
             target = (cur_len - 1) // 2
-            # 反向累计（大 → 小），一次性得到累计直方图
-            cum_hist = np.cumsum(hist[::-1])
-            # 第一个累计值 > target 的位置（右侧开区间）
+            cum_hist = np.cumsum(hist[::-1])  # 反向累计
             idx = np.searchsorted(cum_hist, target + 1, side='right')
-            median_val = 255 - idx            # 恢复到原灰度值
+            median_val = 255 - idx
             thresholds.append(int(median_val))
+            # print(f"[AdaptiveMedian] 迭代 {iter_cnt + 1:02d}: 中值 = {median_val}")
 
-            # 早停条件
             if median_val > stop_median:
                 break
-            
-            # 直接使用累计计数得到本轮保留的像素数
-            cur_len = int(cum_hist[idx])
-            
-            # 清零低位，防止下一轮再次计入
-            if median_val > 0:
-                hist[:median_val] = 0
+
+            if median_val >= 0:
+                hist[:median_val + 1] = 0
+            cur_len = int(hist.sum())
             iter_cnt += 1
 
-        # -------------------------------------------------
-        # 4️⃣ 选取最佳迭代次数（保持原逻辑）
-        # -------------------------------------------------
-        best_iter = 1
+        # 如果无迭代结果
+        N = len(thresholds)
+        if N == 0:
+            return [], 1
+
+        # 原始差值法（仅用于“无满足条件”时的回退）
+        original_best_iter = 1
         if len(thresholds) > 1:
             diffs = [abs(thresholds[i] - thresholds[i - 1]) for i in range(1, len(thresholds))]
-            min_diff_idx = int(np.argmin(diffs))
-            best_iter = min_diff_idx + 2   # +2 因为 diffs 索引比 thresholds 小 1，且取“后一次”
+        else:
+            diffs = []
 
+        if len(diffs) > 0:
+            min_diff_idx = int(np.argmin(diffs))
+            original_best_iter = min_diff_idx + 1  # 第 i+1 次迭代（1-based）
+        else:
+            original_best_iter = 1
+
+        # -------------------------------------------------
+        # 5️⃣ 检测第一个跳跃式突变：B - A > 80
+        # -------------------------------------------------
+        jump_index = None
+        for n in range(1, N):
+            if thresholds[n] - thresholds[n - 1] > 80:
+                jump_index = n  # 索引 n，对应第 n+1 次迭代
+                break
+
+        if jump_index is None:
+            best_iter = original_best_iter
+            # print(f"[AdaptiveMedian] 无跳跃突变，使用原始方法选定阈值 (第 {best_iter} 次迭代) = {thresholds[best_iter-1]}")
+            return thresholds, best_iter
+
+        A = thresholds[jump_index - 1]
+        lower_bound = A / 3
+
+        # 考察前 jump_index - 1 次迭代（第 1 到第 jump_index-1 次）
+        candidate_iters = []
+        for i in range(jump_index - 1):  # 索引 0 到 jump_index-2
+            if thresholds[i] >= lower_bound:
+                candidate_iters.append(i + 1)
+
+        default_included_iter = jump_index  # 第 jump_index 次迭代（1-based）默认保留
+
+        # -------------------------------------------------
+        # 6️⃣ 根据 candidate_iters 数量决定
+        # -------------------------------------------------
+        if len(candidate_iters) == 0:
+            best_iter = original_best_iter
+            # print(f"[AdaptiveMedian] 跳跃突变在第 {jump_index+1} 次，但前 {jump_index-1} 次无满足 median >= {lower_bound:.1f} 的迭代，回退原始方法")
+        elif len(candidate_iters) == 1:
+            best_iter = candidate_iters[0]
+            # print(f"[AdaptiveMedian] 前 {jump_index-1} 次中仅一个满足条件，直接选为最佳迭代: {best_iter}")
+        elif len(candidate_iters) == 2:
+            best_iter = max(candidate_iters)
+            # print(f"[AdaptiveMedian] 前 {jump_index-1} 次中有两个满足条件，取较大的: {best_iter}")
+        else:
+            # ≥3 个满足 → 在 candidate_iters + [default_included_iter] 中找 diffs 最小的相邻对
+            valid_iters_set = set(candidate_iters) | {default_included_iter}  # 合法迭代集合
+            best_iter = default_included_iter  # 默认 fallback
+
+            # 从后往前遍历 diffs，优先找后期平稳的
+            # diffs[i] 对应第 i+1 次和第 i 次迭代的差值（即连接 iter i+1 和 i+2）
+            # 所以 diffs[i] 反映的是第 i+2 次迭代的“前一次变化”
+            # 我们想找：i+1 和 i+2 都在 valid_iters_set 中，且 diffs[i] 最小
+            candidate_positions = []  # (diff_value, later_iter)
+            for i in range(len(diffs)):
+                prev_iter = i + 1      # diffs[i] 是 thresholds[i+1] 和 thresholds[i] 的差 → 对应第 i+1 和 i+2 次迭代
+                curr_iter = i + 2
+                if prev_iter in valid_iters_set and curr_iter in valid_iters_set:
+                    candidate_positions.append((diffs[i], curr_iter))
+
+            if candidate_positions:
+                # 按差值排序，取最小；若相同，取 later_iter 更大的（更靠后）
+                candidate_positions.sort(key=lambda x: (x[0], -x[1]))
+                best_iter = candidate_positions[0][1]
+            else:
+                # 没有相邻对都合法 → 取最大合法迭代
+                best_iter = max(valid_iters_set)
+
+            print(f"[AdaptiveMedian] 在 {sorted(valid_iters_set)} 中复用 diffs 找最平稳，选第 {best_iter} 次迭代")
+
+        # 最终输出
+        # selected_thr = thresholds[best_iter - 1]
+        # print(f"[AdaptiveMedian] 最终选定阈值 (第 {best_iter} 次迭代) = {selected_thr}")
         return thresholds, best_iter
 
     def _compress_low_levels(self, y: np.ndarray, thr: int) -> np.ndarray:
@@ -501,7 +556,7 @@ if __name__ == "__main__":
 
     # 调用接口（路径输入，保存输出）
     result_image = enhancer.process(
-        image_input="CameraUtils/screenshot_4_warped.jpg",
+        image_input="Resources/Captured/9.png",
         save_output=True
     )
 
