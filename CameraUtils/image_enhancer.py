@@ -217,6 +217,10 @@ class ImageEnhancer:
             cur_len = int(hist.sum())
             iter_cnt += 1
 
+            # print("\n[AdaptiveMedian] 迭代阈值序列:")
+            # for idx, val in enumerate(thresholds, start=1):
+            #     print(f"  第 {idx:2d} 次迭代 → 中位数阈值 = {val}")
+
         # -------------------------------------------------
         # 4️⃣ 若未产生任何阈值，直接返回空
         # -------------------------------------------------
@@ -239,16 +243,16 @@ class ImageEnhancer:
             original_best_iter = 1
 
         # -------------------------------------------------
-        # 6️⃣ 检测 **第一个突变**：B - A > 80
+        # 6️⃣ 检测 **第一个突变**：B - A
         # -------------------------------------------------
         jump_index: int | None = None          # thresholds 中的索引（0‑based），对应 B
         for n in range(1, N):
-            if thresholds[n] - thresholds[n - 1] > 80:
+            if thresholds[n] - thresholds[n - 1] > 30:
                 jump_index = n
                 break
 
         # -----------------------------------------------------------------
-        # 🆕  新增规则：若 C 与 A 之间也存在大幅跳变（|A-C|>50），直接返回 A
+        # 🆕  新增规则：若 C 与 A 之间也存在大幅跳变，直接返回 A
         # -----------------------------------------------------------------
         if jump_index is not None:
             # A 是突变前的值（阈值列表里的 jump_index-1 位置）
@@ -256,10 +260,8 @@ class ImageEnhancer:
             # 检查是否存在 C（jump_index-2）
             if jump_index >= 2:                     # 至少要有第 n‑1 次迭代
                 C = thresholds[jump_index - 2]
-                if abs(A - C) > 40:                 # 满足新规则 → 直接选 A
-                    best_iter = jump_index          # A 所在的迭代次数（1‑based）
-                    # 返回前直接打印（可自行删掉）。
-                    # print(f"[AdaptiveMedian] 触发新规则：C 与 A 差距 {abs(A - C)} > 50，直接选第 {best_iter} 次迭代阈值 = {A}")
+                if abs(A - C) > 25:                        # 判断 A 与 C 差距
+                    best_iter = jump_index - 1             # 直接选 C 所在的迭代（n‑1）
                     return thresholds, best_iter
             # 若没有 C 或 C 与 A 差距 ≤50，则继续执行原有的跳变后处理逻辑
         else:
@@ -310,11 +312,9 @@ class ImageEnhancer:
                 # 没有相邻对都合法 → 取最大合法迭代
                 best_iter = max(valid_iters_set)
 
-            # print(f"[AdaptiveMedian] 在 {sorted(valid_iters_set)} 中复用 diffs 找最平稳，选第 {best_iter} 次迭代")
+        # best_thr = thresholds[best_iter - 1]          # 依据最佳迭代取得阈值
+        # print(f"[AdaptiveMedian] 最终选取第 {best_iter} 次迭代阈值 = {best_thr}")
 
-        # -------------------------------------------------
-        # 9️⃣ 返回结果
-        # -------------------------------------------------
         return thresholds, best_iter
 
     def _compress_low_levels(self, y: np.ndarray, thr: int) -> np.ndarray:
@@ -575,7 +575,7 @@ if __name__ == "__main__":
 
     # 调用接口（路径输入，保存输出）
     result_image = enhancer.process(
-        image_input="Resources/Captured/10.png",
+        image_input="Resources/Captured/14.png",
         save_output=True
     )
 

@@ -143,13 +143,13 @@ class CANFDGUI:
 
         # 曝光值下拉框
         self.exposure_var = tk.IntVar(value=-4)                     # 默认值
-        # 下拉框，选项为 0、-1 … -10
+        # 下拉框，选项为 0、-1 …
         ttk.Label(root, text="曝光值:", font=("微软雅黑", 10)).grid(
             row=1, column=3, sticky='w', padx=5, pady=5)
         self.exposure_cb = ttk.Combobox(
             root,
             textvariable=self.exposure_var,
-            values=[0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10],
+            values=[0, -1, -2, -3, -4, -5, -6, -7, -8, -9],
             state="readonly",
             width=6,
             font=("微软雅黑", 10)
