@@ -149,7 +149,7 @@ class CANFDGUI:
         self.exposure_cb = ttk.Combobox(
             root,
             textvariable=self.exposure_var,
-            values=[0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11, -12],
+            values=[0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10],
             state="readonly",
             width=6,
             font=("微软雅黑", 10)
