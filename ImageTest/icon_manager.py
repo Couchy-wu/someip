@@ -4,12 +4,14 @@ import json
 import tkinter as tk
 from tkinter import ttk, messagebox
 from PIL import Image, ImageTk
+import random
 
 # ========================================
 # 数据类
 # ========================================
 class IconData:
-    def __init__(self, name="", width=0, height=0, top=0, left=0, reuse=False, reuse_name="", reuse_top=0, reuse_left=0):
+    def __init__(self, name="", width=0, height=0, top=0, left=0, reuse=False, 
+                 reuse_name="", reuse_top=0, reuse_left=0, class_name=""):
         self.name = name
         self.width = width
         self.height = height
@@ -19,6 +21,7 @@ class IconData:
         self.reuse_name = reuse_name
         self.reuse_top = reuse_top
         self.reuse_left = reuse_left
+        self.class_name = class_name  # UI类名
     
     @classmethod
     def from_dict(cls, data):
@@ -31,12 +34,14 @@ class IconData:
             reuse=data.get("reuse", False),
             reuse_name=data.get("reuse_name", ""),
             reuse_top=data.get("reuse_top", 0),
-            reuse_left=data.get("reuse_left", 0)
+            reuse_left=data.get("reuse_left", 0),
+            class_name=data.get("class_name", "")  # 从JSON读取类名
         )
     
     def to_dict(self):
         result = {
             "name": self.name,
+            "class_name": self.class_name,  # 类名写入JSON
             "width": self.width,
             "height": self.height,
             "top": self.top,
@@ -53,7 +58,6 @@ class IconData:
 # 主应用类
 # ========================================
 class IconManagerApp:
-    # 缩略图设置作为类变量
     THUMBNAIL_SIZE = (80, 80)
     ITEM_WIDTH = 110
     ITEM_HEIGHT = 125
@@ -90,7 +94,10 @@ class IconManagerApp:
         self.current_index = 0
         self.unsaved_changes = False
         
-        # 确保 background.png 存在
+        # 类名颜色映射
+        self.class_name_colors = {}
+        self.used_colors = set()
+        
         self.ensure_background_image()
         
         self.load_image_files()
@@ -101,6 +108,11 @@ class IconManagerApp:
         
         # 拦截关闭事件
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        
+        # 绑定系统剪贴板快捷键
+        self.root.bind_all('<Control-c>', self.copy_to_clipboard)
+        # self.root.bind_all('<Control-v>', self.paste_from_clipboard)
+        self.root.bind_all('<Control-x>', self.cut_to_clipboard)
     
     def get_subfolders(self):
         """获取ImageUI下的所有子文件夹"""
@@ -292,6 +304,7 @@ class IconManagerApp:
             self.reuse_name_var.set("")
             self.reuse_top_var.set(0)
             self.reuse_left_var.set(0)
+            self.class_name_var.set("")  # 清空类名显示
         
         messagebox.showinfo("完成", f"'{filename}' 已删除！")
     
@@ -326,7 +339,7 @@ class IconManagerApp:
         self.folder_combobox.bind("<<ComboboxSelected>>", self.on_folder_change)
         
         # 第 1 行：缩略图预览条
-        preview_frame = ttk.LabelFrame(main_frame, text="选择图标（红色边框为未设置位置）", 
+        preview_frame = ttk.LabelFrame(main_frame, text="选择图标（红色边框为未设置位置或类名）", 
                                      height=self.PREVIEW_HEIGHT)
         preview_frame.pack(fill="x", pady=(0, 10), anchor="n")
         preview_frame.pack_propagate(False)
@@ -373,7 +386,7 @@ class IconManagerApp:
             font=("微软雅黑", 12),
             background="lightgray"
         )
-        self.image_label.grid(row=0, column=0, rowspan=10, padx=(0, 10), sticky="nsew")
+        self.image_label.grid(row=0, column=0, rowspan=12, padx=(0, 10), sticky="nsew")
         
         # 右侧：表单
         form_frame = ttk.LabelFrame(content_frame, text="图标信息", padding="10")
@@ -393,50 +406,62 @@ class IconManagerApp:
         self.name_entry = ttk.Entry(form_frame, textvariable=self.name_var, width=40)
         self.name_entry.grid(row=1, column=1, sticky="ew", pady=2)
         
-        ttk.Label(form_frame, text="宽度 (px):").grid(row=2, column=0, sticky="w", pady=2)
+        ttk.Label(form_frame, text="UI 类名:").grid(row=2, column=0, sticky="w", pady=2)
+        self.class_name_var = tk.StringVar()
+        self.validate_cmd = root.register(self.validate_class_name)
+        self.class_name_entry = ttk.Entry(
+            form_frame, 
+            textvariable=self.class_name_var, 
+            width=40,
+            validate="key",
+            validatecommand=(self.validate_cmd, "%P")
+        )
+        self.class_name_entry.grid(row=2, column=1, sticky="ew", pady=2)
+        
+        ttk.Label(form_frame, text="宽度 (px):").grid(row=3, column=0, sticky="w", pady=2)
         self.width_var = tk.IntVar()
         # 修改为可编辑的 Entry，在 update_display 中动态控制状态
         self.width_entry = ttk.Entry(form_frame, textvariable=self.width_var, width=20)
-        self.width_entry.grid(row=2, column=1, sticky="w", pady=2, padx=(0, 10))
+        self.width_entry.grid(row=3, column=1, sticky="w", pady=2, padx=(0, 10))
         
-        ttk.Label(form_frame, text="高度 (px):").grid(row=3, column=0, sticky="w", pady=2)
+        ttk.Label(form_frame, text="高度 (px):").grid(row=4, column=0, sticky="w", pady=2)
         self.height_var = tk.IntVar()
         self.height_entry = ttk.Entry(form_frame, textvariable=self.height_var, width=20)
-        self.height_entry.grid(row=3, column=1, sticky="w", pady=2, padx=(0, 10))
+        self.height_entry.grid(row=4, column=1, sticky="w", pady=2, padx=(0, 10))
         
-        ttk.Label(form_frame, text="顶部 (px):").grid(row=4, column=0, sticky="w", pady=2)
+        ttk.Label(form_frame, text="顶部 (px):").grid(row=5, column=0, sticky="w", pady=2)
         self.top_var = tk.IntVar()
-        ttk.Entry(form_frame, textvariable=self.top_var, width=20).grid(row=4, column=1, sticky="w", pady=2, padx=(0, 10))
+        ttk.Entry(form_frame, textvariable=self.top_var, width=20).grid(row=5, column=1, sticky="w", pady=2, padx=(0, 10))
         
-        ttk.Label(form_frame, text="左侧 (px):").grid(row=5, column=0, sticky="w", pady=2)
+        ttk.Label(form_frame, text="左侧 (px):").grid(row=6, column=0, sticky="w", pady=2)
         self.left_var = tk.IntVar()
-        ttk.Entry(form_frame, textvariable=self.left_var, width=20).grid(row=5, column=1, sticky="w", pady=2, padx=(0, 10))
+        ttk.Entry(form_frame, textvariable=self.left_var, width=20).grid(row=6, column=1, sticky="w", pady=2, padx=(0, 10))
         
         # 分隔线
         separator = ttk.Separator(form_frame, orient='horizontal')
-        separator.grid(row=6, column=0, columnspan=2, sticky="ew", pady=10)
+        separator.grid(row=7, column=0, columnspan=2, sticky="ew", pady=10)
         
         # 复用配置
         self.reuse_var = tk.BooleanVar()
         reuse_check = ttk.Checkbutton(form_frame, text="启用复用", variable=self.reuse_var, 
                                      command=self.toggle_reuse_fields)
-        reuse_check.grid(row=7, column=0, columnspan=2, sticky="w", pady=(0, 5))
+        reuse_check.grid(row=8, column=0, columnspan=2, sticky="w", pady=(0, 5))
         
         # 复用表单字段（初始隐藏）
-        ttk.Label(form_frame, text="复用名称:").grid(row=8, column=0, sticky="w", pady=2)
+        ttk.Label(form_frame, text="复用名称:").grid(row=9, column=0, sticky="w", pady=2)
         self.reuse_name_var = tk.StringVar()
         self.reuse_name_entry = ttk.Entry(form_frame, textvariable=self.reuse_name_var, width=40)
-        self.reuse_name_entry.grid(row=8, column=1, sticky="ew", pady=2)
+        self.reuse_name_entry.grid(row=9, column=1, sticky="ew", pady=2)
         
-        ttk.Label(form_frame, text="复用顶部 (px):").grid(row=9, column=0, sticky="w", pady=2)
+        ttk.Label(form_frame, text="复用顶部 (px):").grid(row=10, column=0, sticky="w", pady=2)
         self.reuse_top_var = tk.IntVar()
         self.reuse_top_entry = ttk.Entry(form_frame, textvariable=self.reuse_top_var, width=20)
-        self.reuse_top_entry.grid(row=9, column=1, sticky="w", pady=2, padx=(0, 10))
+        self.reuse_top_entry.grid(row=10, column=1, sticky="w", pady=2, padx=(0, 10))
         
-        ttk.Label(form_frame, text="复用左侧 (px):").grid(row=10, column=0, sticky="w", pady=2)
+        ttk.Label(form_frame, text="复用左侧 (px):").grid(row=11, column=0, sticky="w", pady=2)
         self.reuse_left_var = tk.IntVar()
         self.reuse_left_entry = ttk.Entry(form_frame, textvariable=self.reuse_left_var, width=20)
-        self.reuse_left_entry.grid(row=10, column=1, sticky="w", pady=2, padx=(0, 10))
+        self.reuse_left_entry.grid(row=11, column=1, sticky="w", pady=2, padx=(0, 10))
         
         # 初始隐藏复用字段
         self.toggle_reuse_fields()
@@ -445,6 +470,7 @@ class IconManagerApp:
         
         # 绑定变量变化事件
         self.name_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
+        self.class_name_var.trace_add("write", lambda *args: self.mark_unsaved_changes())  # 监听类名变化
         self.width_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
         self.height_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
         self.top_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
@@ -458,7 +484,7 @@ class IconManagerApp:
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill="x", pady=(10, 0))
         
-        # 删除图标按钮（新增）
+        # 删除图标按钮
         ttk.Button(btn_frame, text="删除图标", command=self.delete_icon, style="Danger.TButton").pack(side="right", padx=(0, 10))
         
         # 清除按钮
@@ -466,6 +492,13 @@ class IconManagerApp:
         
         # 保存按钮
         ttk.Button(btn_frame, text="保存配置", command=self.save_config).pack(side="right")
+    
+    def validate_class_name(self, input_str):
+        """验证UI类名：只允许英文、数字和下划线"""
+        if not input_str:  # 允许为空
+            return True
+        # 检查每个字符是否为字母、数字或下划线
+        return all(c.isalnum() or c == '_' for c in input_str) and input_str.isascii()
     
     def toggle_reuse_fields(self):
         """切换复用字段的显示/隐藏，并在启用时自动填写默认复用名称"""
@@ -477,10 +510,17 @@ class IconManagerApp:
             if not self.reuse_name_var.get().strip():
                 base_name = self.name_var.get().strip() or os.path.splitext(self.filename_var.get())[0]
                 self.reuse_name_var.set(f"{base_name}_2")
+            
+            # 复用时将主类名同步到复用类名，并锁定类名输入框
+            self.class_name_entry.config(state="readonly")
         else:
             self.reuse_name_entry.grid_remove()
             self.reuse_top_entry.grid_remove()
             self.reuse_left_entry.grid_remove()
+            
+            # 取消复用时恢复类名输入框可编辑状态
+            if self.image_files and self.image_files[self.current_index] != 'background.png':
+                self.class_name_entry.config(state="normal")
     
     def on_folder_change(self, event):
         """处理文件夹切换"""
@@ -529,6 +569,8 @@ class IconManagerApp:
         self.thumbnail_images.clear()
         self.highlight_frames.clear()
         self.reuse_labels.clear()
+        self.class_name_colors.clear()
+        self.used_colors.clear()
         
         # 清空缩略图区域
         for widget in self.scroll_frame.winfo_children():
@@ -558,10 +600,12 @@ class IconManagerApp:
             reuse_label = tk.Label(item_frame, text="复用", bg="lightgreen", font=("微软雅黑", 7))
             self.reuse_labels[filename] = reuse_label
             
+            # 获取高亮颜色
+            color = self.get_highlight_color(filename)
             highlight_frame = tk.Frame(
                 item_frame,
-                highlightbackground="red" if self.should_highlight(filename) else "gray",
-                highlightthickness=3 if self.should_highlight(filename) else 1
+                highlightbackground=color if color else "gray",
+                highlightthickness=3 if color else 1
             )
             highlight_frame.pack(fill="both", expand=True)
             self.highlight_frames[filename] = highlight_frame
@@ -598,31 +642,71 @@ class IconManagerApp:
             print(f"缩略图加载失败: {filename}, {e}")
             return None
     
-    def should_highlight(self, filename):
-        """判断是否高亮 - 主位置或复用位置为0,0时高亮"""
+    def get_highlight_color(self, filename):
+        """计算高亮颜色 - 支持多种状态判断"""
         if filename not in self.config_data:
-            return True
+            return "red"
         
         data = self.config_data[filename]
-        # 主位置为0,0
-        main_invalid = data.top == 0 and data.left == 0
         
-        # 如果启用了复用，复用位置为0,0也需要高亮
-        reuse_invalid = False
-        if data.reuse:
-            reuse_invalid = data.reuse_top == 0 and data.reuse_left == 0
+        # 如果没有类名，红色高亮
+        if not data.class_name:
+            return "red"
         
-        return main_invalid or reuse_invalid
+        # 主位置为0,0，红色高亮
+        if data.top == 0 and data.left == 0:
+            return "red"
+        
+        # 如果启用了复用，复用位置为0,0也需要红色高亮
+        if data.reuse and data.reuse_top == 0 and data.reuse_left == 0:
+            return "red"
+        
+        # 如果有类名且该类名有多个图标，使用对应的颜色
+        if data.class_name and data.class_name in self.class_name_colors:
+            return self.class_name_colors[data.class_name]
+        
+        return None
+    
+    def generate_unique_color(self):
+        """生成不重复的颜色"""
+        while True:
+            r = random.randint(100, 255)
+            g = random.randint(100, 255)
+            b = random.randint(100, 255)
+            color = f'#{r:02x}{g:02x}{b:02x}'
+            if color not in self.used_colors:
+                return color
     
     def update_thumbnail_highlights(self):
         """更新高亮状态和复用标签显示"""
+        # 先清空颜色映射，重新统计类名出现次数
+        self.class_name_colors.clear()
+        self.used_colors.clear()
+        
+        # 统计所有非空类名的出现次数
+        class_name_counts = {}
+        for filename in self.image_files:
+            if filename in self.config_data:
+                class_name = self.config_data[filename].class_name
+                if class_name:  # 只统计非空类名
+                    class_name_counts[class_name] = class_name_counts.get(class_name, 0) + 1
+        
+        # 只为出现次数大于1的类名生成颜色
+        for class_name, count in class_name_counts.items():
+            if count > 1 and class_name not in self.class_name_colors:
+                color = self.generate_unique_color()
+                self.class_name_colors[class_name] = color
+                self.used_colors.add(color)
+        
+        # 更新每个图标的高亮
         for filename in self.image_files:
             frame = self.highlight_frames.get(filename)
             reuse_label = self.reuse_labels.get(filename)
             
             if frame:
-                if self.should_highlight(filename):
-                    frame.configure(highlightbackground="red", highlightthickness=3)
+                color = self.get_highlight_color(filename)
+                if color:
+                    frame.configure(highlightbackground=color, highlightthickness=3)
                 else:
                     frame.configure(highlightbackground="gray", highlightthickness=1)
             
@@ -666,11 +750,13 @@ class IconManagerApp:
         if filename not in self.config_data:
             return
         
-        # 强制 background.png 名称为 "background"
+        # 强制background.png名称为"background"，类名也为"background"
         if filename == 'background.png':
             new_name = "background"
+            new_class_name = "background"
         else:
             new_name = self.name_var.get().strip()
+            new_class_name = self.class_name_var.get().strip()
         
         new_top = self.top_var.get()
         new_left = self.left_var.get()
@@ -687,12 +773,10 @@ class IconManagerApp:
         if has_reuse and not new_reuse_name:
             messagebox.showwarning("警告", "复用名称不能为空！请填写后再保存。")
             return
-
         # 验证主名称和复用名称不能相同
         if has_reuse and new_name == new_reuse_name:
             messagebox.showwarning("警告", "主名称和复用名称不能相同！")
             return
-
         # 全局名称唯一性验证，检查新名称是否与已有名称冲突（排除当前文件本身）
         for other_filename, other_data in self.config_data.items():
             if other_filename == filename:
@@ -710,15 +794,15 @@ class IconManagerApp:
                 if new_reuse_name == other_data.name:
                     messagebox.showwarning("警告", f"复用名称 '{new_reuse_name}' 已存在于 '{other_filename}' 中！\n所有UI名称必须唯一。")
                     return
-
                 if other_data.reuse and new_reuse_name == other_data.reuse_name:
                     messagebox.showwarning("警告", f"复用名称 '{new_reuse_name}' 已作为复用名称存在于 '{other_filename}' 中！\n所有UI名称必须唯一。")
                     return
+        
         old_data = self.config_data[filename]
-
         # 检查是否有更改
         has_changes = (
             old_data.name != new_name or 
+            old_data.class_name != new_class_name or  # 检查类名变化
             old_data.top != new_top or 
             old_data.left != new_left or
             old_data.width != new_width or
@@ -730,11 +814,12 @@ class IconManagerApp:
         )
         
         if has_changes:
-            # 如果是 background.png，且尺寸改变，则调整图片
+            # 如果是background.png，且尺寸改变，则调整图片
             if filename == 'background.png' and (old_data.width != new_width or old_data.height != new_height):
                 self.resize_background_image(new_width, new_height)
             
             self.config_data[filename].name = new_name
+            self.config_data[filename].class_name = new_class_name  # 保存类名
             self.config_data[filename].top = new_top
             self.config_data[filename].left = new_left
             self.config_data[filename].width = new_width
@@ -812,11 +897,13 @@ class IconManagerApp:
         
         icon_data = self.config_data[filename]
         
-        # 强制 background.png 名称为 background
+        # 强制 background.png 名称为 background，类名也为 background
         if filename == 'background.png':
             self.name_var.set("background")
+            self.class_name_var.set("background")
         else:
             self.name_var.set(icon_data.name)
+            self.class_name_var.set(icon_data.class_name)
         
         self.width_var.set(icon_data.width)
         self.height_var.set(icon_data.height)
@@ -834,10 +921,16 @@ class IconManagerApp:
             self.width_entry.config(state="normal")
             self.height_entry.config(state="normal")
             self.name_entry.config(state="readonly")
+            self.class_name_entry.config(state="readonly")
         else:
             self.width_entry.config(state="readonly")
             self.height_entry.config(state="readonly")
             self.name_entry.config(state="normal")
+            # 根据复用状态控制类名输入框
+            if icon_data.reuse:
+                self.class_name_entry.config(state="readonly")
+            else:
+                self.class_name_entry.config(state="normal")
         
         # 根据复用状态显示/隐藏复用字段
         self.toggle_reuse_fields()
@@ -853,6 +946,32 @@ class IconManagerApp:
             self.image_label.image = None
         
         self.update_thumbnail_highlights()
+    
+    # 新增：剪贴板操作函数
+    def copy_to_clipboard(self, event=None):
+        """复制选中文本到系统剪贴板"""
+        try:
+            widget = self.root.focus_get()
+            if isinstance(widget, (tk.Entry, ttk.Entry)):
+                selected_text = widget.selection_get()
+                self.root.clipboard_clear()
+                self.root.clipboard_append(selected_text)
+        except:
+            pass
+        return "break"
+    
+    def cut_to_clipboard(self, event=None):
+        """剪切选中文本到系统剪贴板"""
+        try:
+            widget = self.root.focus_get()
+            if isinstance(widget, (tk.Entry, ttk.Entry)):
+                selected_text = widget.selection_get()
+                self.root.clipboard_clear()
+                self.root.clipboard_append(selected_text)
+                widget.delete('sel.first', 'sel.last')
+        except:
+            pass
+        return "break"
 
 # ============ 启动 ============
 if __name__ == "__main__":
