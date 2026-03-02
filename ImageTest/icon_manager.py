@@ -301,7 +301,6 @@ class IconManagerApp:
             self.top_var.set(0)
             self.left_var.set(0)
             self.reuse_var.set(False)
-            self.reuse_name_var.set("")
             self.reuse_top_var.set(0)
             self.reuse_left_var.set(0)
             self.class_name_var.set("")  # 清空类名显示
@@ -447,12 +446,6 @@ class IconManagerApp:
                                      command=self.toggle_reuse_fields)
         reuse_check.grid(row=8, column=0, columnspan=2, sticky="w", pady=(0, 5))
         
-        # 复用表单字段（初始隐藏）
-        ttk.Label(form_frame, text="复用名称:").grid(row=9, column=0, sticky="w", pady=2)
-        self.reuse_name_var = tk.StringVar()
-        self.reuse_name_entry = ttk.Entry(form_frame, textvariable=self.reuse_name_var, width=40)
-        self.reuse_name_entry.grid(row=9, column=1, sticky="ew", pady=2)
-        
         ttk.Label(form_frame, text="复用顶部 (px):").grid(row=10, column=0, sticky="w", pady=2)
         self.reuse_top_var = tk.IntVar()
         self.reuse_top_entry = ttk.Entry(form_frame, textvariable=self.reuse_top_var, width=20)
@@ -476,7 +469,6 @@ class IconManagerApp:
         self.top_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
         self.left_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
         self.reuse_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
-        self.reuse_name_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
         self.reuse_top_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
         self.reuse_left_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
         
@@ -501,26 +493,15 @@ class IconManagerApp:
         return all(c.isalnum() or c == '_' for c in input_str) and input_str.isascii()
     
     def toggle_reuse_fields(self):
-        """切换复用字段的显示/隐藏，并在启用时自动填写默认复用名称"""
+        """切换复用字段的显示/隐藏。复用开启时自动把复用名称设为当前 UI 名称（内部保存），不再显示复用名称输入框。"""
         if self.reuse_var.get():
-            self.reuse_name_entry.grid()
+            # 只显示复用坐标字段
             self.reuse_top_entry.grid()
             self.reuse_left_entry.grid()
-            # 当复用被勾选且复用名称为空时，自动填充 "原名称_2"
-            if not self.reuse_name_var.get().strip():
-                base_name = self.name_var.get().strip() or os.path.splitext(self.filename_var.get())[0]
-                self.reuse_name_var.set(f"{base_name}_2")
-            
-            # 复用时将主类名同步到复用类名，并锁定类名输入框
-            self.class_name_entry.config(state="readonly")
         else:
-            self.reuse_name_entry.grid_remove()
+            # 隐藏复用坐标字段
             self.reuse_top_entry.grid_remove()
             self.reuse_left_entry.grid_remove()
-            
-            # 取消复用时恢复类名输入框可编辑状态
-            if self.image_files and self.image_files[self.current_index] != 'background.png':
-                self.class_name_entry.config(state="normal")
     
     def on_folder_change(self, event):
         """处理文件夹切换"""
@@ -668,13 +649,31 @@ class IconManagerApp:
         return None
     
     def generate_unique_color(self):
-        """生成不重复的颜色"""
+        """
+        生成一个唯一且相对较深的随机颜色（十六进制 #RRGGBB）。
+        采用 HSV（色相‑饱和度‑明度）空间生成颜色：
+        - 色相随即取值 0‑1，保证颜色多样；
+        - 饱和度保持在 0.6‑1.0，使颜色不至于过于灰暗；
+        - 明度（亮度）限制在 0.3‑0.6 之间，确保颜色足够“深”，在灰色 GUI 背景上更明显。
+        """
+        import colorsys, random
+
         while True:
-            r = random.randint(100, 255)
-            g = random.randint(100, 255)
-            b = random.randint(100, 255)
+            # 随机生成色相
+            h = random.random()                     # 0.0 – 1.0
+            # 高饱和度，避免出现过于淡的颜色
+            s = random.uniform(0.6, 1.0)             # 0.6 – 1.0
+            # 低明度，使颜色偏暗
+            v = random.uniform(0.3, 0.6)             # 0.3 – 0.6
+
+            # 将 HSV 转换为 RGB（0‑255 整数）
+            r, g, b = colorsys.hsv_to_rgb(h, s, v)
+            r, g, b = int(r * 255), int(g * 255), int(b * 255)
+
             color = f'#{r:02x}{g:02x}{b:02x}'
+            # 确保颜色在当前已使用集合中唯一
             if color not in self.used_colors:
+                self.used_colors.add(color)   # 记录已使用，防止后续重复
                 return color
     
     def update_thumbnail_highlights(self):
@@ -765,18 +764,10 @@ class IconManagerApp:
         
         # 复用配置
         has_reuse = self.reuse_var.get()
-        new_reuse_name = self.reuse_name_var.get().strip() if has_reuse else ""
+        new_reuse_name = new_name if has_reuse else ""
         new_reuse_top = self.reuse_top_var.get() if has_reuse else 0
         new_reuse_left = self.reuse_left_var.get() if has_reuse else 0
         
-        # 验证名称不能为空
-        if has_reuse and not new_reuse_name:
-            messagebox.showwarning("警告", "复用名称不能为空！请填写后再保存。")
-            return
-        # 验证主名称和复用名称不能相同
-        if has_reuse and new_name == new_reuse_name:
-            messagebox.showwarning("警告", "主名称和复用名称不能相同！")
-            return
         # 全局名称唯一性验证，检查新名称是否与已有名称冲突（排除当前文件本身）
         for other_filename, other_data in self.config_data.items():
             if other_filename == filename:
@@ -912,7 +903,6 @@ class IconManagerApp:
         
         # 更新复用相关变量
         self.reuse_var.set(icon_data.reuse)
-        self.reuse_name_var.set(icon_data.reuse_name)
         self.reuse_top_var.set(icon_data.reuse_top)
         self.reuse_left_var.set(icon_data.reuse_left)
         
@@ -926,11 +916,7 @@ class IconManagerApp:
             self.width_entry.config(state="readonly")
             self.height_entry.config(state="readonly")
             self.name_entry.config(state="normal")
-            # 根据复用状态控制类名输入框
-            if icon_data.reuse:
-                self.class_name_entry.config(state="readonly")
-            else:
-                self.class_name_entry.config(state="normal")
+            self.class_name_entry.config(state="normal")
         
         # 根据复用状态显示/隐藏复用字段
         self.toggle_reuse_fields()

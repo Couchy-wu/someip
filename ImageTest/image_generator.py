@@ -657,11 +657,11 @@ class ImageGeneratorApp:
                         if not icon_name or len(top_left) < 2:
                             continue
                         matched = False
+                        # 分别检查主位置和复用位置，避免同名图标被误判
                         for filename, data in self.config_data.items():
                             if filename == "background.png":
                                 continue
-                            # 仅匹配后退出当前 filename 循环，继续遍历后续 item
-                            # -------- 主位置匹配 ----------
+                            # -------- 主位置匹配 --------
                             if data.get("name") == icon_name:
                                 if (abs(top_left[0] - data["left"]) < 5 and
                                     abs(top_left[1] - data["top"]) < 5):
@@ -669,9 +669,9 @@ class ImageGeneratorApp:
                                         "main" if data.get("reuse", False) else "enabled"
                                     )
                                     matched = True
-                                    break  # 结束对该 filename 的检查，进入下一个 item
-                            # -------- 复用位置匹配 ----------
-                            elif data.get("reuse", False) and data.get("reuse_name") == icon_name:
+                                    break  # 找到匹配后结束当前 filename 检查
+                            # -------- 复用位置匹配 --------
+                            if data.get("reuse", False) and data.get("reuse_name") == icon_name:
                                 if (abs(top_left[0] - data["reuse_left"]) < 5 and
                                     abs(top_left[1] - data["reuse_top"]) < 5):
                                     img_cfg["icon_states"][filename] = "reuse"
@@ -881,7 +881,8 @@ class ImageGeneratorApp:
             output_parts = []
             # 平台信息
             output_parts.append(f'  "platform": "{self.current_platform}"')
-            for config in self.image_configs:
+            # 对每张图像进行遍历
+            for img_idx, config in enumerate(self.image_configs):   # ★ MOD
                 image_name = config["name"]
                 items = []
                 # 读取该图像对应的数值字典（若不存在则为空 dict）
@@ -890,6 +891,8 @@ class ImageGeneratorApp:
                     if filename not in self.config_data:
                         continue
                     data = self.config_data[filename]
+                    # ----------------- 读取图标的 class_name -----------------
+                    class_name = data.get("class_name", "")
                     has_reuse = data.get("reuse", False) and state == "reuse"
                     name = data.get("reuse_name", "") if has_reuse else data.get("name", "")
                     if not name:
@@ -908,8 +911,10 @@ class ImageGeneratorApp:
                                 height = h if height == 0 else height
                             except:
                                 pass
+                    # ----------------- 生成单个图标项 -----------------
                     item = {
                         "name": name,
+                        "class_name": class_name,
                         "top_left": [pos_x, pos_y],
                         "bottom_right": [pos_x + width, pos_y + height]
                     }
