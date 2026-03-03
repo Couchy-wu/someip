@@ -56,6 +56,9 @@ class CANFDGUI:
         # 在 GUI 中创建一次 ImageEnhancer 实例，以便在 “变换” 中复用
         from CameraUtils.image_enhancer import ImageEnhancer
         self._enhancer = ImageEnhancer(enable_timing=False)    
+        # GUI显示帧率控制
+        self._gui_frame_interval = 0.2          # 0.2 = 200ms间隔 = 5 fps 
+        self._last_gui_update_time = 0          # 上次GUI更新时间戳
 
         # ---------- 第一块视频显示：右上角摄像头显示区域 ----------
         # 用一个固定大小的 Label 充当画布（640×360）
@@ -426,15 +429,31 @@ class CANFDGUI:
             else:
                 self._last_transform_c_image = None
 
+            # GUI显示帧率控制（仅显示部分限制为10fps，但保持30fps处理）
+            current_time = time.time()
+            if current_time - self._last_gui_update_time < self._gui_frame_interval:
+                return  # 跳过GUI更新，但保持30fps处理
+
+            self._last_gui_update_time = current_time
+
             # 缩放到 640×360（对应 OUTPUT_WIDTH / OUTPUT_HEIGHT）
             img = img.resize((640, 360), Image.LANCZOS)
             img2 = img2.resize((640, 360), Image.LANCZOS)
+
             # 在主线程中更新 UI（Tk 只能在主线程操作）
             photo = ImageTk.PhotoImage(img)
             photo2 = ImageTk.PhotoImage(img2)
-            # 记录 after id，后面关闭窗口时可取消
-            self._after_id = self.root.after(0, self._update_video_label, photo)
-            self._after_id2 = self.root.after(0, self._update_video_label2, photo2)
+
+            # 取消未完成的更新（避免堆积）
+            if self._after_id:
+                self.root.after_cancel(self._after_id)
+            if hasattr(self, '_after_id2') and self._after_id2:
+                self.root.after_cancel(self._after_id2)
+
+            # 使用 after_idle 替代 after(0, ...) 更高效
+            self._after_id = self.root.after_idle(self._update_video_label, photo)
+            self._after_id2 = self.root.after_idle(self._update_video_label2, photo2)
+
         except Exception as err:
             print(f"[ERROR] 摄像头回调异常: {err}")
 
@@ -1147,6 +1166,18 @@ class CANFDGUI:
 
         # 让摄像头线程自行退出，标记回调函数不再处理新帧
         self._stop_camera_thread = True
+
+        # 取消所有待处理的 after 调用（使用循环清理）
+        for attr in ['_after_id', '_after_id2']:
+            if hasattr(self, attr):
+                aid = getattr(self, attr)
+                if aid:
+                    try:
+                        self.root.after_cancel(aid)
+                    except:
+                        pass
+                    setattr(self, attr, None)
+
         # 若已经创建了 CameraViewer 实例，调用它的 stop()
         if hasattr(self, "_camera_viewer") and self._camera_viewer is not None:
             try:
