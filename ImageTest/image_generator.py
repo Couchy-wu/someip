@@ -882,7 +882,7 @@ class ImageGeneratorApp:
             # 平台信息
             output_parts.append(f'  "platform": "{self.current_platform}"')
             # 对每张图像进行遍历
-            for img_idx, config in enumerate(self.image_configs):   # ★ MOD
+            for img_idx, config in enumerate(self.image_configs):
                 image_name = config["name"]
                 items = []
                 # 读取该图像对应的数值字典（若不存在则为空 dict）
@@ -918,20 +918,10 @@ class ImageGeneratorApp:
                         "top_left": [pos_x, pos_y],
                         "bottom_right": [pos_x + width, pos_y + height]
                     }
-                    # 如果该图标有数值且非空，则写入 "value"
+                    # 直接以字符串形式保存 value
                     val = values_dict.get(filename)
-                    # 非空检查，避免生成空value字段
                     if val is not None and str(val).strip() != "":
-                        # 尝试转换为数值类型（int或float）
-                        try:
-                            # 先尝试转为int
-                            if '.' in str(val):
-                                item["value"] = float(val)
-                            else:
-                                item["value"] = int(val)
-                        except ValueError:
-                            # 转换失败则保持原字符串
-                            item["value"] = val
+                        item["value"] = str(val)  # 强制转为 str 类型
                     items.append(json.dumps(item, ensure_ascii=False, separators=(',', ':')))
                 image_entry = f'  "{image_name}": [\n    ' + ',\n    '.join(items) + '\n  ]'
                 output_parts.append(image_entry)
