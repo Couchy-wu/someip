@@ -666,17 +666,17 @@ class ImageGeneratorApp:
                                 if (abs(top_left[0] - data["left"]) < 5 and
                                     abs(top_left[1] - data["top"]) < 5):
                                     img_cfg["icon_states"][filename] = (
-                                        "main" if data.get("reuse", False) else "enabled"
-                                    )
+                                        "main" if bool(data.get("reuse", 0)) else "enabled"
+                                    )   # 复用标识改为整数，使用 bool() 判定
                                     matched = True
                                     break  # 找到匹配后结束当前 filename 检查
-                            # -------- 复用位置匹配 --------
-                            if data.get("reuse", False) and data.get("reuse_name") == icon_name:
-                                if (abs(top_left[0] - data["reuse_left"]) < 5 and
-                                    abs(top_left[1] - data["reuse_top"]) < 5):
-                                    img_cfg["icon_states"][filename] = "reuse"
-                                    matched = True
-                                    break
+                            # -------- 复用位置匹配（复用 = 1、2、3）--------
+                            if data.get("reuse", 0) and \
+                               (abs(top_left[0] - data["reuse_left"]) < 5 and
+                                abs(top_left[1] - data["reuse_top"]) < 5):
+                                img_cfg["icon_states"][filename] = "reuse"
+                                matched = True
+                                break
                         if not matched:
                             print(f"⚠️ 无法匹配图标: {icon_name} @ {top_left}")
                         # 若配置里携带数值，则同步到 icon_values
@@ -893,12 +893,14 @@ class ImageGeneratorApp:
                     data = self.config_data[filename]
                     # ----------------- 读取图标的 class_name -----------------
                     class_name = data.get("class_name", "")
-                    has_reuse = data.get("reuse", False) and state == "reuse"
-                    name = data.get("reuse_name", "") if has_reuse else data.get("name", "")
-                    if not name:
-                        name = f"{data.get('name', '')}_2" if has_reuse else os.path.splitext(filename)[0]
+                    # ----------------- 是否为复用位置 -----------------
+                    has_reuse = bool(data.get("reuse", 0)) and state == "reuse"   # 使用整数标识复用
+                    # ----------------- 图标名称（复用时仍使用同一名称） -----------------
+                    name = data.get("name", "")
+                    # ----------------- 位置坐标 -----------------
                     pos_x = data["reuse_left"] if has_reuse else data["left"]
-                    pos_y = data["reuse_top"] if has_reuse else data["top"]
+                    pos_y = data["reuse_top"]  if has_reuse else data["top"]
+                    # ----------------- 宽高（若配置中缺失则实时读取） -----------------
                     width = data.get("width", 0) or 0
                     height = data.get("height", 0) or 0
                     if width == 0 or height == 0:

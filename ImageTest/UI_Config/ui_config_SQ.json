@@ -6,7 +6,7 @@
         "height": 247,
         "top": 0,
         "left": 0,
-        "reuse": false
+        "reuse": 0
     },
     "ACC.png": {
         "name": "ACC巡航",
@@ -15,7 +15,7 @@
         "height": 52,
         "top": 146,
         "left": 400,
-        "reuse": false
+        "reuse": 0
     },
     "限速.png": {
         "name": "限速",
@@ -24,7 +24,7 @@
         "height": 50,
         "top": 146,
         "left": 165,
-        "reuse": false
+        "reuse": 0
     },
     "限速-大圈.png": {
         "name": "限速_超速",
@@ -33,7 +33,7 @@
         "height": 103,
         "top": 119,
         "left": 139,
-        "reuse": false
+        "reuse": 0
     },
     "ICC.png": {
         "name": "ICC",
@@ -42,7 +42,7 @@
         "height": 46,
         "top": 146,
         "left": 487,
-        "reuse": false
+        "reuse": 0
     },
     "盲区监测 (1).png": {
         "name": "盲区监测_右上",
@@ -51,7 +51,7 @@
         "height": 54,
         "top": 2,
         "left": 651,
-        "reuse": false
+        "reuse": 0
     },
     "盲区监测.png": {
         "name": "盲区监测_左上",
@@ -60,7 +60,7 @@
         "height": 54,
         "top": 2,
         "left": 20,
-        "reuse": false
+        "reuse": 0
     },
     "来电.png": {
         "name": "电话号码",
@@ -69,7 +69,7 @@
         "height": 40,
         "top": 200,
         "left": 389,
-        "reuse": false
+        "reuse": 0
     },
     "警示_碰撞预警.png": {
         "name": "警示_碰撞预警",
@@ -78,7 +78,7 @@
         "height": 80,
         "top": 27,
         "left": 263,
-        "reuse": false
+        "reuse": 0
     },
     "矢量 122 (边框).png": {
         "name": "边框_右下",
@@ -87,7 +87,7 @@
         "height": 44,
         "top": 203,
         "left": 681,
-        "reuse": false
+        "reuse": 0
     },
     "矢量 122 (边框) (1).png": {
         "name": "边框_右上",
@@ -96,7 +96,7 @@
         "height": 44,
         "top": 0,
         "left": 681,
-        "reuse": false
+        "reuse": 0
     },
     "矢量 122 (边框) (3).png": {
         "name": "边框_左上",
@@ -105,7 +105,7 @@
         "height": 44,
         "top": 0,
         "left": 0,
-        "reuse": false
+        "reuse": 0
     },
     "矢量 122 (边框) (2).png": {
         "name": "边框_左下",
@@ -114,7 +114,7 @@
         "height": 44,
         "top": 203,
         "left": 0,
-        "reuse": false
+        "reuse": 0
     },
     "车道偏离-右偏.png": {
         "name": "车道偏离",
@@ -123,8 +123,7 @@
         "height": 32,
         "top": 155,
         "left": 388,
-        "reuse": true,
-        "reuse_name": "车道偏离",
+        "reuse": 1,
         "reuse_top": 155,
         "reuse_left": 472
     },
@@ -135,7 +134,7 @@
         "height": 46,
         "top": 146,
         "left": 402,
-        "reuse": false
+        "reuse": 0
     },
     "telltale_ADS接管.png": {
         "name": "ADS接管",
@@ -144,7 +143,7 @@
         "height": 50,
         "top": 196,
         "left": 278,
-        "reuse": false
+        "reuse": 0
     },
     "R.png": {
         "name": "R档",
@@ -153,7 +152,7 @@
         "height": 28,
         "top": 202,
         "left": 289,
-        "reuse": false
+        "reuse": 0
     },
     "AVH.png": {
         "name": "AVH",
@@ -162,7 +161,7 @@
         "height": 40,
         "top": 197,
         "left": 283,
-        "reuse": false
+        "reuse": 0
     },
     "D.png": {
         "name": "D档",
@@ -171,7 +170,7 @@
         "height": 28,
         "top": 202,
         "left": 289,
-        "reuse": false
+        "reuse": 0
     },
     "N.png": {
         "name": "N档",
@@ -180,7 +179,7 @@
         "height": 28,
         "top": 202,
         "left": 289,
-        "reuse": false
+        "reuse": 0
     },
     "P.png": {
         "name": "P档",
@@ -189,7 +188,7 @@
         "height": 28,
         "top": 202,
         "left": 289,
-        "reuse": false
+        "reuse": 0
     },
     "220.png": {
         "name": "车速220",
@@ -198,7 +197,7 @@
         "height": 47,
         "top": 146,
         "left": 252,
-        "reuse": false
+        "reuse": 0
     },
     "km_h.png": {
         "name": "km_h",
@@ -207,6 +206,6 @@
         "height": 28,
         "top": 198,
         "left": 271,
-        "reuse": false
+        "reuse": 0
     }
 }

@@ -46,10 +46,9 @@ class IconData:
             "height": self.height,
             "top": self.top,
             "left": self.left,
-            "reuse": self.reuse
+            "reuse": int(self.reuse) if isinstance(self.reuse, bool) else self.reuse   # 改为保存整数 0/1/2/3
         }
         if self.reuse:
-            result["reuse_name"] = self.reuse_name
             result["reuse_top"] = self.reuse_top
             result["reuse_left"] = self.reuse_left
         return result
@@ -764,42 +763,34 @@ class IconManagerApp:
         
         # 复用配置
         has_reuse = self.reuse_var.get()
-        new_reuse_name = new_name if has_reuse else ""
         new_reuse_top = self.reuse_top_var.get() if has_reuse else 0
         new_reuse_left = self.reuse_left_var.get() if has_reuse else 0
         
-        # 全局名称唯一性验证，检查新名称是否与已有名称冲突（排除当前文件本身）
+        # -------------------  名称唯一性校验（不再检查 reuse_name） -------------------
         for other_filename, other_data in self.config_data.items():
             if other_filename == filename:
                 continue  # 跳过当前文件
+            
             # 检查主名称冲突
             if new_name == other_data.name:
                 messagebox.showwarning("警告", f"主名称 '{new_name}' 已存在于 '{other_filename}' 中！\n所有UI名称必须唯一。")
                 return
-            # 检查主名称是否与他人的复用名称冲突
+        
+            # 检查主名称与他人的复用名称冲突
             if other_data.reuse and new_name == other_data.reuse_name:
                 messagebox.showwarning("警告", f"主名称 '{new_name}' 已作为复用名称存在于 '{other_filename}' 中！\n所有UI名称必须唯一。")
                 return
-            # 检查复用名称冲突
-            if has_reuse:
-                if new_reuse_name == other_data.name:
-                    messagebox.showwarning("警告", f"复用名称 '{new_reuse_name}' 已存在于 '{other_filename}' 中！\n所有UI名称必须唯一。")
-                    return
-                if other_data.reuse and new_reuse_name == other_data.reuse_name:
-                    messagebox.showwarning("警告", f"复用名称 '{new_reuse_name}' 已作为复用名称存在于 '{other_filename}' 中！\n所有UI名称必须唯一。")
-                    return
         
         old_data = self.config_data[filename]
         # 检查是否有更改
         has_changes = (
             old_data.name != new_name or 
-            old_data.class_name != new_class_name or  # 检查类名变化
+            old_data.class_name != new_class_name or      # 检查类名变化
             old_data.top != new_top or 
             old_data.left != new_left or
             old_data.width != new_width or
             old_data.height != new_height or
             old_data.reuse != has_reuse or
-            old_data.reuse_name != new_reuse_name or
             old_data.reuse_top != new_reuse_top or
             old_data.reuse_left != new_reuse_left
         )
@@ -810,13 +801,12 @@ class IconManagerApp:
                 self.resize_background_image(new_width, new_height)
             
             self.config_data[filename].name = new_name
-            self.config_data[filename].class_name = new_class_name  # 保存类名
+            self.config_data[filename].class_name = new_class_name      # 保存类名
             self.config_data[filename].top = new_top
             self.config_data[filename].left = new_left
             self.config_data[filename].width = new_width
             self.config_data[filename].height = new_height
-            self.config_data[filename].reuse = has_reuse
-            self.config_data[filename].reuse_name = new_reuse_name
+            self.config_data[filename].reuse = 1 if has_reuse else 0   # 保存为整数 0/1
             self.config_data[filename].reuse_top = new_reuse_top
             self.config_data[filename].reuse_left = new_reuse_left
             self.unsaved_changes = True
