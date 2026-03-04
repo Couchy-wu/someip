@@ -10,8 +10,12 @@ import random
 # 数据类
 # ========================================
 class IconData:
-    def __init__(self, name="", width=0, height=0, top=0, left=0, reuse=False, 
-                 reuse_name="", reuse_top=0, reuse_left=0, class_name=""):
+    # 为支持多重复用，扩展 __init__ 参数列表
+    def __init__(self, name="", width=0, height=0, top=0, left=0,
+                 reuse=False, reuse_name="", reuse_top=0, reuse_left=0,
+                 reuse2=False, reuse_top_2=0, reuse_left_2=0,
+                 reuse3=False, reuse_top_3=0, reuse_left_3=0,
+                 class_name=""):
         self.name = name
         self.width = width
         self.height = height
@@ -21,10 +25,19 @@ class IconData:
         self.reuse_name = reuse_name
         self.reuse_top = reuse_top
         self.reuse_left = reuse_left
-        self.class_name = class_name  # UI类名
+        # 第二套复用坐标
+        self.reuse2 = reuse2
+        self.reuse_top_2 = reuse_top_2
+        self.reuse_left_2 = reuse_left_2
+        # 第三套复用坐标
+        self.reuse3 = reuse3
+        self.reuse_top_3 = reuse_top_3
+        self.reuse_left_3 = reuse_left_3
+        self.class_name = class_name  # UI 类名
     
     @classmethod
     def from_dict(cls, data):
+        reuse_cnt = int(data.get("reuse", 0))          # 0‑3
         return cls(
             name=data.get("name", ""),
             width=data.get("width", 0),
@@ -35,22 +48,42 @@ class IconData:
             reuse_name=data.get("reuse_name", ""),
             reuse_top=data.get("reuse_top", 0),
             reuse_left=data.get("reuse_left", 0),
+            reuse2=data.get("reuse2", False),
+            reuse_top_2=data.get("reuse_top_2", 0),
+            reuse_left_2=data.get("reuse_left_2", 0),
+            reuse3=data.get("reuse3", False), 
+            reuse_top_3=data.get("reuse_top_3", 0),
+            reuse_left_3=data.get("reuse_left_3", 0),
             class_name=data.get("class_name", "")  # 从JSON读取类名
         )
     
+
     def to_dict(self):
+        """导出为 JSON 字典"""
+        # 统计当前对象实际启用了多少套复用
+        reuse_cnt = (
+            int(bool(self.reuse)) +
+            int(bool(self.reuse2)) +
+            int(bool(self.reuse3))
+        )
         result = {
             "name": self.name,
-            "class_name": self.class_name,  # 类名写入JSON
+            "class_name": self.class_name,
             "width": self.width,
             "height": self.height,
             "top": self.top,
             "left": self.left,
-            "reuse": int(self.reuse) if isinstance(self.reuse, bool) else self.reuse   # 改为保存整数 0/1/2/3
+            "reuse": reuse_cnt,
         }
         if self.reuse:
             result["reuse_top"] = self.reuse_top
             result["reuse_left"] = self.reuse_left
+        if self.reuse2:
+            result["reuse_top_2"] = self.reuse_top_2
+            result["reuse_left_2"] = self.reuse_left_2
+        if self.reuse3:
+            result["reuse_top_3"] = self.reuse_top_3
+            result["reuse_left_3"] = self.reuse_left_3
         return result
 
 # ========================================
@@ -65,8 +98,8 @@ class IconManagerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("UI 图标管理器")
-        self.root.geometry("1000x700")
-        self.root.minsize(900, 650)
+        self.root.geometry("1100x800")
+        self.root.minsize(1000, 750)
         
         # 路径配置作为实例变量
         self.project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -96,7 +129,20 @@ class IconManagerApp:
         # 类名颜色映射
         self.class_name_colors = {}
         self.used_colors = set()
-        
+
+        # 复用控件引用存储
+        self.reuse_var = tk.BooleanVar()
+        self.reuse2_var = tk.BooleanVar()
+        self.reuse3_var = tk.BooleanVar()
+
+        self.reuse_top_var = tk.IntVar()
+        self.reuse_top_2_var = tk.IntVar()
+        self.reuse_top_3_var = tk.IntVar()
+
+        self.reuse_left_var = tk.IntVar()
+        self.reuse_left_2_var = tk.IntVar()
+        self.reuse_left_3_var = tk.IntVar()
+
         self.ensure_background_image()
         
         self.load_image_files()
@@ -384,7 +430,7 @@ class IconManagerApp:
             font=("微软雅黑", 12),
             background="lightgray"
         )
-        self.image_label.grid(row=0, column=0, rowspan=12, padx=(0, 10), sticky="nsew")
+        self.image_label.grid(row=0, column=0, rowspan=16, padx=(0, 10), sticky="nsew")
         
         # 右侧：表单
         form_frame = ttk.LabelFrame(content_frame, text="图标信息", padding="10")
@@ -439,21 +485,40 @@ class IconManagerApp:
         separator = ttk.Separator(form_frame, orient='horizontal')
         separator.grid(row=7, column=0, columnspan=2, sticky="ew", pady=10)
         
-        # 复用配置
-        self.reuse_var = tk.BooleanVar()
-        reuse_check = ttk.Checkbutton(form_frame, text="启用复用", variable=self.reuse_var, 
+        # 将三个复用开关放在同一行，使用 column 分隔
+        self.reuse_check = ttk.Checkbutton(form_frame, text="启用复用", variable=self.reuse_var, 
                                      command=self.toggle_reuse_fields)
-        reuse_check.grid(row=8, column=0, columnspan=2, sticky="w", pady=(0, 5))
-        
+        self.reuse_check.grid(row=8, column=0, sticky="w", padx=(0, 10), pady=(0, 5))
+
+        self.reuse2_check = ttk.Checkbutton(form_frame, text="启用第二个复用", variable=self.reuse2_var, 
+                                           command=self.toggle_reuse_fields)
+        self.reuse2_check.grid(row=8, column=1, sticky="w", padx=(0, 10), pady=(0, 5))  # 紧跟其后
+
+        self.reuse3_check = ttk.Checkbutton(form_frame, text="启用第三个复用", variable=self.reuse3_var, 
+                                           command=self.toggle_reuse_fields)
+        self.reuse3_check.grid(row=9, column=0, sticky="w", pady=(0, 5))  # 最右边的也靠左排列
+
+        # 复用坐标字段（初始隐藏）
         ttk.Label(form_frame, text="复用顶部 (px):").grid(row=10, column=0, sticky="w", pady=2)
-        self.reuse_top_var = tk.IntVar()
         self.reuse_top_entry = ttk.Entry(form_frame, textvariable=self.reuse_top_var, width=20)
         self.reuse_top_entry.grid(row=10, column=1, sticky="w", pady=2, padx=(0, 10))
-        
         ttk.Label(form_frame, text="复用左侧 (px):").grid(row=11, column=0, sticky="w", pady=2)
-        self.reuse_left_var = tk.IntVar()
         self.reuse_left_entry = ttk.Entry(form_frame, textvariable=self.reuse_left_var, width=20)
         self.reuse_left_entry.grid(row=11, column=1, sticky="w", pady=2, padx=(0, 10))
+        # 第二组坐标
+        ttk.Label(form_frame, text="第二个复用顶部 (px):").grid(row=12, column=0, sticky="w", pady=2)  
+        self.reuse_top_2_entry = ttk.Entry(form_frame, textvariable=self.reuse_top_2_var, width=20)
+        self.reuse_top_2_entry.grid(row=12, column=1, sticky="w", pady=2, padx=(0, 10))
+        ttk.Label(form_frame, text="第二个复用左侧 (px):").grid(row=13, column=0, sticky="w", pady=2)  
+        self.reuse_left_2_entry = ttk.Entry(form_frame, textvariable=self.reuse_left_2_var, width=20)
+        self.reuse_left_2_entry.grid(row=13, column=1, sticky="w", pady=2, padx=(0, 10))
+        # 第三组坐标
+        ttk.Label(form_frame, text="第三个复用顶部 (px):").grid(row=14, column=0, sticky="w", pady=2)
+        self.reuse_top_3_entry = ttk.Entry(form_frame, textvariable=self.reuse_top_3_var, width=20)
+        self.reuse_top_3_entry.grid(row=14, column=1, sticky="w", pady=2, padx=(0, 10))
+        ttk.Label(form_frame, text="第三个复用左侧 (px):").grid(row=15, column=0, sticky="w", pady=2) 
+        self.reuse_left_3_entry = ttk.Entry(form_frame, textvariable=self.reuse_left_3_var, width=20)
+        self.reuse_left_3_entry.grid(row=15, column=1, sticky="w", pady=2, padx=(0, 10))
         
         # 初始隐藏复用字段
         self.toggle_reuse_fields()
@@ -470,6 +535,12 @@ class IconManagerApp:
         self.reuse_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
         self.reuse_top_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
         self.reuse_left_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
+        self.reuse2_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
+        self.reuse_top_2_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
+        self.reuse_left_2_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
+        self.reuse3_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
+        self.reuse_top_3_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
+        self.reuse_left_3_var.trace_add("write", lambda *args: self.mark_unsaved_changes())
         
         # 第 3 行：按钮
         btn_frame = ttk.Frame(main_frame)
@@ -492,16 +563,51 @@ class IconManagerApp:
         return all(c.isalnum() or c == '_' for c in input_str) and input_str.isascii()
     
     def toggle_reuse_fields(self):
-        """切换复用字段的显示/隐藏。复用开启时自动把复用名称设为当前 UI 名称（内部保存），不再显示复用名称输入框。"""
+        """切换复用字段的显示/隐藏，并同步状态与变量"""
+        # 控制第一个复用
         if self.reuse_var.get():
-            # 只显示复用坐标字段
             self.reuse_top_entry.grid()
             self.reuse_left_entry.grid()
         else:
-            # 隐藏复用坐标字段
             self.reuse_top_entry.grid_remove()
             self.reuse_left_entry.grid_remove()
-    
+            # 主复用关闭时，强制关闭所有子复用并重置状态
+            self.reuse2_var.set(False)
+            self.reuse3_var.set(False)
+            self.reuse2_check.grid_remove()
+            self.reuse3_check.grid_remove()
+            self.reuse_top_2_entry.grid_remove()
+            self.reuse_left_2_entry.grid_remove()
+            self.reuse_top_3_entry.grid_remove()
+            self.reuse_left_3_entry.grid_remove()
+
+        # 控制第二个复用：只有第一个启用才能启用第二个
+        if self.reuse_var.get():
+            self.reuse2_check.grid()  # 显示开关
+            if self.reuse2_var.get():
+                self.reuse_top_2_entry.grid()
+                self.reuse_left_2_entry.grid()
+            else:
+                self.reuse_top_2_entry.grid_remove()
+                self.reuse_left_2_entry.grid_remove()
+        else:
+            # 已在上面统一处理
+            pass
+
+        # 控制第三个复用：只有第二个启用才能启用第三个
+        if self.reuse2_var.get():
+            self.reuse3_check.grid()  # 显示开关
+            if self.reuse3_var.get():
+                self.reuse_top_3_entry.grid()
+                self.reuse_left_3_entry.grid()
+            else:
+                self.reuse_top_3_entry.grid_remove()
+                self.reuse_left_3_entry.grid_remove()
+        else:
+            self.reuse3_check.grid_remove()
+            self.reuse_top_3_entry.grid_remove()
+            self.reuse_left_3_entry.grid_remove()
+
     def on_folder_change(self, event):
         """处理文件夹切换"""
         new_subfolder = self.folder_combobox.get()
@@ -629,19 +735,22 @@ class IconManagerApp:
         
         data = self.config_data[filename]
         
-        # 如果没有类名，红色高亮
+        # 类名缺失或位置为 (0,0) 时均视为未配置
         if not data.class_name:
             return "red"
-        
-        # 主位置为0,0，红色高亮
         if data.top == 0 and data.left == 0:
             return "red"
         
-        # 如果启用了复用，复用位置为0,0也需要红色高亮
-        if data.reuse and data.reuse_top == 0 and data.reuse_left == 0:
+        # 复用次数对应的坐标若仍为 (0,0) 也视为未配置
+        # 这里 data.reuse 已是整数 0‑3
+        if data.reuse >= 1 and data.reuse_top == 0 and data.reuse_left == 0:
+            return "red"
+        if data.reuse >= 2 and data.reuse_top_2 == 0 and data.reuse_left_2 == 0:
+            return "red"
+        if data.reuse >= 3 and data.reuse_top_3 == 0 and data.reuse_left_3 == 0:
             return "red"
         
-        # 如果有类名且该类名有多个图标，使用对应的颜色
+        # 同一类名出现多次时使用统一颜色
         if data.class_name and data.class_name in self.class_name_colors:
             return self.class_name_colors[data.class_name]
         
@@ -765,6 +874,17 @@ class IconManagerApp:
         has_reuse = self.reuse_var.get()
         new_reuse_top = self.reuse_top_var.get() if has_reuse else 0
         new_reuse_left = self.reuse_left_var.get() if has_reuse else 0
+
+        has_reuse2 = self.reuse2_var.get()
+        new_reuse_top_2 = self.reuse_top_2_var.get() if has_reuse2 else 0
+        new_reuse_left_2 = self.reuse_left_2_var.get() if has_reuse2 else 0
+
+        has_reuse3 = self.reuse3_var.get()
+        new_reuse_top_3 = self.reuse_top_3_var.get() if has_reuse3 else 0
+        new_reuse_left_3 = self.reuse_left_3_var.get() if has_reuse3 else 0
+
+        # 计算复用次数（0‑3），保存到 data.reuse
+        reuse_cnt = int(has_reuse) + int(has_reuse2) + int(has_reuse3)
         
         # -------------------  名称唯一性校验（不再检查 reuse_name） -------------------
         for other_filename, other_data in self.config_data.items():
@@ -790,9 +910,15 @@ class IconManagerApp:
             old_data.left != new_left or
             old_data.width != new_width or
             old_data.height != new_height or
-            old_data.reuse != has_reuse or
+            old_data.reuse != reuse_cnt or
             old_data.reuse_top != new_reuse_top or
-            old_data.reuse_left != new_reuse_left
+            old_data.reuse_left != new_reuse_left or
+            old_data.reuse2 != has_reuse2 or
+            old_data.reuse_top_2 != new_reuse_top_2 or
+            old_data.reuse_left_2 != new_reuse_left_2 or
+            old_data.reuse3 != has_reuse3 or
+            old_data.reuse_top_3 != new_reuse_top_3 or
+            old_data.reuse_left_3 != new_reuse_left_3
         )
         
         if has_changes:
@@ -806,9 +932,17 @@ class IconManagerApp:
             self.config_data[filename].left = new_left
             self.config_data[filename].width = new_width
             self.config_data[filename].height = new_height
-            self.config_data[filename].reuse = 1 if has_reuse else 0   # 保存为整数 0/1
+            # 统一保存复用次数
+            self.config_data[filename].reuse = reuse_cnt
+            # 仍然保存每套坐标
             self.config_data[filename].reuse_top = new_reuse_top
             self.config_data[filename].reuse_left = new_reuse_left
+            self.config_data[filename].reuse2 = has_reuse2
+            self.config_data[filename].reuse_top_2 = new_reuse_top_2
+            self.config_data[filename].reuse_left_2 = new_reuse_left_2
+            self.config_data[filename].reuse3 = has_reuse3
+            self.config_data[filename].reuse_top_3 = new_reuse_top_3
+            self.config_data[filename].reuse_left_3 = new_reuse_left_3
             self.unsaved_changes = True
             self.update_thumbnail_highlights()
     
@@ -873,7 +1007,13 @@ class IconManagerApp:
                 reuse=False,
                 reuse_name="",
                 reuse_top=0,
-                reuse_left=0
+                reuse_left=0,
+                reuse2=False,
+                reuse_top_2=0,
+                reuse_left_2=0,
+                reuse3=False,
+                reuse_top_3=0,
+                reuse_left_3=0
             )
         
         icon_data = self.config_data[filename]
@@ -895,6 +1035,12 @@ class IconManagerApp:
         self.reuse_var.set(icon_data.reuse)
         self.reuse_top_var.set(icon_data.reuse_top)
         self.reuse_left_var.set(icon_data.reuse_left)
+        self.reuse2_var.set(icon_data.reuse2)
+        self.reuse_top_2_var.set(icon_data.reuse_top_2)
+        self.reuse_left_2_var.set(icon_data.reuse_left_2)
+        self.reuse3_var.set(icon_data.reuse3)
+        self.reuse_top_3_var.set(icon_data.reuse_top_3)
+        self.reuse_left_3_var.set(icon_data.reuse_left_3)
         
         # 控制 width 和 height 输入框状态（background.png 可编辑）
         if filename == 'background.png':
