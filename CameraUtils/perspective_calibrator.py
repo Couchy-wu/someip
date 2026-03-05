@@ -223,10 +223,10 @@ class PerspectiveCalibrator:
         ]
 
         # 绘制边框
-        cv2.line(self.working_image, tl_d, tr_d, (255, 0, 0), 2)
-        cv2.line(self.working_image, tr_d, br_d, (255, 0, 0), 2)
-        cv2.line(self.working_image, br_d, bl_d, (255, 0, 0), 2)
-        cv2.line(self.working_image, bl_d, tl_d, (255, 0, 0), 2)
+        cv2.line(self.working_image, tl_d, tr_d, (255, 0, 0), 1)
+        cv2.line(self.working_image, tr_d, br_d, (255, 0, 0), 1)
+        cv2.line(self.working_image, br_d, bl_d, (255, 0, 0), 1)
+        cv2.line(self.working_image, bl_d, tl_d, (255, 0, 0), 1)
         # 标记角点
         for pt, label in zip([tl_d, tr_d, bl_d, br_d], ["TL", "TR", "BL", "BR"]):
             cv2.circle(self.working_image, pt, 6, (0, 0, 255), -1)
@@ -435,6 +435,14 @@ class PerspectiveCalibrator:
                         y / self.base_scale_y * self.current_scale)
                        for (x, y) in ordered_pts]
 
+        # 记录角点顺序，以便后续拖拽时能够映射到字典键
+        self.point_order = [
+            "top_left_corner",
+            "top_right_corner",
+            "bottom_left_corner",
+            "bottom_right_corner"
+        ]
+
         # 第一次加载时设为基准
         if self.original_corners is None:
             self.original_corners = self.corners.copy()
@@ -476,13 +484,13 @@ class PerspectiveCalibrator:
 
         # 四条边
         cv2.line(self.working_image, pts_disp["top_left_corner"],
-                 pts_disp["top_right_corner"], (255, 0, 0), 2)
+                 pts_disp["top_right_corner"], (255, 0, 0), 1)
         cv2.line(self.working_image, pts_disp["top_right_corner"],
-                 pts_disp["bottom_right_corner"], (255, 0, 0), 2)
+                 pts_disp["bottom_right_corner"], (255, 0, 0), 1)
         cv2.line(self.working_image, pts_disp["bottom_right_corner"],
-                 pts_disp["bottom_left_corner"], (255, 0, 0), 2)
+                 pts_disp["bottom_left_corner"], (255, 0, 0), 1)
         cv2.line(self.working_image, pts_disp["bottom_left_corner"],
-                 pts_disp["top_left_corner"], (255, 0, 0), 2)
+                 pts_disp["top_left_corner"], (255, 0, 0), 1)
 
         label_map = {
             "top_left_corner": "TL",
@@ -535,6 +543,7 @@ class PerspectiveCalibrator:
         print("   - 'z' 键: 扩大5%")
         print("   - 'x' 键: 缩小5%")
         print("   - 't' 键: 切换Canny边缘显示（辅助角点选择）")
+        print("   - 'q' 键: 直接读取已保存的角点并使用")
         # print("   - 'w' 键: 保存拉直后的图像")
         print(f"   - 当前输出分辨率: {current_res_name}")
         # ---------- 主循环 ----------
@@ -556,6 +565,13 @@ class PerspectiveCalibrator:
                 self.show_canny = not self.show_canny
                 print(f"Canny边缘显示: {'开启' if self.show_canny else '关闭'}")
                 self._redraw_with_corners()
+            elif key == ord('q'):
+                #  # 按下 'q' 时直接加载已保存的 fixed_corners.json,若成功会自动绘制并计算透视矩阵
+                if self.load_corners():
+                    print("✅ 已从 fixed_corners.json 加载并应用角点信息")
+                else:
+                    print("⚠️ 未能加载 fixed_corners.json，请检查文件是否存在或格式是否正确")
+
             # elif key == ord('w'):             # 保存变换后的图像
             #     if hasattr(self, 'warped_image') and self.warped_image is not None:
             #         output_path = self.image_path.parent / f"{self.image_path.stem}_warped.jpg"
