@@ -95,6 +95,8 @@ class ImageGeneratorApp:
         self.status_colors = {
             "main": "blue",      # 🔵 启用位置1（主位置）
             "reuse": "green",    # 🟢 启用位置2（复用位置）
+            "reuse2": "orange",  # 🟠 启用位置3（第二个复用位置)
+            "reuse3": "purple",  # 🟣 启用位置4（第三个复用位置）
             "enabled": "red",    # 🔴 启用（无复用）
             None: "lightgray"    # ⚪ 不启用
         }
@@ -511,7 +513,16 @@ class ImageGeneratorApp:
         if state is None:
             return "不启用"
         elif has_reuse:
-            return "启用位置1" if state == "main" else "启用位置2"
+            if state == "main":
+                return "启用位置1（主位置）"
+            elif state == "reuse":
+                return "启用位置2（复用位置 1）"
+            elif state == "reuse2":
+                return "启用位置3（复用位置 2）"
+            elif state == "reuse3":
+                return "启用位置4（复用位置 3）"
+            else:
+                return "启用"
         else:
             return "启用"
     
@@ -524,11 +535,21 @@ class ImageGeneratorApp:
             current_states = self.image_configs[self.current_image_index]["icon_states"]
             state = current_states.get(filename)
             config = self.config_data.get(filename, {})
-            has_reuse = config.get("reuse", False)
+            has_reuse = config.get("reuse", 0)
             if state is None:
                 color = self.status_colors[None]
             elif has_reuse:
-                color = self.status_colors["main"] if state == "main" else self.status_colors["reuse"]
+                # 多重复用映射
+                if state == "main":
+                    color = self.status_colors["main"]
+                elif state == "reuse":
+                    color = self.status_colors["reuse"]
+                elif state == "reuse2":
+                    color = self.status_colors["reuse2"]
+                elif state == "reuse3":
+                    color = self.status_colors["reuse3"]
+                else:
+                    color = self.status_colors[None]
             else:
                 color = self.status_colors["enabled"] if state == "enabled" else self.status_colors[None]
         label.config(bg=color)
@@ -541,22 +562,43 @@ class ImageGeneratorApp:
         current_states = self.image_configs[self.current_image_index]["icon_states"]
         current_state = current_states.get(filename, None)
         config = self.config_data[filename]
-        has_reuse = config.get("reuse", False)
+        has_reuse = config.get("reuse", 0)
         # ---------- 状态切换 ----------
-        if current_state is None:
+        if current_state is None:                         # 当前未启用 → 启用主位置
             current_states[filename] = "main" if has_reuse else "enabled"
             button.config(relief="sunken")
-        elif has_reuse:
-            if current_state == "main":
-                current_states[filename] = "reuse"
-                button.config(relief="sunken")
-            elif current_state == "reuse":
-                current_states.pop(filename, None)
-                button.config(relief="raised")
         else:
-            if current_state == "enabled":
-                current_states.pop(filename, None)
-                button.config(relief="raised")
+            if has_reuse:                                 # 有复用，需要更多轮转
+                # 根据已有状态决定下一个状态
+                if current_state == "main":
+                    current_states[filename] = "reuse"    # 第1个复用位置
+                    button.config(relief="sunken")
+                elif current_state == "reuse":
+                    if has_reuse >= 2:
+                        current_states[filename] = "reuse2"   # 第2个复用位置
+                    else:
+                        current_states.pop(filename, None)    # 回到未启用
+                        button.config(relief="raised")
+                    button.config(relief="sunken")
+                elif current_state == "reuse2":
+                    if has_reuse >= 3:
+                        current_states[filename] = "reuse3"   # 第3个复用位置
+                        button.config(relief="sunken")
+                    else:
+                        current_states.pop(filename, None)    # 回到未启用
+                        button.config(relief="raised")
+                elif current_state == "reuse3":
+                    # 最后一次点击恢复为未启用
+                    current_states.pop(filename, None)
+                    button.config(relief="raised")
+                else:
+                    # 防御性回退
+                    current_states.pop(filename, None)
+                    button.config(relief="raised")
+            else:                                         # 没有复用，仅在 enabled 与未启用之间切换
+                if current_state == "enabled":
+                    current_states.pop(filename, None)
+                    button.config(relief="raised")
         # ---------- 同步数值框 ----------
         # button.value_entry 在 load_icons_and_create_buttons 中创建
         entry = getattr(button, "value_entry", None)
@@ -661,22 +703,37 @@ class ImageGeneratorApp:
                         for filename, data in self.config_data.items():
                             if filename == "background.png":
                                 continue
-                            # -------- 主位置匹配 --------
+                            # ---------------- 主位置匹配 ----------------
                             if data.get("name") == icon_name:
                                 if (abs(top_left[0] - data["left"]) < 5 and
                                     abs(top_left[1] - data["top"]) < 5):
                                     img_cfg["icon_states"][filename] = (
                                         "main" if bool(data.get("reuse", 0)) else "enabled"
-                                    )   # 复用标识改为整数，使用 bool() 判定
+                                    )
                                     matched = True
-                                    break  # 找到匹配后结束当前 filename 检查
-                            # -------- 复用位置匹配（复用 = 1、2、3）--------
-                            if data.get("reuse", 0) and \
-                               (abs(top_left[0] - data["reuse_left"]) < 5 and
-                                abs(top_left[1] - data["reuse_top"]) < 5):
-                                img_cfg["icon_states"][filename] = "reuse"
-                                matched = True
-                                break
+                                    # 若主位置已经匹配成功，直接退出当前 filename 循环
+                                    break
+                            # ---------------- 复用位置 1 ----------------
+                            if data.get("reuse", 0) >= 1:
+                                if (abs(top_left[0] - data["reuse_left"]) < 5 and
+                                    abs(top_left[1] - data["reuse_top"]) < 5):
+                                    img_cfg["icon_states"][filename] = "reuse"
+                                    matched = True
+                                    break
+                            # ---------------- 复用位置 2 ----------------
+                            if data.get("reuse", 0) >= 2:
+                                if (abs(top_left[0] - data.get("reuse_left_2", -9999)) < 5 and
+                                    abs(top_left[1] - data.get("reuse_top_2", -9999)) < 5):
+                                    img_cfg["icon_states"][filename] = "reuse2"
+                                    matched = True
+                                    break
+                            # ---------------- 复用位置 3 ----------------
+                            if data.get("reuse", 0) >= 3:
+                                if (abs(top_left[0] - data.get("reuse_left_3", -9999)) < 5 and
+                                    abs(top_left[1] - data.get("reuse_top_3", -9999)) < 5):
+                                    img_cfg["icon_states"][filename] = "reuse3"
+                                    matched = True
+                                    break
                         if not matched:
                             print(f"⚠️ 无法匹配图标: {icon_name} @ {top_left}")
                         # 若配置里携带数值，则同步到 icon_values
@@ -788,12 +845,19 @@ class ImageGeneratorApp:
                 continue
             try:
                 icon_img = Image.open(file_path).convert("RGBA")
-                if state in ("main", "enabled"):
+                # 根据状态选择坐标
+                if state == "main" or state == "enabled":
                     pos_x = self.config_data[filename]["left"]
                     pos_y = self.config_data[filename]["top"]
                 elif state == "reuse":
                     pos_x = self.config_data[filename]["reuse_left"]
                     pos_y = self.config_data[filename]["reuse_top"]
+                elif state == "reuse2":
+                    pos_x = self.config_data[filename]["reuse_left_2"]
+                    pos_y = self.config_data[filename]["reuse_top_2"]
+                elif state == "reuse3":
+                    pos_x = self.config_data[filename]["reuse_left_3"]
+                    pos_y = self.config_data[filename]["reuse_top_3"]
                 else:
                     continue
                 if 0 <= pos_x < self.bg_width and 0 <= pos_y < self.bg_height:
@@ -843,12 +907,19 @@ class ImageGeneratorApp:
                 continue
             try:
                 icon_img = Image.open(file_path).convert("RGBA")
-                if state in ("main", "enabled"):
+                # 复用坐标选择
+                if state == "main" or state == "enabled":
                     pos_x = self.config_data[filename]["left"]
                     pos_y = self.config_data[filename]["top"]
                 elif state == "reuse":
                     pos_x = self.config_data[filename]["reuse_left"]
                     pos_y = self.config_data[filename]["reuse_top"]
+                elif state == "reuse2":
+                    pos_x = self.config_data[filename]["reuse_left_2"]
+                    pos_y = self.config_data[filename]["reuse_top_2"]
+                elif state == "reuse3":
+                    pos_x = self.config_data[filename]["reuse_left_3"]
+                    pos_y = self.config_data[filename]["reuse_top_3"]
                 else:
                     continue
                 composite_img.paste(icon_img, (pos_x, pos_y), icon_img)
@@ -893,13 +964,21 @@ class ImageGeneratorApp:
                     data = self.config_data[filename]
                     # ----------------- 读取图标的 class_name -----------------
                     class_name = data.get("class_name", "")
-                    # ----------------- 是否为复用位置 -----------------
-                    has_reuse = bool(data.get("reuse", 0)) and state == "reuse"   # 使用整数标识复用
-                    # ----------------- 图标名称（复用时仍使用同一名称） -----------------
-                    name = data.get("name", "")
-                    # ----------------- 位置坐标 -----------------
-                    pos_x = data["reuse_left"] if has_reuse else data["left"]
-                    pos_y = data["reuse_top"]  if has_reuse else data["top"]
+                    # ----------------- 计算坐标 -----------------
+                    if state == "main" or state == "enabled":
+                        pos_x = data["left"]
+                        pos_y = data["top"]
+                    elif state == "reuse":
+                        pos_x = data["reuse_left"]
+                        pos_y = data["reuse_top"]
+                    elif state == "reuse2":
+                        pos_x = data["reuse_left_2"]
+                        pos_y = data["reuse_top_2"]
+                    elif state == "reuse3":
+                        pos_x = data["reuse_left_3"]
+                        pos_y = data["reuse_top_3"]
+                    else:
+                        continue
                     # ----------------- 宽高（若配置中缺失则实时读取） -----------------
                     width = data.get("width", 0) or 0
                     height = data.get("height", 0) or 0
@@ -915,7 +994,7 @@ class ImageGeneratorApp:
                                 pass
                     # ----------------- 生成单个图标项 -----------------
                     item = {
-                        "name": name,
+                        "name": data.get("name", ""),
                         "class_name": class_name,
                         "top_left": [pos_x, pos_y],
                         "bottom_right": [pos_x + width, pos_y + height]
