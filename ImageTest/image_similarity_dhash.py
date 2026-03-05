@@ -1,0 +1,107 @@
+# ImageTest/image_similarity_dhash.py
+from typing import Union, Tuple
+import numpy as np
+from PIL import Image
+
+
+"""
+图标一致性比较（dHash + 汉明距离）
+输入支持：文件路径 / PIL.Image / ndarray（灰度或彩色）
+灰度化 → 缩放至 9×8（使用 PIL BILINEAR）
+差值哈希 → 64 位整数
+汉明距离判定
+"""
+
+def compare_icons(
+    img_a: Union[str, Image.Image, np.ndarray],
+    img_b: Union[str, Image.Image, np.ndarray],
+    threshold: int = 5,
+    confidence: bool = False,
+) -> Tuple[bool, int, float]:
+    """
+    比较两个图标是否一致（基于 dHash）
+    参数：
+        img_a, img_b: 图像输入，支持：
+            - 文件路径（str）
+            - PIL.Image.Image
+            - NumPy ndarray（灰度 H×W 或彩色 H×W×3/4）
+        threshold: 汉明距离阈值，≤ 阈值视为“一致”
+        confidence: 是否计算置信度（0~100），False 时返回 -1
+    返回：
+        (is_same: bool, hamming: int, confidence_score: float)
+    """
+
+    # ========================================
+    # 1. 统一转为 8-bit 灰度 ndarray (H, W)
+    # 优化：减少类型判断开销，避免中间转换
+    # ========================================
+    def to_grayscale(img):
+        if isinstance(img, str):
+            return np.array(Image.open(img).convert("L"), dtype=np.uint8)
+        elif isinstance(img, Image.Image):
+            return np.array(img.convert("L"), dtype=np.uint8)
+        elif isinstance(img, np.ndarray):
+            if img.ndim == 2:
+                return img
+            # 多通道：使用 Luma 加权转灰度（更准确）
+            if img.shape[2] == 3:
+                return (0.299 * img[:, :, 0] + 0.587 * img[:, :, 1] + 0.114 * img[:, :, 2]).astype(np.uint8)
+            elif img.shape[2] == 4:  # RGBA
+                rgb = img[:, :, :3]
+                alpha = img[:, :, 3] / 255.0
+                return ((0.299 * rgb[:, :, 0] + 0.587 * rgb[:, :, 1] + 0.114 * rgb[:, :, 2]) * alpha).astype(np.uint8)
+            else:
+                return np.mean(img, axis=2).astype(np.uint8)
+        else:
+            raise TypeError(f"不支持的图像类型: {type(img)}")
+
+    arr_a = to_grayscale(img_a)
+    arr_b = to_grayscale(img_b)
+
+    # ========================================
+    # 2. dHash 计算（保留原始 PIL.resize 逻辑）
+    # 用 PIL 双线性插值缩放
+    # ========================================
+    def compute_dhash(image_array):
+        # 转为 PIL 图像
+        pil_img = Image.fromarray(image_array)
+        # 缩放至 9×8（宽9，高8）
+        resized = pil_img.resize((9, 8), Image.BILINEAR)
+        data = np.array(resized, dtype=np.uint8)  # (8, 9)
+        # 行内差分：后一列 > 前一列 → bool (8,8)
+        diff = data[:, 1:] > data[:, :-1]
+        # 展平为 64 位，打包为 int
+        bits = diff.ravel()  # (64,)
+        packed = np.packbits(bits)  # (8,) uint8
+        # 使用 int.from_bytes 替代循环，更快
+        return int.from_bytes(packed, 'big')
+
+    hash_a = compute_dhash(arr_a)
+    hash_b = compute_dhash(arr_b)
+
+    # ========================================
+    # 3. 汉明距离 + 判定
+    # 优化：内置 bit_count，高效计算
+    # ========================================
+    hamming_distance = (hash_a ^ hash_b).bit_count()
+    is_same = hamming_distance <= threshold
+    confidence_score = 100.0 * (64 - hamming_distance) / 64 if confidence else -1.0
+
+    return is_same, hamming_distance, confidence_score
+
+
+# ========================================
+# 示例用法（直接运行时执行）
+# ========================================
+if __name__ == "__main__":
+    # 请替换为你的图标路径
+    ICON_A = "ADS接管_标准.png"
+    ICON_B = "ADS接管.png"
+    result = compare_icons(
+        ICON_A,
+        ICON_B,
+        threshold=5,
+        confidence=True
+    )
+    print("比较完成:", result)
+    # 输出: (is_same, hamming, confidence)
