@@ -85,27 +85,48 @@ def compare_icons(
     返回：
         (is_same: bool, hamming: int, confidence_score: float)
     """
-    # ========================================
     # 1. 统一转为 8-bit 灰度 ndarray (H, W)
-    # ========================================
-    # 调用全局 to_grayscale 函数
     arr_a = to_grayscale(img_a)
     arr_b = to_grayscale(img_b)
     
-    # ========================================
     # 2. dHash 计算（调用全局函数）
-    # ========================================
-    # 调用全局 compute_dhash 函数
     hash_a = compute_dhash(arr_a)
     hash_b = compute_dhash(arr_b)
     
-    # ========================================
     # 3. 汉明距离 + 判定
-    # 优化：内置 bit_count，高效计算
-    # ========================================
     hamming_distance = (hash_a ^ hash_b).bit_count()
     is_same = hamming_distance <= threshold
     confidence_score = 100.0 * (64 - hamming_distance) / 64 if confidence else -1.0
+    return is_same, hamming_distance, confidence_score
+
+def compare_with_precomputed_hash(
+    img: Union[str, Image.Image, np.ndarray],
+    precomputed_hash: int,
+    threshold: int = 5,
+    confidence: bool = False,
+) -> Tuple[bool, int, float]:
+    """
+    与已经得到的 dHash 哈希值进行比较。比较两个图标是否一致
+    参数：
+        img: 图像输入，支持：
+            - 文件路径（str）
+            - PIL.Image.Image
+            - NumPy ndarray（灰度 H×W 或彩色 H×W×3/4）
+        threshold: 汉明距离阈值，≤ 阈值视为“一致”
+        confidence: 是否计算置信度（0~100），False 时返回 -1
+    返回：
+        (is_same: bool, hamming: int, confidence_score: float)
+    """
+    # 1. 转为 8‑bit 灰度 ndarray
+    gray_arr = to_grayscale(img)
+    
+    # 2. 计算待比较图像的 dHash
+    cur_hash = compute_dhash(gray_arr)
+
+    # 3. 汉明距离与判定
+    hamming_distance = (cur_hash ^ precomputed_hash).bit_count()
+    is_same = hamming_distance <= threshold
+    confidence_score = (100.0 * (64 - hamming_distance) / 64 if confidence else -1.0)
     return is_same, hamming_distance, confidence_score
 
 
