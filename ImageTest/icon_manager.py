@@ -4,6 +4,7 @@ import json
 import tkinter as tk
 from tkinter import ttk, messagebox
 from PIL import Image, ImageTk
+from image_similarity_dhash import get_image_hash
 import random
 
 # ========================================
@@ -15,7 +16,7 @@ class IconData:
                  reuse=False, reuse_name="", reuse_top=0, reuse_left=0,
                  reuse2=False, reuse_top_2=0, reuse_left_2=0,
                  reuse3=False, reuse_top_3=0, reuse_left_3=0,
-                 class_name=""):
+                 class_name="", hash_val=None):
         self.name = name
         self.width = width
         self.height = height
@@ -34,6 +35,7 @@ class IconData:
         self.reuse_top_3 = reuse_top_3
         self.reuse_left_3 = reuse_left_3
         self.class_name = class_name  # UI 类名
+        self.hash = hash_val if hash_val is not None else 0
     
     @classmethod
     def from_dict(cls, data):
@@ -54,7 +56,8 @@ class IconData:
             reuse3=data.get("reuse3", False), 
             reuse_top_3=data.get("reuse_top_3", 0),
             reuse_left_3=data.get("reuse_left_3", 0),
-            class_name=data.get("class_name", "")  # 从JSON读取类名
+            class_name=data.get("class_name", ""),  # 从JSON读取类名
+            hash_val=data.get("hash", None)
         )
     
 
@@ -84,6 +87,8 @@ class IconData:
         if self.reuse3:
             result["reuse_top_3"] = self.reuse_top_3
             result["reuse_left_3"] = self.reuse_left_3
+        if self.hash:
+            result["hash"] = self.hash
         return result
 
 # ========================================
@@ -249,7 +254,48 @@ class IconManagerApp:
             self.unsaved_changes = False
         except Exception as e:
             messagebox.showerror("错误", f"保存失败：{e}")
-    
+
+    # 计算并写入所有图像的 dHash 到 JSON 配置中
+    def compute_and_update_hashes(self):
+        """遍历当前平台文件夹，计算每张图像的 dHash 并写入 json"""
+        # 1. 确认 json 已经生成
+        if not os.path.exists(self.config_file):
+            messagebox.showwarning("提示", "请先生成 json 配置文件！")
+            return
+
+        # 2. 逐图像计算哈希
+        changed = False
+        for filename in self.image_files:
+            # 背景图也需要哈希
+            img_path = os.path.join(self.resources_dir, filename)
+            try:
+                hash_val = get_image_hash(img_path)          # 调用公共接口
+            except Exception as e:
+                messagebox.showerror("错误", f"计算 {filename} 哈希失败：{e}")
+                continue
+
+            # 3. 若 config 中没有该条目则创建默认 IconData
+            if filename not in self.config_data:
+                self.config_data[filename] = IconData(
+                    name=os.path.splitext(filename)[0],
+                    width=0,
+                    height=0,
+                    top=0,
+                    left=0,
+                    class_name=""
+                )
+            # 4. 更新/新增 hash
+            if getattr(self.config_data[filename], "hash", None) != hash_val:
+                self.config_data[filename].hash = hash_val
+                changed = True
+
+        if changed:
+            self.unsaved_changes = True
+            self.update_thumbnail_highlights()   # （可选）刷新 UI 高亮
+            messagebox.showinfo("完成", "所有图像的哈希已计算并写入配置（未保存）。")
+        else:
+            messagebox.showinfo("完成", "所有图像的哈希已是最新状态。")
+
     def clear_all(self):
         """一键清除所有位置数据"""
         if not self.config_data:
@@ -552,6 +598,10 @@ class IconManagerApp:
         # 清除按钮
         ttk.Button(btn_frame, text="清除所有位置", command=self.clear_all, style="Danger.TButton").pack(side="right", padx=(0, 10))
         
+        # 计算所有图像哈希值按钮
+        ttk.Button(btn_frame, text="计算所有图像哈希值",
+                   command=self.compute_and_update_hashes).pack(side="right", padx=(0, 10))
+
         # 保存按钮
         ttk.Button(btn_frame, text="保存配置", command=self.save_config).pack(side="right")
     
