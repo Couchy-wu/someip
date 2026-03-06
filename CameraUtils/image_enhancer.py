@@ -32,7 +32,8 @@ class ImageEnhancer:
         self.enable_edge_restore  = False            # 导向滤波后是否把原始强边缘恢复回去
         self.enable_fast_retinex   = True            # True → Fast‑Retinex；False → 直接使用原始 Y（仅压暗部）
         self.enable_sharpen       = True            # 是否在亮度增强后执行锐化
-        self.enable_binary        = True             # 是否对最终亮度图做 Otsu 二值化
+        self.enable_binary        = True             # 是否对最终亮度图做二值化
+        self.enable_otsu          = False            # True → Otsu，False → 固定阈值 128
         self.enable_small_noise_remove = True       # 是否启用小面积噪声去除（新增开关）
 
         # ---------- Fast‑Retinex ----------
@@ -347,8 +348,15 @@ class ImageEnhancer:
         """
         使用 Otsu 方法自动计算阈值进行二值化
         """
-        _, binary = cv2.threshold(gray, 0, 255,
-                                 cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        return binary
+
+    # ------------------- 固定阈值二值化 ------------------- #
+    def _fixed_threshold(self, gray: np.ndarray) -> np.ndarray:
+        """
+        使用固定阈值 128 进行二值化。
+        """
+        _, binary = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY)
         return binary
 
     # ------------------- 导向滤波（降采样‑上采样） ------------------- #
@@ -519,15 +527,23 @@ class ImageEnhancer:
         # -------------------------------------------------
         Y_binary_clean = None
         if self.enable_binary:
-            Y_binary = self._maybe_time("otsu_binary",
-                                       self._otsu_binary,
-                                       Y_tmp)
+            # ---------- 二值化方式 ----------
+            if self.enable_otsu:
+                Y_binary = self._maybe_time("otsu_binary", self._otsu_binary, Y_tmp)
+            else:
+                # 使用固定阈值 128 进行二值化
+                Y_binary = self._maybe_time("fixed_threshold", self._fixed_threshold, Y_tmp)
+            # ---------- 小噪声去除 ----------
             if self.enable_small_noise_remove:
-                Y_binary_clean = self._maybe_time("remove_small_noise",
-                                                 self._remove_small_noise_regions,
-                                                 Y_binary)
+                Y_binary_clean = self._maybe_time("remove_small_noise", self._remove_small_noise_regions, Y_binary)
             else:
                 Y_binary_clean = Y_binary.copy()
+            # # 保存二值掩模（0 = 黑色，255 = 保留区）
+            # self._maybe_time("save_binary_mask", 
+            #                  self._save_stage,   
+            #                  "binary_mask",     
+            #                  Y_binary_clean)     
+
         # 7️⃣ 合成最终彩色图（使用 **原始** Y 通道，只保存 final_color.png）
         final_color = self._maybe_time(
             "reconstruct_color",

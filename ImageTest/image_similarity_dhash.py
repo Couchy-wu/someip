@@ -121,7 +121,7 @@ def compare_icons(
     hamming_distance = (hash_a ^ hash_b).bit_count()
     confidence_score = 100.0 * (64 - hamming_distance) / 64
     
-    # 只要置信度大于80%就视为"一致"
+    # 只要置信度大于thr%就视为"一致"
     is_same = confidence_score >= thr
     print(f"{confidence_score}")
     return is_same
@@ -149,11 +149,17 @@ def compare_with_precomputed_hash(
     # 2. 计算待比较图像的 dHash
     cur_hash = compute_dhash(gray_arr)
 
+    # 检查哈希值是否为0
+    if cur_hash == 0:
+        print("疑似无UI, 图像哈希值为0")
+        #  直接返回不一致
+        return False
+
     # 3. 汉明距离与置信度计算
     hamming_distance = (cur_hash ^ precomputed_hash).bit_count()
     confidence_score = 100.0 * (64 - hamming_distance) / 64
     
-    # 只要置信度大于80%就视为"一致"
+    # 只要置信度大于thr%就视为"一致"
     is_same = confidence_score >= thr
     print(f"置信度：{confidence_score}")
     
