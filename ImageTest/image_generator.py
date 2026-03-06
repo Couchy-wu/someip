@@ -996,6 +996,7 @@ class ImageGeneratorApp:
                     item = {
                         "name": data.get("name", ""),
                         "class_name": class_name,
+                        "ui_hash": data.get("hash"),
                         "top_left": [pos_x, pos_y],
                         "bottom_right": [pos_x + width, pos_y + height]
                     }
