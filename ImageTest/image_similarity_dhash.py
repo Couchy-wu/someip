@@ -41,6 +41,33 @@ def to_grayscale(img: Union[str, Image.Image, np.ndarray]) -> np.ndarray:
     else:
         raise TypeError(f"不支持的图像类型: {type(img)}")
 
+# 快速等比缩放 + 填充至目标尺寸（9x8）
+def resize_with_padding(image_array: np.ndarray, target_size=(9, 8)) -> np.ndarray:
+    """
+    将灰度图像 ndarray 等比缩放并填充至目标尺寸 (9, 8)
+    使用 PIL 进行高效缩放和填充，最后转回 ndarray
+    """
+    # 转为 PIL 图像以便使用 resize 和 paste
+    pil_img = Image.fromarray(image_array, mode="L")
+    target_width, target_height = target_size
+
+    # 计算缩放比例，保持宽高比
+    src_width, src_height = pil_img.size
+    scale = min(target_width / src_width, target_height / src_height)
+    new_width = max(1, int(src_width * scale))
+    new_height = max(1, int(src_height * scale))
+
+    # 缩放（使用 BILINEAR，与原逻辑一致）
+    resized = pil_img.resize((new_width, new_height), Image.BILINEAR)
+
+    # 创建居中填充的画布，背景为中性灰（128），减少边缘干扰
+    padded = Image.new("L", target_size, 128)
+    offset = ((target_width - new_width) // 2, (target_height - new_height) // 2)
+    padded.paste(resized, offset)
+
+    # 转回 numpy array
+    return np.array(padded, dtype=np.uint8)
+
 
 # ========================================
 # dHash 计算提取为全局函数，供内外部复用
@@ -56,8 +83,7 @@ def compute_dhash(image_array: np.ndarray) -> int:
     # 转为 PIL 图像
     pil_img = Image.fromarray(image_array)
     # 缩放至 9×8（宽9，高8）
-    resized = pil_img.resize((9, 8), Image.BILINEAR)
-    data = np.array(resized, dtype=np.uint8)  # (8, 9)
+    data = resize_with_padding(image_array, (9, 8))
     # 行内差分：后一列 > 前一列 → bool (8,8)
     diff = data[:, 1:] > data[:, :-1]
     # 展平为 64 位，打包为 int
