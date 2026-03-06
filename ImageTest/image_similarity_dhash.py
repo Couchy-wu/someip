@@ -96,9 +96,8 @@ def compute_dhash(image_array: np.ndarray) -> int:
 def compare_icons(
     img_a: Union[str, Image.Image, np.ndarray],
     img_b: Union[str, Image.Image, np.ndarray],
-    threshold: int = 5,
-    confidence: bool = False,
-) -> Tuple[bool, int, float]:
+    thr:int
+) -> Tuple[bool]:
     """
     比较两个图标是否一致（基于 dHash）
     参数：
@@ -106,8 +105,7 @@ def compare_icons(
             - 文件路径（str）
             - PIL.Image.Image
             - NumPy ndarray（灰度 H×W 或彩色 H×W×3/4）
-        threshold: 汉明距离阈值，≤ 阈值视为“一致”
-        confidence: 是否计算置信度（0~100），False 时返回 -1
+        thr(int):置信度阈值, 如80
     返回：
         (is_same: bool, hamming: int, confidence_score: float)
     """
@@ -119,18 +117,21 @@ def compare_icons(
     hash_a = compute_dhash(arr_a)
     hash_b = compute_dhash(arr_b)
     
-    # 3. 汉明距离 + 判定
+    # 3. 汉明距离 + 置信度计算
     hamming_distance = (hash_a ^ hash_b).bit_count()
-    is_same = hamming_distance <= threshold
-    confidence_score = 100.0 * (64 - hamming_distance) / 64 if confidence else -1.0
-    return is_same, hamming_distance, confidence_score
+    confidence_score = 100.0 * (64 - hamming_distance) / 64
+    
+    # 只要置信度大于80%就视为"一致"
+    is_same = confidence_score >= thr
+    print(f"{confidence_score}")
+    return is_same
+
 
 def compare_with_precomputed_hash(
     img: Union[str, Image.Image, np.ndarray],
     precomputed_hash: int,
-    threshold: int = 5,
-    confidence: bool = False,
-) -> Tuple[bool, int, float]:
+    thr:int
+) -> Tuple[bool]:
     """
     与已经得到的 dHash 哈希值进行比较。比较两个图标是否一致
     参数：
@@ -138,22 +139,25 @@ def compare_with_precomputed_hash(
             - 文件路径（str）
             - PIL.Image.Image
             - NumPy ndarray（灰度 H×W 或彩色 H×W×3/4）
-        threshold: 汉明距离阈值，≤ 阈值视为“一致”
-        confidence: 是否计算置信度（0~100），False 时返回 -1
+        thr(int): 置信度阈值, 如80
     返回：
         (is_same: bool, hamming: int, confidence_score: float)
     """
-    # 1. 转为 8‑bit 灰度 ndarray
+    # 1. 转为 8-bit 灰度 ndarray
     gray_arr = to_grayscale(img)
     
     # 2. 计算待比较图像的 dHash
     cur_hash = compute_dhash(gray_arr)
 
-    # 3. 汉明距离与判定
+    # 3. 汉明距离与置信度计算
     hamming_distance = (cur_hash ^ precomputed_hash).bit_count()
-    is_same = hamming_distance <= threshold
-    confidence_score = (100.0 * (64 - hamming_distance) / 64 if confidence else -1.0)
-    return is_same, hamming_distance, confidence_score
+    confidence_score = 100.0 * (64 - hamming_distance) / 64
+    
+    # 只要置信度大于80%就视为"一致"
+    is_same = confidence_score >= 80
+    print(f"置信度：{confidence_score}")
+    
+    return is_same
 
 
 # ========================================
@@ -183,14 +187,8 @@ if __name__ == "__main__":
     # 请替换为你的图标路径
     ICON_A = "ADS接管_标准.png"
     ICON_B = "ADS接管.png"
-    result = compare_icons(
-        ICON_A,
-        ICON_B,
-        threshold=5,
-        confidence=True
-    )
+    result = compare_icons(ICON_A, ICON_B, 80)
     print("比较完成:", result)
-    # 输出: (is_same, hamming, confidence)
     
     # 新增接口函数使用示例
     hash_val = get_image_hash(ICON_A)
