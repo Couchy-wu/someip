@@ -154,7 +154,7 @@ def compare_with_precomputed_hash(
     confidence_score = 100.0 * (64 - hamming_distance) / 64
     
     # 只要置信度大于80%就视为"一致"
-    is_same = confidence_score >= 80
+    is_same = confidence_score >= thr
     print(f"置信度：{confidence_score}")
     
     return is_same
