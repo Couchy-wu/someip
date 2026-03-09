@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-交互式标注 + ORB 多模板自动检测（加入鼠标拉伸/缩放 & 动态缩略图）
+交互式标注 + ORB 多模板自动检测（加入鼠标拉伸/缩放 & 动态缩略图 & 全局清空）
 """
 
 # -------------------------------------------------
@@ -23,9 +23,6 @@ from tkinter import ttk, messagebox
 from functools import partial
 import traceback
 
-PROJECT_ROOT = Path(__file__).resolve().parent
-os.chdir(PROJECT_ROOT)
-
 # -------------------------------------------------
 # 1️⃣ 参数 & 环境检查（加入可调参数）
 # -------------------------------------------------
@@ -35,7 +32,6 @@ parser.add_argument('--subset',      type=str, default='')
 parser.add_argument('--default_class', type=int, default=0)
 parser.add_argument('--max_class',   type=int, default=79)
 parser.add_argument('--yaml_path',   type=str, default='')
-
 # ---------- 可调参数 ----------
 parser.add_argument('--tpl_dir',     type=str, default='muban',
                     help='模板文件夹（相对于 data_root）')
@@ -50,7 +46,6 @@ parser.add_argument('--min_match',   type=int, default=4,
 parser.add_argument('--nms_iou',    type=float, default=0.5,
                     help='NMS IOU 阈值')
 args = parser.parse_args()
-
 # ---------- 参数映射 ----------
 DATA_ROOT    = args.data_root
 SUBSET       = args.subset.strip()
@@ -180,23 +175,19 @@ def _detect_one_template(frame_gray, tmpl_gray,
             (int(tmpl_gray.shape[1] * scale_factor),
              int(tmpl_gray.shape[0] * scale_factor)),
             interpolation=cv2.INTER_LINEAR)
-
     kp_t, des_t = _ORB.detectAndCompute(tmpl_gray, None)
     kp_i, des_i = _ORB.detectAndCompute(frame_gray, None)
     print(f"[DEBUG] 模板关键点数={len(kp_t)}，帧关键点数={len(kp_i)}")
     if des_t is None or des_i is None:
         return []
-
     matches = _BF.knnMatch(des_t, des_i, k=2)
     good = [m for m, n in matches if m.distance < ratio_thr * n.distance]
     print(f"[DEBUG] 匹配总数={len(matches)}，好匹配数={len(good)}（ratio_thr={ratio_thr}）")
-
     results = []
     instance_id = 0
     while len(good) >= min_match and instance_id < max_instances:
         src_pts = np.float32([kp_t[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
         dst_pts = np.float32([kp_i[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
-
         if src_pts.shape[0] < 4:
             break
         H, mask = cv2.findHomography(src_pts, dst_pts,
@@ -204,14 +195,12 @@ def _detect_one_template(frame_gray, tmpl_gray,
         if H is None:
             print("[DEBUG] RANSAC 失败（Homography 为 None）")
             break
-
         h, w = tmpl_gray.shape[:2]
         corners = np.float32([[0, 0], [w, 0], [w, h], [0, h]]).reshape(-1, 1, 2)
         proj = cv2.perspectiveTransform(corners, H)
         x, y, w_box, h_box = cv2.boundingRect(proj.astype(np.int32))
         inlier_cnt = int(mask.sum())
         score = inlier_cnt / max(len(kp_t), 1)
-
         results.append(((x, y, w_box, h_box), H, float(score)))
         good = [g for i, g in enumerate(good) if mask[i] == 0]
         instance_id += 1
@@ -228,7 +217,6 @@ def detect_multi(frame_gray, templates, class_names,
             class_names.append(name)
             print(f"[INFO] 自动把模板 `{name}` 加入类别列表，class_id={len(class_names)-1}")
         class_id = class_names.index(name)
-
         raw = _detect_one_template(
             frame_gray, tmpl,
             ratio_thr=ratio_thr,
@@ -239,7 +227,6 @@ def detect_multi(frame_gray, templates, class_names,
         )
         if not raw:
             continue
-
         boxes = [r[0] for r in raw]
         scores = [r[2] for r in raw]
         keep = nms(boxes, scores, iou_thr=nms_iou)
@@ -251,7 +238,6 @@ def detect_multi(frame_gray, templates, class_names,
 
 def load_templates(tpl_dir):
     """返回 dict {stem: gray_image}"""
-    tpl_dir = Path(tpl_dir)
     tmpl_paths = list(Path(tpl_dir).glob("*.*"))
     templates = {}
     for p in tmpl_paths:
@@ -265,10 +251,15 @@ def load_templates(tpl_dir):
     return templates
 
 # -------------------------------------------------
-# 4️⃣ 业务层 – AnnotatorCore（加入拉伸/缩放）
+# 4️⃣ 业务层 – AnnotatorCore（加入拉伸/缩放、类名显示）
 # -------------------------------------------------
 class AnnotatorCore:
-    def __init__(self, img_path, txt_path, default_class, class_colors):
+    def __init__(self,
+                 img_path,
+                 txt_path,
+                 default_class,
+                 class_colors,
+                 class_names):                 # ← 新增
         self.img_path = img_path
         self.txt_path = txt_path
         self.cur_class = default_class
@@ -276,13 +267,11 @@ class AnnotatorCore:
         if self.cv_img is None:
             raise RuntimeError(f'Cannot read image: {img_path}')
         self.h, self.w = self.cv_img.shape[:2]
-
         self.existing_boxes = read_boxes(txt_path)   # 已有框
         self.new_boxes = []                         # 本轮新增框
         self._deleted_all = False
-
         self.class_colors = class_colors
-
+        self.class_names = class_names              # 保存类别列表
         # ---------- 拉伸/缩放交互状态 ----------
         self._mode = 'draw'                 # 'draw' 或 'resize'
         self._resize_info = None            # {'list_ref':…, 'idx':…, 'handle':…}
@@ -354,11 +343,8 @@ class AnnotatorCore:
         lst = self._resize_info['list_ref']
         idx = self._resize_info['idx']
         handle = self._resize_info['handle']
-
-        # 先把相对坐标转成像素坐标
         x1, y1, x2, y2 = self._box_to_pixel(lst[idx])
 
-        # 根据手柄编号修改对应的边界
         if handle == 0:   # 左上
             x1, y1 = x, y
         elif handle == 1: # 上中
@@ -376,7 +362,7 @@ class AnnotatorCore:
         elif handle == 7: # 左中
             x1 = x
 
-        # 边界限制（防止越界、负宽高）
+        # 边界限制
         x1 = max(0, min(self.w - 1, x1))
         x2 = max(0, min(self.w - 1, x2))
         y1 = max(0, min(self.h - 1, y1))
@@ -386,7 +372,6 @@ class AnnotatorCore:
         if y2 < y1:
             y1, y2 = y2, y1
 
-        # 写回相对坐标
         lst[idx] = self._pixel_to_rel(lst[idx][0], x1, y1, x2, y2)
 
     # -----------------------------------------------------------------
@@ -461,34 +446,121 @@ class AnnotatorCore:
         print("[Info] 已保存（新增框已合并进已有框）")
 
     # -----------------------------------------------------------------
-    # ⑧ 绘制（包括 resize 手柄）
+    # ⑧ 绘制（包括 resize 手柄、文字不遮挡框线、类名显示）
     # -----------------------------------------------------------------
     def draw(self, show_cur_rect=True):
         canvas = self.cv_img.copy()
 
-        # 1️⃣ 画已有框
+        # -------------------------------------------------
+        # 1️⃣ 画已有框（并在框上方显示类名，框线不被文字遮挡）
+        # -------------------------------------------------
         for cls, xc, yc, w, h in self.existing_boxes:
             color = self.class_colors[cls % len(self.class_colors)]
             x1 = int((xc - w / 2) * self.w)
             y1 = int((yc - h / 2) * self.h)
             x2 = int((xc + w / 2) * self.w)
             y2 = int((yc + h / 2) * self.h)
-            cv2.rectangle(canvas, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(canvas, str(cls), (x1, y1 - 4),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
-        # 2️⃣ 画本轮新增框
+            # ① 先画框（后面会再画一次覆盖文字背景的部分）
+            cv2.rectangle(canvas, (x1, y1), (x2, y2), color, 2)
+
+            # ② 生成文字（id:name）
+            if 0 <= cls < len(self.class_names):
+                label = f"{cls}:{self.class_names[cls]}"
+            else:
+                label = str(cls)
+
+            # ③ 文字尺寸
+            (tw, th), baseline = cv2.getTextSize(label,
+                                                 cv2.FONT_HERSHEY_SIMPLEX,
+                                                 0.7, 2)
+
+            # ④ 文字左上角坐标（尽量放在框外上方）
+            txt_x = x1
+            txt_y = y1 - 6
+            if txt_y - th - baseline < 0:  # 越界 → 放到框内部
+                txt_y = y1 + th + baseline + 4
+
+            # ⑤ **半透明背景**（在单独的 overlay 上绘制，然后 blend 回 canvas）
+            overlay = canvas.copy()
+            cv2.rectangle(overlay,
+                          (txt_x, txt_y - th - baseline),
+                          (txt_x + tw, txt_y + baseline),
+                          (0, 0, 0), -1)  # 黑底
+            alpha = 0.35  # 透明度 0~1，越小越透明
+            cv2.addWeighted(overlay, alpha,
+                            canvas, 1 - alpha,
+                            0, canvas)
+
+            # ⑥ 文字本身：先黑色粗体再白色细体，形成描边效果
+            #    这样即使背景稍透明，文字仍然清晰可读
+            # ----- 黑色粗字（描边） -----
+            cv2.putText(canvas, label,
+                        (txt_x, txt_y),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7,
+                        (0, 0, 0), 3, cv2.LINE_AA)
+            # ----- 白色细字（主体） -----
+            cv2.putText(canvas, label,
+                        (txt_x, txt_y),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7,
+                        (255, 255, 255), 1, cv2.LINE_AA)
+
+            # ⑦ 再画一次框，覆盖文字背景的下边缘，确保框线完整可见
+            cv2.rectangle(canvas, (x1, y1), (x2, y2), color, 2)
+
+        # -------------------------------------------------
+        # 2️⃣ 画本轮新增框（同上）
+        # -------------------------------------------------
         for cls, xc, yc, w, h in self.new_boxes:
             color = self.class_colors[cls % len(self.class_colors)]
             x1 = int((xc - w / 2) * self.w)
             y1 = int((yc - h / 2) * self.h)
             x2 = int((xc + w / 2) * self.w)
             y2 = int((yc + h / 2) * self.h)
-            cv2.rectangle(canvas, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(canvas, str(cls), (x1, y1 - 4),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
-        # 3️⃣ 若正在 resize，绘制红色粗框 + 手柄
+            cv2.rectangle(canvas, (x1, y1), (x2, y2), color, 2)
+
+            if 0 <= cls < len(self.class_names):
+                label = f"{cls}:{self.class_names[cls]}"
+            else:
+                label = str(cls)
+
+            (tw, th), baseline = cv2.getTextSize(label,
+                                                 cv2.FONT_HERSHEY_SIMPLEX,
+                                                 0.7, 2)
+
+            txt_x = x1
+            txt_y = y1 - 6
+            if txt_y - th - baseline < 0:
+                txt_y = y1 + th + baseline + 4
+
+            # ---------- 半透明背景 ----------
+            overlay = canvas.copy()
+            cv2.rectangle(overlay,
+                          (txt_x, txt_y - th - baseline),
+                          (txt_x + tw, txt_y + baseline),
+                          (0, 0, 0), -1)
+            alpha = 0.35
+            cv2.addWeighted(overlay, alpha,
+                            canvas, 1 - alpha,
+                            0, canvas)
+
+            # ---------- 文字描边 + 主体 ----------
+            cv2.putText(canvas, label,
+                        (txt_x, txt_y),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7,
+                        (0, 0, 0), 3, cv2.LINE_AA)  # 粗黑描边
+            cv2.putText(canvas, label,
+                        (txt_x, txt_y),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7,
+                        (255, 255, 255), 1, cv2.LINE_AA)  # 白色主体
+
+            # 再次绘制框线，覆盖文字背景
+            cv2.rectangle(canvas, (x1, y1), (x2, y2), color, 2)
+
+        # -------------------------------------------------
+        # 3️⃣ 正在 resize 时绘制红框 + 手柄（保持原样）
+        # -------------------------------------------------
         if self._mode == 'resize' and self._resize_info is not None:
             lst = self._resize_info['list_ref']
             idx = self._resize_info['idx']
@@ -498,7 +570,7 @@ class AnnotatorCore:
             x2 = int((xc + w / 2) * self.w)
             y2 = int((yc + h / 2) * self.h)
 
-            sel_color = (0, 0, 255)          # 红色手柄 / 粗框
+            sel_color = (0, 0, 255)  # 红色手柄 / 粗框
             cv2.rectangle(canvas, (x1, y1), (x2, y2), sel_color, 3)
 
             handles = [
@@ -517,19 +589,30 @@ class AnnotatorCore:
                               (hx + self._handle_size, hy + self._handle_size),
                               sel_color, -1)
 
+        # -------------------------------------------------
         # 4️⃣ 当前绘制中的临时矩形（仅在 draw 模式下出现）
+        # -------------------------------------------------
         if show_cur_rect and getattr(self, '_cur_rect', None) and self._mode == 'draw':
             x1, y1, x2, y2 = self._cur_rect
             cv2.rectangle(canvas, (x1, y1), (x2, y2), (0, 0, 255), 2)
 
-        # 5️⃣ 类别指示框
+        # -------------------------------------------------
+        # 5️⃣ 类别指示框（左上角，保持原来的逻辑）
+        # -------------------------------------------------
         cur_color = self.class_colors[self.cur_class % len(self.class_colors)]
-        cv2.rectangle(canvas, (0, 0), (120, 30), (0, 0, 0), -1)
-        cv2.putText(canvas, f"Class: {self.cur_class}",
+        cv2.rectangle(canvas, (0, 0), (200, 30), (0, 0, 0), -1)
+
+        if 0 <= self.cur_class < len(self.class_names):
+            cur_label = f"{self.cur_class}:{self.class_names[self.cur_class]}"
+        else:
+            cur_label = str(self.cur_class)
+
+        cv2.putText(canvas,
+                    f"Class: {cur_label}",
                     (5, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
                     cur_color, 2)
-        return canvas
 
+        return canvas
     # -----------------------------------------------------------------
     # ⑨ 键盘切类
     # -----------------------------------------------------------------
@@ -549,7 +632,7 @@ class AnnotatorCore:
             print(f"[Warning] 名称 `{name}` 不在类别列表中，保持原类别 {self.cur_class}")
 
 # -------------------------------------------------
-# 5️⃣ UI 层 – AnnotatorUI（加入 AutoDetect & 动态缩略图）
+# 5️⃣ UI 层 – AnnotatorUI（加入 AutoDetect, 缩略图, ClearAll）
 # -------------------------------------------------
 class AnnotatorUI:
     def __init__(self, core: AnnotatorCore, class_names,
@@ -589,6 +672,7 @@ class AnnotatorUI:
         # ---------- 右侧按钮 ----------
         btn_frame = tk.Frame(self.root)
         btn_frame.grid(row=0, column=1, sticky='ns', padx=5, pady=5)
+
         ttk.Button(btn_frame, text="Undo",   width=10,
                     command=self.core.undo).grid(pady=2)
         ttk.Button(btn_frame, text="Clear",  width=10,
@@ -599,6 +683,11 @@ class AnnotatorUI:
                     command=self.core.save).grid(pady=2)
         ttk.Button(btn_frame, text="AutoDetect", width=10,
                     command=self._on_auto_detect).grid(pady=2)
+
+        # ---------- 新增按钮：一次性清空所有标注 ----------
+        ttk.Button(btn_frame, text="ClearAll", width=10,
+                    command=self._on_clear_all).grid(pady=2)
+
         ttk.Button(btn_frame, text="Last",   width=10,
                     command=self._on_last).grid(pady=2)
         ttk.Button(btn_frame, text="Next",   width=10,
@@ -716,20 +805,17 @@ class AnnotatorUI:
     # 鼠标交互（框选 + 拉伸）
     # -------------------------------------------------
     def _on_mouse_down(self, event):
-        """左键按下 → 先尝试进入 resize；若未命中则开始普通框选"""
         entered_resize = self.core.pick_resize_target(event.x, event.y)
         if not entered_resize:
             self.core.start_box(event.x, event.y)
 
     def _on_mouse_move(self, event):
-        """拖动 → 根据当前模式更新框或尺寸"""
         if self.core._mode == 'draw':
             self.core.update_box(event.x, event.y)
         elif self.core._mode == 'resize':
             self.core.update_resize(event.x, event.y)
 
     def _on_mouse_up(self, event):
-        """松开 → 完成对应操作"""
         if self.core._mode == 'draw':
             self.core.finish_box(event.x, event.y)
         elif self.core._mode == 'resize':
@@ -741,6 +827,10 @@ class AnnotatorUI:
     def _on_key(self, event):
         if event.char:
             self.core.change_class(ord(event.char.lower()))
+        # ---------- 快捷键：Ctrl+Shift+C → 清空全部 ----------
+        if (event.state & 0x0004) and (event.state & 0x0001) and \
+                event.keysym.lower() == 'c':
+            self._on_clear_all()
         if event.keysym == 'Escape':
             self._on_quit()
 
@@ -765,11 +855,9 @@ class AnnotatorUI:
         for i, btn in enumerate(self.thumb_buttons):
             real_idx = start + i
             if real_idx >= self.total_imgs:
-                # 理论上不会进入这里，因为按钮数量已与图片数匹配
                 btn.configure(image='', state=tk.DISABLED)
                 btn.image = None
                 continue
-
             if real_idx in self._thumb_cache:
                 photo = self._thumb_cache[real_idx]
             else:
@@ -778,12 +866,13 @@ class AnnotatorUI:
                     self.img_root,
                     self.lbl_root,
                 )
+                # 这里同样要把 class_names 传进去
                 tmp_core = AnnotatorCore(
                     img_path=self.img_files[real_idx],
                     txt_path=txt_path,
                     default_class=self.core.cur_class,
                     class_colors=self.core.class_colors,
-                )
+                    class_names=self.class_names)   # ← 新增
                 thumb_img = tmp_core.draw(show_cur_rect=False)
                 thumb_small = cv2.resize(thumb_img, (80, 80), interpolation=cv2.INTER_AREA)
                 thumb_rgb = cv2.cvtColor(thumb_small, cv2.COLOR_BGR2RGB)
@@ -870,42 +959,55 @@ class AnnotatorUI:
                 self.core.new_boxes.append((class_id, xc, yc, nw, nh))
             self._refresh_ui()
 
+    # -------------------------------------------------
+    # ---------- 全局清空所有标注 ----------
+    # -------------------------------------------------
+    def _on_clear_all(self):
+        """一次性把所有图片对应的 label/*.txt 文件清空"""
+        answer = messagebox.askyesno(
+            "确认清空全部标注",
+            "此操作会 **永久删除** 数据集中所有图片的标注文件，且不可撤销。\n确定要继续吗？")
+        if not answer:
+            return
+
+        # 1️⃣ 清空每张图片对应的 txt 文件
+        for img_path in self.img_files:
+            txt_path = txt_path_from_img(
+                img_path, self.img_root, self.lbl_root)
+            ensure_dir(os.path.dirname(txt_path))
+            open(txt_path, 'w', encoding='utf-8').close()
+
+        # 2️⃣ 同步当前 Core（不然 UI 仍会显示旧框）
+        self.core.existing_boxes.clear()
+        self.core.new_boxes.clear()
+        self.core._deleted_all = True
+
+        # 3️⃣ 清理缩略图缓存，让缩略图重新绘制（不再带框）
+        self._thumb_cache.clear()
+        self._last_new_boxes = []
+
+        print("[Info] 已清空全部标注文件（{} 张图片）".format(len(self.img_files)))
+        self._refresh_ui()
+
 # -------------------------------------------------
 # 6️⃣ 主入口（遍历图片、打开 UI）
 # -------------------------------------------------
 def main():
-    # -------------------------------------------------
-    # 1️⃣ 统一根目录 → 绝对路径（已在文件顶部完成）
-    # -------------------------------------------------
-    img_root = Path(DATA_ROOT) / 'images'
-    lbl_root = Path(DATA_ROOT) / 'labels'
-
+    img_root = os.path.join(DATA_ROOT, 'images')
+    lbl_root = os.path.join(DATA_ROOT, 'labels')
     if SUBSET:
-        img_root = img_root / SUBSET
-        lbl_root = lbl_root / SUBSET
+        img_root = os.path.join(img_root, SUBSET)
+        lbl_root = os.path.join(lbl_root, SUBSET)
 
-    # -------------------------------------------------
-    # 2️⃣ 读取图片列表（list_image_files 仍接受 str）
-    # -------------------------------------------------
-    img_files = list_image_files(str(img_root))
+    img_files = list_image_files(img_root)
     if not img_files:
         print(f'⚠️ 未在 {img_root} 中找到图片')
         sys.exit(1)
 
-    # -------------------------------------------------
-    # 3️⃣ 读取类别名称（YAML_PATH 已是绝对路径）
-    # -------------------------------------------------
     class_names = load_class_names(YAML_PATH)
     print(f"[Info] 已读取 {len(class_names)} 个类别（来自 {YAML_PATH}）")
-
-    # -------------------------------------------------
-    # 4️⃣ 生成颜色映射（必须在使用前完成） 
-    # -------------------------------------------------
     class_colors = generate_color_map(len(class_names))
 
-    # -------------------------------------------------
-    # 5️⃣ 其它初始化
-    # -------------------------------------------------
     default_class = DEFAULT_CLASS
     if default_class >= len(class_names):
         print("[Warning] 默认类别 ID 超出 yaml 中的类别数，已重置为 0")
@@ -914,26 +1016,19 @@ def main():
     total_imgs = len(img_files)
     idx = 0
     print(f'🖼️ 共计 {total_imgs} 张图片待标注')
-
-    # -------------------------------------------------
-    # 6️⃣ 主循环
-    # -------------------------------------------------
     while 0 <= idx < total_imgs:
         img_path = img_files[idx]
-        txt_path = txt_path_from_img(str(img_path), str(img_root), str(lbl_root))
+        txt_path = txt_path_from_img(img_path, img_root, lbl_root)
 
-        core = AnnotatorCore(
-            img_path=str(img_path),
-            txt_path=txt_path,
-            default_class=default_class,
-            class_colors=class_colors,
-        )
+        core = AnnotatorCore(img_path,
+                             txt_path,
+                             default_class,
+                             class_colors,
+                             class_names)          # ← 这里传入 class_names
 
-        ui = AnnotatorUI(
-            core, class_names,
-            img_files, idx, total_imgs,
-            str(img_root), str(lbl_root)
-        )
+        ui = AnnotatorUI(core, class_names,
+                         img_files, idx, total_imgs,
+                         img_root, lbl_root)
 
         if ui.result == "next":
             idx += 1
