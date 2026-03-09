@@ -2,5 +2,26 @@ path: ./dataset
 train: ARHUD_frames
 val: ARHUD_frames
 
-nc: 3   # 类别数
-names: ['velocity', 'phone', 'FCW']
+nc: 20   # 类别数
+names: [
+    'Text_Icon_speed_value',
+    'Text_Icon_speed_unit',
+    'Text_Icon_position',
+    'Text_Icon_phone',
+    'Text_Icon_ACC',
+    'Text_Icon_speed_limit',
+    'Text_Icon_speed_over',
+    'Icon_AVH',
+    'Icon_ICC',
+    'Icon_ADS_fault',
+    'Icon_ADS_takeover',
+    'Icon_lane_departure',
+    'Icon_collision_warning',
+    'Icon_Blind_right',
+    'Icon_Blind_left',
+    'Icon_Adjustment',
+    'Icon_NCA',
+    'Icon_AVP',
+    'Icon_direct_Left',
+    'Icon_direct_Right'
+]
