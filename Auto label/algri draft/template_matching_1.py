@@ -96,7 +96,7 @@ def process_single_image(file_path, template_info):
 
 def main():
     # 1. 预处理模板图像
-    template_bgr = cv2.imread('kmh.png')
+    template_bgr = cv2.imread('../../kmh.png')
     if template_bgr is None:
         print("模板图像读取失败")
         return

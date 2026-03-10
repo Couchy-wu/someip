@@ -83,8 +83,8 @@ def pyramid_match_opencv(img, tmpl, levels=4):
 # ------------------- 主程序 -------------------
 if __name__ == "__main__":
     # ------------------- 读取 -------------------
-    img_path = r"image.png"   # 大图
-    tmpl_path = r"find1.png"   # 模板
+    img_path = r"../../image.png"  # 大图
+    tmpl_path = r"../../find1.png"  # 模板
 
     img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
     tmpl = cv2.imread(tmpl_path, cv2.IMREAD_GRAYSCALE)

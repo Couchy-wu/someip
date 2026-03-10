@@ -23,7 +23,7 @@ OVERLAP_THRESHOLD = 0.3   # 去重阈值（IoU）
 
 
 # 目标图像路径
-target_path = 'TemporaryResources/ARHUD_frames/'
+target_path = '../../TemporaryResources/ARHUD_frames/'
 target_list =  os.listdir(target_path)
 target_label = "TemporaryResources/label/"
 target_muban = "TemporaryResources/muban/"
