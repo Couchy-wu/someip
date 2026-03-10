@@ -860,6 +860,7 @@ class AnnotatorUI:
             if real_idx >= self.total_imgs:
                 btn.configure(image='', state=tk.DISABLED)
                 btn.image = None
+                btn.configure(width=80, height=80)
                 continue
             if real_idx in self._thumb_cache:
                 photo = self._thumb_cache[real_idx]
@@ -875,15 +876,24 @@ class AnnotatorUI:
                     txt_path=txt_path,
                     default_class=self.core.cur_class,
                     class_colors=self.core.class_colors,
-                    class_names=self.class_names)   # ← 新增
+                    class_names=self.class_names)
                 thumb_img = tmp_core.draw(show_cur_rect=False)
-                thumb_small = cv2.resize(thumb_img, (80, 80), interpolation=cv2.INTER_AREA)
+                # 根据是否选中来决定缩略图大小（选中时大 50%）
+                if real_idx == self.img_index:
+                    thumb_small = cv2.resize(thumb_img, (120, 120), interpolation=cv2.INTER_AREA)  # 80 * 1.5 = 120
+                else:
+                    thumb_small = cv2.resize(thumb_img, (80, 80), interpolation=cv2.INTER_AREA)
                 thumb_rgb = cv2.cvtColor(thumb_small, cv2.COLOR_BGR2RGB)
-                pil = Image.fromarray(thumb_rgb)
+                pil = Image.fromarray(thumb_small if False else thumb_rgb)
                 photo = ImageTk.PhotoImage(pil)
                 self._thumb_cache[real_idx] = photo
             btn.configure(image=photo, state=tk.NORMAL)
             btn.image = photo
+            # 设置按钮尺寸与图像匹配
+            if real_idx == self.img_index:
+                btn.configure(width=120, height=120)  # 选中时更大
+            else:
+                btn.configure(width=80, height=80)
 
     # -------------------------------------------------
     # 主画面刷新（每帧）
