@@ -1,0 +1,27 @@
+path: ./dataset
+train: ARHUD_frames
+val: ARHUD_frames
+
+nc: 20   # 类别数
+names: [
+    'Text_Icon_speed_value',    车速,
+    'Text_Icon_speed_unit',     km/h,
+    'Text_Icon_position',       档位D/N/P/R,
+    'Text_Icon_phone',          电话号码,
+    'Text_Icon_ACC',            ACC巡航,
+    'Text_Icon_speed_limit',    限速,
+    'Text_Icon_speed_over',     限速超速,
+    'Icon_AVH',                 Icon_AVH.png,
+    'Icon_ICC',                 Icon_ICC_1.png,
+    'Icon_ADS_fault',           Icon_ADS_fault.png,
+    'Icon_ADS_takeover',        Icon_ADS_takeover.png,
+    'Icon_lane_departure',      Icon_lane_departure_1.png,
+    'Icon_collision_warning',   Icon_collision_warning.png,
+    'Icon_Blind_right',         Icon_collision_warning.png,
+    'Icon_Blind_left',          Icon_Blind_left.png,
+    'Icon_Adjustment',          Icon_Adjustment_1.png,
+    'Icon_NCA',                 Icon_NCA_1.png,
+    'Icon_AVP',                 Icon_AVP_1.png,
+    'Icon_direct_Left',         Icon_direct_Left.png,
+    'Icon_direct_Right',        Icon_direct_Right.png,
+]

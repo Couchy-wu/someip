@@ -17,11 +17,14 @@ import threading
 import queue
 from pathlib import Path
 from tqdm import tqdm
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageDraw, ImageFont
 import tkinter as tk
 from tkinter import ttk, messagebox
 from functools import partial
 import traceback
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+os.chdir(PROJECT_ROOT)
 
 # -------------------------------------------------
 # 1️⃣ 参数 & 环境检查（加入可调参数）
@@ -51,7 +54,7 @@ DATA_ROOT    = args.data_root
 SUBSET       = args.subset.strip()
 DEFAULT_CLASS = args.default_class
 MAX_CLASS    = args.max_class
-YAML_PATH    = args.yaml_path or os.path.join(DATA_ROOT, 'data.yaml')
+YAML_PATH    = args.yaml_path or os.path.join(DATA_ROOT, 'artificial_data.yaml')
 TPL_DIR      = Path(args.tpl_dir)                     # 正确使用传入路径
 RATIO_THR    = args.ratio_thr
 RANSAC_THR   = args.ransac_thr
@@ -95,6 +98,20 @@ def ensure_dir(p):
         os.makedirs(p, exist_ok=True)
 
 def load_class_names(yaml_path):
+    """
+    读取 artificial_data，返回两样东西：
+        1. names            -> List[str]   （仅保留类别名称）
+        2. name_to_img_file -> Dict[str, str]（可选的 “类别 ↔ 示例图片” 映射）
+    
+    新增的 yaml 格式示例（每行可以写成 “'类名', 图片文件”）：
+        names: [
+            'Text_Icon_speed_value', a.png,
+            'Text_Icon_speed_unit',   b.png,
+            'Text_Icon_position',    c.png,
+            'Icon_AVH',               # 只写类名时不需要图片
+            ...
+        ]
+    """
     if not os.path.isfile(yaml_path):
         print(f"[Error] 找不到 yaml 文件: {yaml_path}")
         sys.exit(1)
@@ -103,11 +120,33 @@ def load_class_names(yaml_path):
     if 'names' not in data:
         print("[Error] yaml 中没有 `names` 键")
         sys.exit(1)
-    names = data['names']
-    if not isinstance(names, list):
+
+    raw_names = data['names']
+    # 支持 “'类名', img.png” 两种写法
+    if not isinstance(raw_names, list):
         print("[Error] `names` 必须是列表")
         sys.exit(1)
-    return names
+
+    names = []                     # 只存类别名称
+    name_to_img = {}               # 类名 → 示例图片（若有）
+
+    i = 0
+    while i < len(raw_names):
+        item = raw_names[i]
+        # 若元素本身就是字符串且后面紧跟另一个字符串，则认为是 “类名, img”
+        if isinstance(item, str) and (i + 1) < len(raw_names) and isinstance(raw_names[i + 1], str):
+            cls_name = item.strip()
+            img_file = raw_names[i + 1].strip()
+            names.append(cls_name)
+            name_to_img[cls_name] = img_file
+            i += 2                                   # 跳过两项
+        else:
+            # 仅有类名的普通写法
+            cls_name = str(item).strip()
+            names.append(cls_name)
+            i += 1
+    # 返回两对象，保持向后兼容
+    return names, name_to_img
 
 def generate_color_map(num_classes):
     base_colors = [
@@ -635,12 +674,19 @@ class AnnotatorCore:
 # 5️⃣ UI 层 – AnnotatorUI（加入 AutoDetect, 缩略图, ClearAll）
 # -------------------------------------------------
 class AnnotatorUI:
-    def __init__(self, core: AnnotatorCore, class_names,
-                 img_files, img_index, total_imgs,
-                 img_root, lbl_root):
+    def __init__(self,
+                 core: AnnotatorCore,
+                 class_names,
+                 class_img_map,
+                 img_files,
+                 img_index,
+                 total_imgs,
+                 img_root,
+                 lbl_root):
         # ---------- 基础属性 ----------
         self.core = core
         self.class_names = class_names
+        self.class_img_map = class_img_map
         self.img_files   = img_files
         self.img_index   = img_index
         self.total_imgs  = total_imgs
@@ -709,8 +755,133 @@ class AnnotatorUI:
         tk.Label(btn_frame, text="0‑9 / a‑z → change class",
                  fg='gray').grid(pady=10)
 
-        # ---------- 动态缩略图条 ----------
-        self.thumb_num = min(7, self.total_imgs)          # 实际需要的按钮数量
+        #  **图标列（可滚动 + 支持鼠标滚轮）**
+        ICON_SIZE = 70                      # 图标实际显示大小
+        BG_SIZE   = 80                      # 背景略大，统一尺寸
+        self.icon_buttons = []              # 保存按钮对象
+
+        # 创建带垂直滚动条的 Canvas + 内部 Frame
+        icon_canvas = tk.Canvas(self.root,
+                                width=BG_SIZE + 20,          # 为滚动条预留宽度
+                                height=400,                  # 可视高度，可自行调节
+                                highlightthickness=0)
+        icon_scroll = ttk.Scrollbar(self.root,
+                                    orient="vertical",
+                                    command=icon_canvas.yview)
+        icon_inner = tk.Frame(icon_canvas)   # 实际放按钮的容器
+
+        # 自动更新 scrollregion
+        icon_inner.bind(
+            "<Configure>",
+            lambda e: icon_canvas.configure(scrollregion=icon_canvas.bbox("all"))
+        )
+        icon_canvas.create_window((0, 0), window=icon_inner, anchor="nw")
+        icon_canvas.configure(yscrollcommand=icon_scroll.set)
+
+        # 布局
+        icon_canvas.grid(row=0, column=2, sticky='ns', padx=(5, 0), pady=5)
+        icon_scroll.grid(row=0, column=3, sticky='ns', pady=5)
+
+        # 为图标 Canvas 绑定鼠标滚轮（兼容 Windows、Linux、macOS）
+        def _on_icon_mousewheel(event):
+            # Windows / macOS: event.delta 为 120 的整数倍
+            if hasattr(event, "delta") and event.delta:
+                direction = -1 if event.delta > 0 else 1
+                icon_canvas.yview_scroll(direction, "units")
+            # Linux: 用 Button-4 / Button-5
+            elif hasattr(event, "num"):
+                if event.num == 4:
+                    icon_canvas.yview_scroll(-1, "units")
+                elif event.num == 5:
+                    icon_canvas.yview_scroll(1, "units")
+        icon_canvas.bind_all("<MouseWheel>", _on_icon_mousewheel)   # Windows/macOS
+        icon_canvas.bind_all("<Button-4>", _on_icon_mousewheel)    # Linux 上滚
+        icon_canvas.bind_all("<Button-5>", _on_icon_mousewheel)    # Linux 下滚
+
+        # Pillow 10+ 已去掉 Image.ANTIALIAS，使用 LANCZOS 作为替代
+        try:
+            RESAMPLE_MODE = Image.Resampling.LANCZOS
+        except AttributeError:
+            RESAMPLE_MODE = Image.LANCZOS
+
+        for cid, name in enumerate(self.class_names):
+            # ----- 读取 yaml 第二列的原始字符串（可能是文件名、文字或空） -----
+            second_col = self.class_img_map.get(name, '').strip()
+
+            # ----- 判断是否为合法图片后缀且文件实际存在 -----
+            is_image = any(second_col.lower().endswith(ext)
+                           for ext in ('.png', '.jpg', '.jpeg', '.bmp', '.gif'))
+            img_path = Path(TPL_DIR) / second_col
+            pil_img = None
+            if is_image and img_path.is_file():
+                try:
+                    pil_img = Image.open(str(img_path)).convert('RGBA')
+                except Exception as e:
+                    print(f"[WARN] 打开图标图片 {img_path} 失败: {e}")
+                    pil_img = None
+            else:
+                if is_image:
+                    # 文件不存在的情况给出提示，后续走文字模式
+                    print(f"[WARN] 图标图片未找到或路径非法 → {img_path}")
+
+            # ----- 生成图标（图片或文字） -----
+            if pil_img is None:  # 文字模式
+                # 文字优先使用第二列内容；若为空则回退使用类名（第一列）
+                display_txt = second_col if second_col else name
+
+                # 创建统一的背景
+                bg = Image.new('RGBA', (BG_SIZE, BG_SIZE), (200, 200, 200, 255))
+                draw = ImageDraw.Draw(bg)
+
+                # 加载微软雅黑字体（中文），若不可用则回退
+                try:
+                    # Windows 常见的微软雅黑字体文件路径
+                    font_path = r"C:\Windows\Fonts\msyh.ttc"
+                    if not Path(font_path).is_file():
+                        font_path = r"C:\Windows\Fonts\msyh.ttf"
+                    font = ImageFont.truetype(font_path, size=12)  # 调整字体大小
+                except Exception:
+                    # fallback to default font
+                    font = ImageFont.load_default()
+
+                # 计算文字尺寸（兼容不同 Pillow 版本）
+                try:
+                    w, h = draw.textsize(display_txt, font=font)          # Pillow<10
+                except AttributeError:
+                    bbox = draw.textbbox((0, 0), display_txt, font=font)   # Pillow≥10
+                    w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+
+                # 文字居中绘制
+                draw.text(((BG_SIZE - w) // 2, (BG_SIZE - h) // 2),
+                          display_txt, fill='black', font=font)
+                icon_img = bg
+            else:  # 图片模式
+                # 把图片缩放到 ICON_SIZE 并居中放到统一的灰色背景上
+                icon_resized = pil_img.resize((ICON_SIZE, ICON_SIZE),
+                                              resample=RESAMPLE_MODE)
+                bg = Image.new('RGBA', (BG_SIZE, BG_SIZE), (200, 200, 200, 255))
+                offset = ((BG_SIZE - ICON_SIZE) // 2, (BG_SIZE - ICON_SIZE) // 2)
+                bg.paste(icon_resized, offset, mask=icon_resized)
+                icon_img = bg
+
+            # ----- 创建 Tk 按钮并放入滚动容器 -----
+            tk_img = ImageTk.PhotoImage(icon_img)
+            btn = tk.Button(icon_inner,                # 放进内部 Frame
+                            image=tk_img,
+                            width=BG_SIZE,
+                            height=BG_SIZE,
+                            relief='flat',
+                            bd=0,
+                            command=partial(self._on_icon_click, cid))
+            btn.image = tk_img                # 防止被 GC
+            btn.grid(row=cid, column=0, pady=2, sticky='ew')
+            self.icon_buttons.append(btn)
+
+        # 初始选中状态（保持原来的红框加粗实现）
+        self._refresh_icon_selection()
+
+        # 动态缩略图条（保持原实现）
+        self.thumb_num = min(7, self.total_imgs)
         thumb_bar = tk.Frame(self.root)
         thumb_bar.grid(row=2, column=0, columnspan=2, pady=5)
         self.thumb_buttons = []
@@ -764,6 +935,44 @@ class AnnotatorUI:
         self.core.save()
         self.result = "quit"
         self.root.destroy()
+
+    # 图标点击回调
+    def _on_icon_click(self, class_id):
+        """点击右侧图标后，同步当前类别并刷新 UI"""
+        self.core.cur_class = class_id
+        # 更新下拉框显示
+        if 0 <= class_id < len(self.class_names):
+            self.combo.set(self.class_names[class_id])
+        # 刷新图标选中颜色
+        self._refresh_icon_selection()
+
+    # 根据当前类别切换图标背景（红色=选中，灰色=未选中）
+    def _refresh_icon_selection(self):
+        """
+        根据 ``self.core.cur_class`` 更新右侧图标按钮的外观。
+        选中状态：红色;未选中状态：灰色
+        同时同步下拉框的显示内容。
+        """
+        for idx, btn in enumerate(self.icon_buttons):
+            if idx == self.core.cur_class:                 #  选中
+                btn.configure(
+                    bg='red',               # 背景色
+                    bd=2,                   # 边框宽度（加粗）
+                    relief='solid',         # 实线边框
+                    highlightbackground='red',
+                    highlightthickness=2    # 兼容部分主题的额外高亮
+                )
+            else:                                          # 未选中
+                btn.configure(
+                    bg='gray',
+                    bd=0,
+                    relief='flat',
+                    highlightbackground='gray',
+                    highlightthickness=0
+                )
+        # ---------- 同步下拉框 ----------
+        if 0 <= self.core.cur_class < len(self.class_names):
+            self.combo.set(self.class_names[self.core.cur_class])
 
     # -------------------------------------------------
     # 类别下拉框回调
@@ -827,6 +1036,8 @@ class AnnotatorUI:
     def _on_key(self, event):
         if event.char:
             self.core.change_class(ord(event.char.lower()))
+            # 切类后同步图标高亮
+            self._refresh_icon_selection()
         # ---------- 快捷键：Ctrl+Shift+C → 清空全部 ----------
         if (event.state & 0x0004) and (event.state & 0x0001) and \
                 event.keysym.lower() == 'c':
@@ -857,6 +1068,7 @@ class AnnotatorUI:
             if real_idx >= self.total_imgs:
                 btn.configure(image='', state=tk.DISABLED)
                 btn.image = None
+                btn.configure(width=80, height=80)
                 continue
             if real_idx in self._thumb_cache:
                 photo = self._thumb_cache[real_idx]
@@ -872,15 +1084,24 @@ class AnnotatorUI:
                     txt_path=txt_path,
                     default_class=self.core.cur_class,
                     class_colors=self.core.class_colors,
-                    class_names=self.class_names)   # ← 新增
+                    class_names=self.class_names)
                 thumb_img = tmp_core.draw(show_cur_rect=False)
-                thumb_small = cv2.resize(thumb_img, (80, 80), interpolation=cv2.INTER_AREA)
+                # 根据是否选中来决定缩略图大小（选中时大 50%）
+                if real_idx == self.img_index:
+                    thumb_small = cv2.resize(thumb_img, (120, 120), interpolation=cv2.INTER_AREA)  # 80 * 1.5 = 120
+                else:
+                    thumb_small = cv2.resize(thumb_img, (80, 80), interpolation=cv2.INTER_AREA)
                 thumb_rgb = cv2.cvtColor(thumb_small, cv2.COLOR_BGR2RGB)
-                pil = Image.fromarray(thumb_rgb)
+                pil = Image.fromarray(thumb_small if False else thumb_rgb)
                 photo = ImageTk.PhotoImage(pil)
                 self._thumb_cache[real_idx] = photo
             btn.configure(image=photo, state=tk.NORMAL)
             btn.image = photo
+            # 设置按钮尺寸与图像匹配
+            if real_idx == self.img_index:
+                btn.configure(width=120, height=120)  # 选中时更大
+            else:
+                btn.configure(width=80, height=80)
 
     # -------------------------------------------------
     # 主画面刷新（每帧）
@@ -1004,8 +1225,10 @@ def main():
         print(f'⚠️ 未在 {img_root} 中找到图片')
         sys.exit(1)
 
-    class_names = load_class_names(YAML_PATH)
+    # 同时获取 names 与 name→img 映射
+    class_names, class_img_map = load_class_names(YAML_PATH)
     print(f"[Info] 已读取 {len(class_names)} 个类别（来自 {YAML_PATH}）")
+    
     class_colors = generate_color_map(len(class_names))
 
     default_class = DEFAULT_CLASS
@@ -1020,13 +1243,17 @@ def main():
         img_path = img_files[idx]
         txt_path = txt_path_from_img(img_path, img_root, lbl_root)
 
-        core = AnnotatorCore(img_path,
-                             txt_path,
-                             default_class,
-                             class_colors,
-                             class_names)          # ← 这里传入 class_names
+        core = AnnotatorCore(
+            img_path,
+            txt_path,
+            default_class,
+            class_colors,
+            class_names)
 
-        ui = AnnotatorUI(core, class_names,
+        # 把 class_img_map 传给 UI
+        ui = AnnotatorUI(core,
+                         class_names,
+                         class_img_map,
                          img_files, idx, total_imgs,
                          img_root, lbl_root)
 

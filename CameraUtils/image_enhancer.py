@@ -319,9 +319,16 @@ class ImageEnhancer:
         return thresholds, best_iter
 
     def _compress_low_levels(self, y: np.ndarray, thr: int) -> np.ndarray:
-        """把所有低于 thr 的像素提升到 thr """
-        yc = y.copy()
-        yc[yc < thr] = thr
+        """
+        把所有低于 ``thr`` 的像素提升到 ``thr``，并保证写入的值始终在
+        ``uint8`` 合法范围内（0‑255）。使用 ``np.where`` 生成新数组，可避免
+        在原地写入时出现负数溢出错误。
+        """
+        # 先将阈值裁剪到合法区间
+        thr = int(np.clip(thr, 0, 255))
+        # 使用 np.where 生成新数组，避免直接在 uint8 数组中写入非法负数
+        yc = np.where(y < thr, thr, y).astype(np.uint8)
+
         return yc
 
     # ------------------- 锐化 ------------------- #
@@ -503,7 +510,14 @@ class ImageEnhancer:
         thresholds, best_iter = self._maybe_time("adaptive_median",
                                                 self._adaptive_median_threshold,
                                                 Y_tmp)
-        best_thr = thresholds[best_iter - 1]
+
+        # 确保阈值在 uint8 合法范围 [0,255]，并在极端全黑情况下提供安全默认值
+        if not thresholds:                              # 没有得到阈值 ⇒ 可能是全黑图像
+            best_thr = 0
+        else:
+            best_thr = thresholds[best_iter - 1]        # 原有阈值
+            best_thr = int(np.clip(best_thr, 0, 255))   # 防止出现 -1 或 >255
+                    
         Y_tmp = self._maybe_time("compress_low_levels",
                                 self._compress_low_levels,
                                 Y_tmp,
