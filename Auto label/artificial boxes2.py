@@ -1086,6 +1086,27 @@ class AnnotatorUI:
                     class_colors=self.core.class_colors,
                     class_names=self.class_names)
                 thumb_img = tmp_core.draw(show_cur_rect=False)
+                
+                # 判断是否有已完成标注（existing_boxes 不为空）
+                has_annotation = len(tmp_core.existing_boxes) > 0 or len(tmp_core.new_boxes) > 0
+                
+                if has_annotation:
+                    # 蓝色半透明覆盖层
+                    overlay = thumb_img.copy()
+                    # 绘制蓝色矩形覆盖在缩略图上方（高度约1/4）
+                    h, w = overlay.shape[:2]
+                    cv2.rectangle(overlay, (0, 0), (w, int(h * 0.25)), (255, 0, 0), -1)
+                    # 混合原图和覆盖层
+                    alpha = 0.6
+                    thumb_img = cv2.addWeighted(overlay, alpha, thumb_img, 1 - alpha, 0)
+                    # 添加"已完成"文字
+                    text = "Have Save"
+                    font = cv2.FONT_HERSHEY_SIMPLEX
+                    text_size = cv2.getTextSize(text, font, 0.5, 2)[0]
+                    text_x = (w - text_size[0]) // 2
+                    text_y = int(h * 0.18)
+                    cv2.putText(thumb_img, text, (text_x, text_y), font, 3, (255, 255, 255), 2, cv2.LINE_AA)
+                
                 # 根据是否选中来决定缩略图大小（选中时大 50%）
                 if real_idx == self.img_index:
                     thumb_small = cv2.resize(thumb_img, (120, 120), interpolation=cv2.INTER_AREA)  # 80 * 1.5 = 120

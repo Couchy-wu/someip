@@ -17,7 +17,7 @@ names: [
     'Icon_ADS_takeover',        Icon_ADS_takeover.png,
     'Icon_lane_departure',      Icon_lane_departure_1.png,
     'Icon_collision_warning',   Icon_collision_warning.png,
-    'Icon_Blind_right',         Icon_collision_warning.png,
+    'Icon_Blind_right',         Icon_Blind_right.png,
     'Icon_Blind_left',          Icon_Blind_left.png,
     'Icon_Adjustment',          Icon_Adjustment_1.png,
     'Icon_NCA',                 Icon_NCA_1.png,
