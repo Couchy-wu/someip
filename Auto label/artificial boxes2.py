@@ -66,12 +66,26 @@ NMS_IOU      = args.nms_iou
 # 2️⃣ 小工具（文件遍历、路径转换、yaml、颜色）
 # -------------------------------------------------
 def list_image_files(img_root):
+    """返回按数值顺序排序的图片文件路径列表，支持多层子目录。"""
     files = []
     for root, _, fnames in os.walk(img_root):
         for f in fnames:
             if f.lower().endswith(('.jpg', '.jpeg', '.png')):
                 files.append(os.path.join(root, f))
-    return sorted(files)
+
+    # 自然数排序（按文件名中的数字顺序，而不是字典序）
+    def _natural_key(path):
+        # 取文件名（不含扩展名），提取其中的数字作为排序键
+        stem = os.path.splitext(os.path.basename(path))[0]
+        try:
+            # 若文件名全为数字，则直接转成 int
+            return int(''.join(filter(str.isdigit, stem)))
+        except ValueError:
+            # 兼容非数字文件名，回退到普通字符串比较
+            return stem.lower()
+
+    files.sort(key=_natural_key)   # 用自然数键进行排序
+    return files
 
 def txt_path_from_img(img_path, img_root, lbl_root):
     rel_dir = os.path.relpath(os.path.dirname(img_path), img_root)
@@ -1103,9 +1117,9 @@ class AnnotatorUI:
                     text = "Have Save"
                     font = cv2.FONT_HERSHEY_SIMPLEX
                     text_size = cv2.getTextSize(text, font, 0.5, 2)[0]
-                    text_x = (w - text_size[0]) // 2
+                    text_x = (w - text_size[0]) // 3  - 80
                     text_y = int(h * 0.18)
-                    cv2.putText(thumb_img, text, (text_x, text_y), font, 3, (255, 255, 255), 2, cv2.LINE_AA)
+                    cv2.putText(thumb_img, text, (text_x, text_y), font, 4, (255, 255, 255), 5, cv2.LINE_AA)
                 
                 # 根据是否选中来决定缩略图大小（选中时大 50%）
                 if real_idx == self.img_index:
