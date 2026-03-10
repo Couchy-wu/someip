@@ -23,6 +23,9 @@ from tkinter import ttk, messagebox
 from functools import partial
 import traceback
 
+PROJECT_ROOT = Path(__file__).resolve().parent
+os.chdir(PROJECT_ROOT)
+
 # -------------------------------------------------
 # 1️⃣ 参数 & 环境检查（加入可调参数）
 # -------------------------------------------------
