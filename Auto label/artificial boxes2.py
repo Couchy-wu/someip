@@ -98,6 +98,20 @@ def ensure_dir(p):
         os.makedirs(p, exist_ok=True)
 
 def load_class_names(yaml_path):
+    """
+    读取 data.yaml，返回两样东西：
+        1. names            -> List[str]   （仅保留类别名称）
+        2. name_to_img_file -> Dict[str, str]（可选的 “类别 ↔ 示例图片” 映射）
+    
+    新增的 yaml 格式示例（每行可以写成 “'类名', 图片文件”）：
+        names: [
+            'Text_Icon_speed_value', a.png,
+            'Text_Icon_speed_unit',   b.png,
+            'Text_Icon_position',    c.png,
+            'Icon_AVH',               # 只写类名时不需要图片
+            ...
+        ]
+    """
     if not os.path.isfile(yaml_path):
         print(f"[Error] 找不到 yaml 文件: {yaml_path}")
         sys.exit(1)
@@ -106,11 +120,33 @@ def load_class_names(yaml_path):
     if 'names' not in data:
         print("[Error] yaml 中没有 `names` 键")
         sys.exit(1)
-    names = data['names']
-    if not isinstance(names, list):
+
+    raw_names = data['names']
+    # 支持 “'类名', img.png” 两种写法
+    if not isinstance(raw_names, list):
         print("[Error] `names` 必须是列表")
         sys.exit(1)
-    return names
+
+    names = []                     # 只存类别名称
+    name_to_img = {}               # 类名 → 示例图片（若有）
+
+    i = 0
+    while i < len(raw_names):
+        item = raw_names[i]
+        # 若元素本身就是字符串且后面紧跟另一个字符串，则认为是 “类名, img”
+        if isinstance(item, str) and (i + 1) < len(raw_names) and isinstance(raw_names[i + 1], str):
+            cls_name = item.strip()
+            img_file = raw_names[i + 1].strip()
+            names.append(cls_name)
+            name_to_img[cls_name] = img_file
+            i += 2                                   # 跳过两项
+        else:
+            # 仅有类名的普通写法
+            cls_name = str(item).strip()
+            names.append(cls_name)
+            i += 1
+    # 返回两对象，保持向后兼容
+    return names, name_to_img
 
 def generate_color_map(num_classes):
     base_colors = [
@@ -1017,8 +1053,10 @@ def main():
         print(f'⚠️ 未在 {img_root} 中找到图片')
         sys.exit(1)
 
-    class_names = load_class_names(YAML_PATH)
+    # 同时获取 names 与 name→img 映射
+    class_names, class_img_map = load_class_names(YAML_PATH)
     print(f"[Info] 已读取 {len(class_names)} 个类别（来自 {YAML_PATH}）")
+    
     class_colors = generate_color_map(len(class_names))
 
     default_class = DEFAULT_CLASS
