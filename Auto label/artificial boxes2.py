@@ -257,9 +257,9 @@ def detect_multi(frame_gray, templates, class_names,
     """返回 [(bbox, class_id, score), …]（bbox 为像素坐标）"""
     all_res = []
     for name, tmpl in templates.items():
+        # 若模板名称根本不在已有类别里，则直接 **跳过**（只保留 yaml 中的第一列为类）
         if name not in class_names:
-            class_names.append(name)
-            print(f"[INFO] 自动把模板 `{name}` 加入类别列表，class_id={len(class_names)-1}")
+            continue
         class_id = class_names.index(name)
         raw = _detect_one_template(
             frame_gray, tmpl,
