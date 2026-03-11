@@ -896,6 +896,31 @@ class AnnotatorUI:
 
         # 动态缩略图条（保持原实现）
         self.thumb_num = min(7, self.total_imgs)
+        
+        # 添加缩略图滚动滑动条
+        # 滑动条范围: 0 到 total_imgs - thumb_num
+        thumb_scroll_range = max(0, self.total_imgs - self.thumb_num)
+        self._thumb_scroll_var = tk.IntVar(value=0)
+        
+        # 只有当缩略图数量少于总图片数时才显示滑动条
+        if thumb_scroll_range > 0:
+            self._thumb_scroll_scale = tk.Scale(
+                self.root,
+                from_=0,
+                to=thumb_scroll_range,
+                orient='horizontal',
+                variable=self._thumb_scroll_var,
+                command=self._on_thumb_scroll_change,  # 滑动条回调
+                showvalue=True,  # 不显示数值
+                length=600,
+                sliderlength=20
+            )
+            self._thumb_scroll_scale.grid(row=1, column=0, columnspan=2, pady=5, sticky='ew')
+        else:
+            self._thumb_scroll_scale = None
+
+        # 动态缩略图条（保持原实现）
+        self.thumb_num = min(7, self.total_imgs)
         thumb_bar = tk.Frame(self.root)
         thumb_bar.grid(row=2, column=0, columnspan=2, pady=5)
         self.thumb_buttons = []
@@ -931,6 +956,16 @@ class AnnotatorUI:
         self._refresh_ui()
         self._schedule_refresh()
         self.root.mainloop()
+
+
+    # 缩略图滚动滑动条回调
+    def _on_thumb_scroll_change(self, value):
+        """当滑动条改变时，刷新缩略图显示"""
+        # 将字符串转换为整数
+        scroll_pos = int(value)
+        # 不需要清空缓存，只需要重新计算范围并显示
+        # 缓存会在 _calc_thumb_range 中被使用
+        pass
 
     # -------------------------------------------------
     # 按钮回调
@@ -1064,8 +1099,14 @@ class AnnotatorUI:
     # -------------------------------------------------
     def _calc_thumb_range(self):
         """返回 (start, end) 使得当前图片位于返回区间的中间（尽可能）"""
-        half = self.thumb_num // 2
-        start = max(0, self.img_index - half)
+        # 优先使用滑动条的值（如果存在），否则使用默认逻辑
+        if self._thumb_scroll_scale is not None:
+            start = self._thumb_scroll_var.get()
+        else:
+            # 原有的自动计算逻辑：尽量让当前图片居中
+            half = self.thumb_num // 2
+            start = max(0, self.img_index - half)
+        
         end = start + self.thumb_num
         if end > self.total_imgs:
             end = self.total_imgs
