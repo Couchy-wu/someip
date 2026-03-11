@@ -114,17 +114,8 @@ def ensure_dir(p):
 def load_class_names(yaml_path):
     """
     读取 artificial_data，返回两样东西：
-        1. names            -> List[str]   （仅保留类别名称）
-        2. name_to_img_file -> Dict[str, str]（可选的 “类别 ↔ 示例图片” 映射）
-    
-    新增的 yaml 格式示例（每行可以写成 “'类名', 图片文件”）：
-        names: [
-            'Text_Icon_speed_value', a.png,
-            'Text_Icon_speed_unit',   b.png,
-            'Text_Icon_position',    c.png,
-            'Icon_AVH',               # 只写类名时不需要图片
-            ...
-        ]
+        1. names            -> List[str]   （仅保留类别名称，即 names 第一列）
+        2. name_to_second   -> Dict[str, str]（第二列的原始内容，可能是图片文件名，也可能是文字说明）
     """
     if not os.path.isfile(yaml_path):
         print(f"[Error] 找不到 yaml 文件: {yaml_path}")
@@ -136,31 +127,31 @@ def load_class_names(yaml_path):
         sys.exit(1)
 
     raw_names = data['names']
-    # 支持 “'类名', img.png” 两种写法
     if not isinstance(raw_names, list):
         print("[Error] `names` 必须是列表")
         sys.exit(1)
 
-    names = []                     # 只存类别名称
-    name_to_img = {}               # 类名 → 示例图片（若有）
-
+    names = []                     # 只存类别名称（第一列）
+    name_to_second = {}            # 第二列的原始字符串（用于显示文字或图片路径）
     i = 0
     while i < len(raw_names):
         item = raw_names[i]
-        # 若元素本身就是字符串且后面紧跟另一个字符串，则认为是 “类名, img”
-        if isinstance(item, str) and (i + 1) < len(raw_names) and isinstance(raw_names[i + 1], str):
+        # 若后面还有一个元素，则把它当作第二列
+        if (i + 1) < len(raw_names) and isinstance(item, str) and isinstance(raw_names[i + 1], str):
             cls_name = item.strip()
-            img_file = raw_names[i + 1].strip()
-            names.append(cls_name)
-            name_to_img[cls_name] = img_file
-            i += 2                                   # 跳过两项
+            second_col = raw_names[i + 1].strip()
+            names.append(cls_name)                     # 只把第一列当作类名
+            name_to_second[cls_name] = second_col      # 保存第二列原始内容
+            i += 2
         else:
-            # 仅有类名的普通写法
+            # 没有第二列，直接当普通类名
             cls_name = str(item).strip()
             names.append(cls_name)
+            # 为保持兼容，仍放一个空字符串进去
+            name_to_second[cls_name] = ''
             i += 1
-    # 返回两对象，保持向后兼容
-    return names, name_to_img
+    # 返回两对象（兼容原来调用方式），第二个对象现在是 **第二列原始内容**
+    return names, name_to_second
 
 def generate_color_map(num_classes):
     base_colors = [
@@ -819,58 +810,49 @@ class AnnotatorUI:
             RESAMPLE_MODE = Image.LANCZOS
 
         for cid, name in enumerate(self.class_names):
-            # ----- 读取 yaml 第二列的原始字符串（可能是文件名、文字或空） -----
+            # 第二列原始内容（可能是图片文件名，也可能是文字说明）
             second_col = self.class_img_map.get(name, '').strip()
 
-            # ----- 判断是否为合法图片后缀且文件实际存在 -----
+            # 判断第二列是否是合法的图片文件且文件实际存在
             is_image = any(second_col.lower().endswith(ext)
-                           for ext in ('.png', '.jpg', '.jpeg', '.bmp', '.gif'))
+                           for ext in ('.png', '.jpg', '.jpeg', '.bmp', '.gif')) \
+                       and (Path(TPL_DIR) / second_col).is_file()
+
             img_path = Path(TPL_DIR) / second_col
             pil_img = None
-            if is_image and img_path.is_file():
+            if is_image:
                 try:
                     pil_img = Image.open(str(img_path)).convert('RGBA')
                 except Exception as e:
                     print(f"[WARN] 打开图标图片 {img_path} 失败: {e}")
                     pil_img = None
-            else:
-                if is_image:
-                    # 文件不存在的情况给出提示，后续走文字模式
-                    print(f"[WARN] 图标图片未找到或路径非法 → {img_path}")
 
-            # ----- 生成图标（图片或文字） -----
-            if pil_img is None:  # 文字模式
-                # 文字优先使用第二列内容；若为空则回退使用类名（第一列）
+            # ---------- 生成图标（图片或文字） ----------
+            if pil_img is None:   # 文字模式
+                # 当没有可用图片时，使用第二列的文字说明（若为空则回退到类名）
                 display_txt = second_col if second_col else name
-
                 # 创建统一的背景
                 bg = Image.new('RGBA', (BG_SIZE, BG_SIZE), (200, 200, 200, 255))
                 draw = ImageDraw.Draw(bg)
-
                 # 加载微软雅黑字体（中文），若不可用则回退
                 try:
-                    # Windows 常见的微软雅黑字体文件路径
                     font_path = r"C:\Windows\Fonts\msyh.ttc"
                     if not Path(font_path).is_file():
                         font_path = r"C:\Windows\Fonts\msyh.ttf"
-                    font = ImageFont.truetype(font_path, size=12)  # 调整字体大小
+                    font = ImageFont.truetype(font_path, size=12)
                 except Exception:
-                    # fallback to default font
                     font = ImageFont.load_default()
-
-                # 计算文字尺寸（兼容不同 Pillow 版本）
+                # 兼容 Pillow 版本获取文字尺寸
                 try:
                     w, h = draw.textsize(display_txt, font=font)          # Pillow<10
                 except AttributeError:
                     bbox = draw.textbbox((0, 0), display_txt, font=font)   # Pillow≥10
                     w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
-
                 # 文字居中绘制
                 draw.text(((BG_SIZE - w) // 2, (BG_SIZE - h) // 2),
                           display_txt, fill='black', font=font)
                 icon_img = bg
-            else:  # 图片模式
-                # 把图片缩放到 ICON_SIZE 并居中放到统一的灰色背景上
+            else:   # 图片模式（保持原来的实现）
                 icon_resized = pil_img.resize((ICON_SIZE, ICON_SIZE),
                                               resample=RESAMPLE_MODE)
                 bg = Image.new('RGBA', (BG_SIZE, BG_SIZE), (200, 200, 200, 255))
@@ -878,9 +860,9 @@ class AnnotatorUI:
                 bg.paste(icon_resized, offset, mask=icon_resized)
                 icon_img = bg
 
-            # ----- 创建 Tk 按钮并放入滚动容器 -----
+            # 创建 Tk 按钮并放入滚动容器
             tk_img = ImageTk.PhotoImage(icon_img)
-            btn = tk.Button(icon_inner,                # 放进内部 Frame
+            btn = tk.Button(icon_inner,
                             image=tk_img,
                             width=BG_SIZE,
                             height=BG_SIZE,
