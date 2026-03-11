@@ -900,8 +900,21 @@ class AnnotatorUI:
         # 添加缩略图滚动滑动条
         # 滑动条范围: 0 到 total_imgs - thumb_num
         thumb_scroll_range = max(0, self.total_imgs - self.thumb_num)
-        self._thumb_scroll_var = tk.IntVar(value=0)
-        
+
+        # 计算居中显示的初始值，使得当前图片位于缩略图栏中心
+        init_val = 0
+        if thumb_scroll_range > 0:
+            half = self.thumb_num // 2
+            start_idx = self.img_index - half
+            # 确保起始索引不超出有效范围 [0, thumb_scroll_range]
+            if start_idx < 0:
+                start_idx = 0
+            elif start_idx > thumb_scroll_range:
+                start_idx = thumb_scroll_range
+            init_val = start_idx
+
+        self._thumb_scroll_var = tk.IntVar(value=init_val)
+
         # 只有当缩略图数量少于总图片数时才显示滑动条
         if thumb_scroll_range > 0:
             self._thumb_scroll_scale = tk.Scale(
