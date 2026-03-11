@@ -1161,6 +1161,22 @@ class AnnotatorUI:
                     text_x = (w - text_size[0]) // 3  - 80
                     text_y = int(h * 0.18)
                     cv2.putText(thumb_img, text, (text_x, text_y), font, 4, (255, 255, 255), 5, cv2.LINE_AA)
+                else:
+                    # 红色半透明覆盖层
+                    overlay = thumb_img.copy()
+                    # 绘制红色矩形覆盖在缩略图上方（高度约1/4）
+                    h, w = overlay.shape[:2]
+                    cv2.rectangle(overlay, (0, 0), (w, int(h * 0.25)), (0, 0, 255), -1)
+                    # 混合原图和覆盖层
+                    alpha = 0.6
+                    thumb_img = cv2.addWeighted(overlay, alpha, thumb_img, 1 - alpha, 0)
+                    # 添加"未完成"文字
+                    text = "No Save"
+                    font = cv2.FONT_HERSHEY_SIMPLEX
+                    text_size = cv2.getTextSize(text, font, 0.5, 2)[0]
+                    text_x = (w - text_size[0]) // 3 - 80
+                    text_y = int(h * 0.18)
+                    cv2.putText(thumb_img, text, (text_x, text_y), font, 4, (255, 255, 255), 5, cv2.LINE_AA)
                 
                 # 根据是否选中来决定缩略图大小（选中时大 50%）
                 if real_idx == self.img_index:
