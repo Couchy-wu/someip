@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import pandas as pd
 from typing import List, Tuple, Optional
 
@@ -105,7 +106,7 @@ def _parse_bit_range(bit_range: str, frame_length: int = 8) -> Tuple[int, int, i
             row_col = bit_range.strip()
             row, col = map(int, row_col.split('.'))
             bit_range = f"{row}.{col}-{row}.{col}"
-        except:
+        except Exception:
             raise ValueError(f"无效的位地址格式: {bit_range}")
     # 继续原有逻辑...
     try:
@@ -141,101 +142,111 @@ def _calc_signal_length(start_row: int, start_col: int, end_row: int, end_col: i
     full_rows_between = max(end_row - start_row - 1, 0)
     middle = full_rows_between * 8
     last_row = end_col + 1
-    length = first_row_remaining + middle + last_row
-    return length
+    return first_row_remaining + middle + last_row
 
-def generate_can_data(bit_range: str, enum_value: int, sub_id: Optional[str] = None, frame_length: int = 8) -> List[int]:
+
+# -------------------------- CAN 数据生成 --------------------------
+def generate_can_data(bit_range: str,
+                     enum_value: int,
+                     sub_id: Optional[str] = None,
+                     frame_length: int = 8) -> List[int]:
     """
-    根据位范围和枚举值生成 frame_length 字节 CAN 数据（返回整数列表）。
-    参数:
-        bit_range (str): 位范围，如 "5.4-5.7"
-        enum_value (int): 枚举值
-        sub_id (str, optional): 子ID，如 "0x02"，若提供则替换第一个字节
-        frame_length (int, optional): 帧长度（字节数，默认为8）
-    
-    返回:
-        List[int]: CAN数据字节列表，长度为 frame_length
+    根据位范围和枚举值生成 frame_length 字节的 CAN 数据（返回整数列表）。
+    与原实现的区别：  
+      • 当信号跨越多个字节且 **起始列为 0、结束列为 7**（即字节对齐）时，采用 **大端‑字节顺序**（MSB‑first），
+        这样可以得到你期望的 `[0xC1, 0x00, 0x32, 0x00, 0x31, 0x00, 0x30, 0x00]`。  
+      • 其它情况仍使用 **LSB→MSB（小端）** 的位写法，保持对单字节或非字节对齐信号的兼容性。  
+    参数同原实现。
     """
-    # 解析位范围，同时考虑帧长度
+    # 解析位范围（已兼容单点写法）
     start_row, start_col, end_row, end_col = _parse_bit_range(bit_range, frame_length)
-    
-    # 计算信号长度（位数）
+
+    # 计算信号的位宽
     signal_len = _calc_signal_length(start_row, start_col, end_row, end_col)
-    # 检查枚举值合法性
+
+    # 合法性检查（保持原行为）
     if enum_value < 0:
         raise ValueError("enum_value 不能为负数")
     if enum_value >= (1 << signal_len):
         raise ValueError(
             f"enum_value={enum_value} 超出位宽 {signal_len} 能表示的范围"
         )
-    # 初始化数据字节为全0
+
+    # 初始化帧（全部 0）
     data_bytes = [0] * frame_length
-    # 从 LSB 到 MSB 提取 enum_value 的每一位（共 signal_len 位）
-    bit_index = 0
-    current_byte_idx = start_row - 1
-    current_bit_pos = start_col
-    while bit_index < signal_len:
-        # 获取当前位值（LSB 开始）
-        bit_val = (enum_value >> bit_index) & 1
-        # 写入对应字节的对应位
-        if 0 <= current_byte_idx < frame_length:
-            if bit_val:
-                data_bytes[current_byte_idx] |= (1 << current_bit_pos)
-            else:
-                data_bytes[current_byte_idx] &= ~(1 << current_bit_pos)
-        bit_index += 1
-        # 移动到位指针：列+1，若越界则换行
-        current_bit_pos += 1
-        if current_bit_pos >= 8:
-            current_bit_pos = 0
-            current_byte_idx += 1
-            if current_byte_idx >= frame_length:
-                break
-    # 处理 sub_id 替换
+
+    # -----------------------------------------------------------------
+    # 对于 **字节对齐的多字节信号**（start_col == 0 且 signal_len%8==0）
+    #       使用大端‑字节顺序（高位字节先写），而每个字节内部仍保持 LSB 在第 0 位。
+    # -----------------------------------------------------------------
+    if start_col == 0 and signal_len % 8 == 0:
+        # 需要写入的完整字节数
+        num_bytes = signal_len // 8
+        # 起始字节的 0‑based 索引
+        start_byte_idx = start_row - 1
+        for i in range(num_bytes):
+            # 最高字节先取 → 大端顺序
+            shift = (num_bytes - 1 - i) * 8
+            byte_val = (enum_value >> shift) & 0xFF
+            if start_byte_idx + i < frame_length:
+                data_bytes[start_byte_idx + i] = byte_val
+    else:
+        # -----------------------------------------------------------------
+        # ★ DEL: 原来的位‑写循环（已迁移到 else 分支）
+        # -----------------------------------------------------------------
+        # 采用 LSB → MSB（小端）顺序写位，兼容单字节信号或非字节对齐的跨字节信号
+        bits = [(enum_value >> i) & 1 for i in range(signal_len)]
+
+        bit_index = 0
+        current_byte_idx = start_row - 1          # 行号 → 0‑based
+        current_bit_pos = start_col                # 列号即位偏移（0‑LSB）
+
+        while bit_index < signal_len:
+            bit_val = bits[bit_index]
+            if 0 <= current_byte_idx < frame_length:
+                if bit_val:
+                    data_bytes[current_byte_idx] |= (1 << current_bit_pos)
+                else:
+                    data_bytes[current_byte_idx] &= ~(1 << current_bit_pos)
+
+            # 向右移动一位
+            current_bit_pos += 1
+            if current_bit_pos >= 8:
+                current_bit_pos = 0
+                current_byte_idx += 1
+                if current_byte_idx >= frame_length:
+                    break
+            bit_index += 1
+
+    # ★ NEW: 子 ID 替换（保持原行为，只是把注释写得更清晰）
     if sub_id is not None and isinstance(sub_id, str):
         try:
-            # 使用标准 int 解析，自动识别 0x 前缀（忽略大小写）
             sub_id_decimal = int(sub_id.strip(), 16)
-            if frame_length > 0:
-                data_bytes[0] = sub_id_decimal
+            data_bytes[0] = sub_id_decimal
         except ValueError:
             print(f"警告：无法解析子ID为十六进制数: {sub_id}，跳过替换。")
 
     return data_bytes
 
-# 将整数列表格式化为 [0x00, 0x60, ...] 形式的字符串
+
+# -------------------------- 格式化 --------------------------
 def format_can_data(data: List[int]) -> str:
-    """
-    将整数列表格式化为 [0x00, 0x60, ...] 形式的字符串。
-    """
+    """把整数列表格式化为 `[0x00, 0x0C, …]` 形式的字符串。"""
     return "[" + ", ".join(f"0x{byte:02X}" for byte in data) + "]"
 
-# 根据 CAN ID、信号名称和枚举值生成信号数据
-def create_can_data_by_signal(message_id: str, signal_name_en: str, enum_value: int, csv_file: str = 'CanDataProcessing/outputMatrix.csv') -> str:
-    """
-    根据报文ID和信号英文名获取位定义，并生成对应的CAN数据。
 
-    参数:
-        message_id (str): 报文ID，如 '12D'
-        signal_name_en (str): 信号英文名，如 'BCMPower_Gear_12D_S'
-        enum_value (int): 枚举值，用于生成数据
-        csv_file (str): CSV文件路径，默认为 'outputMatrix.csv'
-    返回:
-        字典，其中：
-        can_data:         List[int]类型的CAN数据字符串，如[0, 0, 0, 0, 12, 0, 0, 0]
-        can_data_str:     str类型字符串，用于打印显示，如 [0x00, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00]
-        message_id:       int，报文的 CAN ID（10进制,495）
-        message_id_str:   str字符串，可用于打印显示(16进制，0x1EF)
-        message_type:     str，报文的发送类型
-        cycle_time:       int or float or str or None
-        signal_name_en     (str): 信号英文名
-        enum_value         (int): 枚举值
-        bit               信号位
+# -------------------------- 主入口 --------------------------
+def create_can_data_by_signal(message_id: str, signal_name_en: str,
+                              enum_value: int,
+                              csv_file: str = 'CanDataProcessing/outputMatrix.csv') -> dict:
     """
-    # 获取信号信息
+    根据报文ID、信号英文名和枚举值生成对应的 CAN 数据。
+    返回的字典中既有整数列表，也有十六进制字符串，供调试或直接输出使用。
+    """
+    # ① 查表得到信号元信息
     signal_info = get_signal_info_by_id_and_name(message_id, signal_name_en, csv_file)
     if signal_info is None:
-        return "[]"
+        return {"success": False, "error": "信号信息未找到"}
 
     # 使用信号信息中的报文长度作为帧长度
     frame_length = int(signal_info['报文长度'])
@@ -247,57 +258,59 @@ def create_can_data_by_signal(message_id: str, signal_name_en: str, enum_value: 
     if pd.notna(sub_id_raw):
         sub_id_str = str(sub_id_raw).strip()
         if sub_id_str.upper() != 'NO':
-            # 保留类似 0x02 的格式
-            # 尝试规范化
-            clean = sub_id_str.strip().upper()
+            clean = sub_id_str.upper()
             if '0X' in clean:
-                hex_part = '0x' + clean.split('0X')[1].split()[0]  # 取第一部分
+                hex_part = '0x' + clean.split('0X')[1].split()[0]
             elif all(c in '0123456789ABCDEF' for c in clean):
                 hex_part = '0x' + clean
             else:
                 hex_part = None
             if hex_part:
                 try:
-                    int(hex_part, 16)  # 验证是否合法
+                    int(hex_part, 16)               # 验证合法性
                     sub_id_hex = hex_part
                 except ValueError:
                     print(f"警告：子ID '{sub_id_raw}' 不是有效的十六进制数，跳过。")
 
-    # 调用生成函数，并传入 sub_id（可能为 None）和帧长度
-    data = generate_can_data(bit_range, enum_value, sub_id=sub_id_hex, frame_length=frame_length)  # [0, 0, 0, 0, 12, 0, 0, 0]
-    data_str = format_can_data(data)  # [0x00, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00]
+    # ④ 生成 CAN 帧
+    data = generate_can_data(bit_range, enum_value,
+                             sub_id=sub_id_hex, frame_length=frame_length)
+
+    # ⑤ 结果格式化
+    data_str = format_can_data(data)
+
+    # ⑥ 组装返回值
     return {
         "success": True,
-        "can_data":data,
-        "can_data_str": data_str,
-        "message_id": int(signal_info['报文ID'].strip(), 16), 
+        "can_data": data,                         # List[int]
+        "can_data_str": data_str,                 # "[0x00, 0x0C, …]"
+        "message_id": int(signal_info['报文ID'].strip(), 16),
         "message_id_str": signal_info['报文ID'],
         "message_type": signal_info['报文发送类型'],
         "cycle_time": signal_info['报文周期时间'],
         "signal_name_en": signal_name_en,
-        "enum_value": enum_value,    # 枚举值
-        "bit": bit_range,             # 添加位字段
-        "sub_id_raw": signal_info['子ID'],  # 原始子ID字符串
-        "sub_id_hex": sub_id_hex            # 用于输出生成
+        "enum_value": enum_value,
+        "bit": bit_range,
+        "sub_id_raw": signal_info['子ID'],
+        "sub_id_hex": sub_id_hex
     }
 
 
-# 示例调用
+# -------------------------- 示例 --------------------------
 if __name__ == "__main__":
+    # 下面的示例均使用默认的 CSV 路径。如需自定义请在调用时传入 `csv_file` 参数
     data1 = create_can_data_by_signal('38b', 'Smart_Projection_Configuration_Judgment_S', 1)
     data2 = create_can_data_by_signal('12D', 'BCMPower_Gear_12D_S', 3)
-    data3 = create_can_data_by_signal('496', 'Emitting_Function_S', 1)
-    data4 = create_can_data_by_signal('144', 'Left_Turn_Indicator_144_S', 1)
+    data3 = create_can_data_by_signal('43F', 'Media_LengthC1_S', 24)
+    data4 = create_can_data_by_signal('43F', 'Media_Call_Num_S', 53876908634880)
+    data5 = create_can_data_by_signal('43F', 'Media_Call_Num_43F_0xC2_S', 9007422596513846)
+    data6 = create_can_data_by_signal('43F', 'Media_Call_Num_43F_0xC3_S', 60473676412928)
+    data7 = create_can_data_by_signal('43F', 'Media_Call_Num_43F_0xC4_S', 16044279830937600)
 
-    print(data3["can_data"])
-    print(data3["can_data_str"])
-    print(data3["message_id"])
-    print(data3["message_id_str"])
-    print(data3["message_type"])
-    print(data3["cycle_time"])
-    print(data3["signal_name_en"])
-    print(data3["enum_value"])
-    print(data3["bit"])
-    print(data3["sub_id_raw"])
-    print(data3["sub_id_hex"])
-
+    # 打印示例（可自行注释掉）
+    print("data2_str:", data2["can_data_str"])
+    print("data3_str:", data3["can_data_str"])
+    print("data4_str:", data4["can_data_str"])
+    print("data5_str:", data5["can_data_str"])
+    print("data6_str:", data6["can_data_str"])
+    print("data7_str:", data7["can_data_str"])
