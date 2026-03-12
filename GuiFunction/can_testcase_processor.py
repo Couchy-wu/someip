@@ -11,6 +11,25 @@ from CanDataProcessing.find_can_from_csv import create_can_data_by_signal
 import logging
 import tkinter as tk
 from tkinter import messagebox
+import unicodedata
+
+
+def _remove_hidden_control_chars(text: str) -> str:
+    """
+    删除可能出现在 JSON 字符串中的隐藏 Unicode 控制字符（如 U+202C、U+200B~U+200F、以及
+    其它类别为 “Format” (Cf) 的字符），返回清理后的字符串。
+    """
+    # 过滤掉所有 “格式控制字符” 或者常见的不可见字符范围
+    cleaned = ''.join(
+        ch for ch in text
+        if not (
+            unicodedata.category(ch) == 'Cf'               # 通用的格式控制字符
+            or 0x200B <= ord(ch) <= 0x200F                 # 零宽空格等
+            or 0xFEFF == ord(ch)                           # 字节顺序标记 (BOM)
+        )
+    )
+    return cleaned
+
 
 class TestCaseProcessor:
     """
@@ -146,16 +165,29 @@ class TestCaseProcessor:
 
     def _load_json_data(self) -> Optional[List[Dict[str, Any]]]:
         """
-        从指定路径加载 JSON 数据
-        :return: 解析后的用例列表，失败返回 None
+        从指定路径加载 JSON 数据，并在返回前删除隐藏的 Unicode 控制字符。
         """
         try:
             with open(self.json_file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                if not isinstance(data, list):
-                    mylog.error(self.logger_name, "错误：JSON 顶层结构应为用例列表（list）")
-                    return None
-                return data
+
+            if not isinstance(data, list):
+                mylog.error(self.logger_name, "错误：JSON 顶层结构应为用例列表（list）")
+                return None
+
+            # 递归遍历 data，把所有字符串中的隐藏控制字符全部去掉
+            def _clean_obj(obj: Any) -> Any:
+                if isinstance(obj, dict):
+                    return {k: _clean_obj(v) for k, v in obj.items()}
+                if isinstance(obj, list):
+                    return [_clean_obj(item) for item in obj]
+                if isinstance(obj, str):
+                    return _remove_hidden_control_chars(obj)   # 清除隐藏字符
+                return obj
+
+            data = _clean_obj(data)
+        
+            return data
         except FileNotFoundError:
             mylog.error(self.logger_name, f"错误：文件未找到 → {self.json_file_path}")
         except json.JSONDecodeError as e:
@@ -328,6 +360,9 @@ class TestCaseProcessor:
         """
         if not script or not isinstance(script, str):
             return []
+
+        # 先清理潜在的隐藏控制字符
+        script = _remove_hidden_control_chars(script)
 
         # 统一标点
         script = (script
