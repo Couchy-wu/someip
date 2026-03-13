@@ -31,9 +31,9 @@ class ImageEnhancer:
         self.enable_guided_filter = False           # 是否在亮度通道上执行导向滤波
         self.enable_edge_restore  = False            # 导向滤波后是否把原始强边缘恢复回去
         self.enable_fast_retinex   = True            # True → Fast‑Retinex；False → 直接使用原始 Y（仅压暗部）
-        self.enable_sharpen       = True            # 是否在亮度增强后执行锐化
+        self.enable_sharpen       = False            # 是否在亮度增强后执行锐化
         self.enable_binary        = True             # 是否对最终亮度图做二值化
-        self.enable_otsu          = False            # True → Otsu，False → 固定阈值 128
+        self.enable_otsu          = False            # True → Otsu，False → 固定阈值
         self.enable_small_noise_remove = True       # 是否启用小面积噪声去除（新增开关）
 
         # ---------- Fast‑Retinex ----------
@@ -361,9 +361,9 @@ class ImageEnhancer:
     # ------------------- 固定阈值二值化 ------------------- #
     def _fixed_threshold(self, gray: np.ndarray) -> np.ndarray:
         """
-        使用固定阈值 128 进行二值化。
+        使用固定阈值  进行二值化。
         """
-        _, binary = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY)
+        _, binary = cv2.threshold(gray, 90, 255, cv2.THRESH_BINARY)
         return binary
 
     # ------------------- 导向滤波（降采样‑上采样） ------------------- #

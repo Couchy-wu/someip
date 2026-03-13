@@ -57,7 +57,7 @@ class CANFDGUI:
         from CameraUtils.image_enhancer import ImageEnhancer
         self._enhancer = ImageEnhancer(enable_timing=False)    
         # GUI显示帧率控制
-        self._gui_frame_interval = 0.2          # 0.2 = 200ms间隔 = 5 fps 
+        self._gui_frame_interval = 0.1          # 0.2 = 200ms间隔 = 5 fps 
         self._last_gui_update_time = 0          # 上次GUI更新时间戳
 
         # ---------- 第一块视频显示：右上角摄像头显示区域 ----------
