@@ -79,7 +79,7 @@ class CANFDGUI:
         self._camera_thread.start()
 
         # ---------- 第二块视频显示：变换相关 ----------
-        self.transform_enable_var = tk.IntVar(value=0)          # 勾选框：是否开启变换
+        self.transform_enable_var = tk.IntVar(value=1)          # 勾选框：是否开启变换，value=1为默认开启
         self.transform_option_var = tk.StringVar(value="变换A") # 下拉框当前选项
 
         # 视频显示
@@ -105,7 +105,7 @@ class CANFDGUI:
         ).grid(row=5, column=0, sticky='w', padx=5)
 
         # 图像采集模式开关
-        self.image_capture_var = tk.IntVar(value=0)   # 0 – 关闭，1 – 开启
+        self.image_capture_var = tk.IntVar(value=1)   #默认： 0 – 关闭，1 – 开启
         tk.Checkbutton(
             root,
             text="开启图像采集模式",
@@ -1011,6 +1011,9 @@ class CANFDGUI:
                 total_test_rounds=rounds_count
             )
 
+            # 把 GUI 的截图方法封装为在主线程执行的回调
+            self.parser.screenshot_callback = lambda: self.root.after(0, self._save_captured_image)
+            
             # 注册状态回调，使 GUI 实时显示当前工况
             self.parser.set_state_callback(
                 lambda s: self.root.after(

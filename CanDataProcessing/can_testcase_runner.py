@@ -67,6 +67,9 @@ class LogParser:
             use_timestamp=True,       # 文件名带时间戳
             show_prefix=True          # 显示日志前缀（时间+级别）
         )
+        # 用于在解析到“立刻截图”时回调 GUI 保存图像
+        self.screenshot_callback = None  # 赋值后应为 callable，或保持 None
+
 
     def load_log(self):
         """加载日志文件内容"""
@@ -326,6 +329,20 @@ class LogParser:
 
             line = lines[i].strip()
             if not line or line.startswith('-') or line.startswith('→'):
+                i += 1
+                continue
+
+            # 检测 “立刻截图” 指令（等价于键盘 a 键）
+            if "立刻截图" in line:
+                mylog.info(LOGGER_NAME, "检测到 ‘立刻截图’ 指令，触发截图回调。")
+                if callable(getattr(self, "screenshot_callback", None)):
+                    try:
+                        # 交给外部回调执行实际保存，回调自行决定线程/GUI 处理
+                        self.screenshot_callback()
+                    except Exception as e:
+                        mylog.error(LOGGER_NAME, f"截图回调异常: {e}")
+                else:
+                    mylog.warning(LOGGER_NAME, "未设置 screenshot_callback，已忽略 ‘立刻截图’。")
                 i += 1
                 continue
 

@@ -306,20 +306,58 @@ class TestCaseProcessor:
         """
         从三行（状态/动作/响应）的“测试脚本”字段中提取目标函数调用
         使用正则匹配，按行顺序输出解析结果，并对“采集”和“输出”生成 CAN 数据
+        新增：若脚本中出现 “立刻截图”，在原有解析顺序中直接记录该文本，只做文本记录（实际截图功能留待后续实现）。
         """
         rows = [("状态", status_row), ("动作", action_row), ("响应", response_row)]
         mylog.info(self.logger_name, "  └─ 脚本解析结果：")
 
         for row_type, row in rows:
             script_raw = row.get("测试脚本", "")
-            calls = self._extract_target_calls(script_raw, self.target_funcs, self.prefix_patterns)
-            if not calls:
+            if not script_raw:
                 continue
 
-            mylog.info(self.logger_name, f"      {row_type}:")
-            for func, args in calls:
+            # 统一清理脚本（去除隐藏字符、全角符号 → 半角等），保持与 _extract_target_calls 相同的处理方式
+            script_clean = _remove_hidden_control_chars(script_raw) \
+                .replace('（', '(').replace('）', ')') \
+                .replace('，', ',').replace('；', ';').strip()
+            # 按分号拆分为独立语句，保持原始顺序
+            statements = [stmt.strip() for stmt in script_clean.split(";") if stmt.strip()]
+
+            # 编译一次用于匹配目标函数的正则（与 _extract_target_calls 中的规则保持一致）
+            prefix_regex = ""
+            if self.prefix_patterns:
+                escaped_prefix = [re.escape(p) for p in self.prefix_patterns]
+                prefix_regex = f"(?:{'|'.join(escaped_prefix)})?"        # 可选前缀
+            func_regex = "|".join(map(re.escape, self.target_funcs))      # 目标函数集合
+            call_pattern = re.compile(
+                rf"{prefix_regex}({func_regex})\s*\(\s*(?P<args>[^)]*?)\s*\)",
+                re.IGNORECASE
+            )
+            # --------------------------------------------
+
+            # 若本行没有任何可解析的内容（既没有目标函数也没有“立刻截图”），则跳过
+            if not any(("立刻截图" in s) or call_pattern.search(s) for s in statements):
+                continue
+
+            mylog.info(self.logger_name, f"      {row_type}:")   # 行标题只打印一次
+
+            # 按顺序遍历每条语句，依次记录 “立刻截图” 或目标函数调用
+            for stmt in statements:
+                # ----- 1 “立刻截图” 文本 ----- 
+                if "立刻截图" in stmt:
+                    mylog.info(self.logger_name, "          立刻截图")
+                    continue
+
+                # ----- 2 目标函数调用 -----
+                m = call_pattern.search(stmt)
+                if not m:
+                    # 未匹配到目标函数且不是截图，直接忽略（保持向后兼容）
+                    continue
+                func = m.group(1)
+                args = m.group("args").strip()
                 mylog.info(self.logger_name, f"          {func}({args})")
 
+                # 下面的业务处理保持原有逻辑不变
                 if func in {"输出", "采集"}:
                     self._generate_can_data_from_call(func, args)
 
