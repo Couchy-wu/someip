@@ -68,7 +68,7 @@ class PerspectiveCalibrator:
     """
     _file_lock = threading.Lock()          # 所有实例共享的文件读写锁
 
-    def __init__(self, image_path,
+    def __init__(self, image_path=None,          # 改为可选，默认 None
                  display_width=960, display_height=540,
                  output_resolution="original",
                  config_name=None):
@@ -81,25 +81,35 @@ class PerspectiveCalibrator:
         self._win_warped = f"PC-{self._uid}-Warped"   # 透视结果窗口唯一名称
 
         # ---------- 基础图像 ----------
-        self.original_image = cv2.imread(image_path)
-        if self.original_image is None:
-            raise FileNotFoundError(f"无法加载图像: {image_path}")
-        self.orig_height, self.orig_width = self.original_image.shape[:2]
-
+        # 支持 image_path=None，避免强制磁盘读取
+        if image_path is not None:
+            self.original_image = cv2.imread(image_path)
+            if self.original_image is None:
+                raise FileNotFoundError(f"无法加载图像: {image_path}")
+            self.orig_height, self.orig_width = self.original_image.shape[:2]
+        else:
+            # 延迟初始化，等待 run_auto 的 image_data
+            self.original_image = None
+            self.orig_height = 0
+            self.orig_width = 0
         # ---------- 显示尺寸 ----------
         self.display_width = display_width
         self.display_height = display_height
 
         # ---------- 基准比例（原始 → 显示） ----------
-        self.base_scale_x = self.orig_width / self.display_width
-        self.base_scale_y = self.orig_height / self.display_height
-
+        # 避免除零，若原始尺寸为0则先设为1
+        self.base_scale_x = (self.orig_width / self.display_width) if self.orig_width > 0 else 1.0
+        self.base_scale_y = (self.orig_height / self.display_height) if self.orig_height > 0 else 1.0
         # ---------- 当前整体缩放（放大/缩小） ----------
         self.current_scale = 1.0
 
         # ---------- 用于显示的缩放图 ----------
-        self.display_image = cv2.resize(self.original_image,
-                                       (display_width, display_height))
+        # 若原始图像未加载，则创建空白占位图，避免后续报错
+        if self.original_image is not None:
+            self.display_image = cv2.resize(self.original_image,
+                                           (display_width, display_height))
+        else:
+            self.display_image = np.zeros((display_height, display_width, 3), dtype=np.uint8)
         self.working_image = self.display_image.copy()
 
         # ---------- 坐标容器 ----------
@@ -115,8 +125,8 @@ class PerspectiveCalibrator:
         self.output_resolution = output_resolution  # "720p", "1080p", "original"
 
         # ---------- 配置文件 ----------
-        self.image_path = Path(image_path)
-        # 固定将配置文件放在本模块所在的 CameraUtils 目录
+        # 当 image_path 为 None 时，使用空路径（后续依赖 image_path 的地方已做保护）
+        self.image_path = Path(image_path) if image_path is not None else Path("memory_buffer")
         self._config_dir = Path(__file__).resolve().parent
         self.config_path = self._config_dir / "fixed_corners.json"
 
@@ -125,10 +135,7 @@ class PerspectiveCalibrator:
         self.corners = None               # 初始化 corners 属性
         self.perspective_matrix = None    # 计算好的透视矩阵（热更新直接使用）
         # ---------- Canny边缘显示标志 ----------
-        self.show_canny = False  # 控制是否显示Canny边缘
-        # ---------- 启动配置文件监听 ----------
-        # self.watcher = self.ConfigFileWatcher(self, self.config_path)
-        # self.watcher.start()
+        self.show_canny = False
 
     def _on_config_modified(self, path_str):
         """文件被外部修改后，仅在本实例内部重新加载角点/矩阵。"""

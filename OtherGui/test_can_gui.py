@@ -772,43 +772,36 @@ class CANFDGUI:
 
     def _apply_perspective_auto(self, frame_rgb):
         """
-        透视变换实现。
+        透视变换实现（零磁盘 IO 优化版）。
         - 直接把当前帧（RGB ndarray）传给 ``PerspectiveCalibrator.run_auto``；
-        - 为满足 `PerspectiveCalibrator` 必须的 ``image_path`` 参数，临时创建一个
-          *空* PNG 文件并立即删除，只用作占位；
+        - 不再创建临时文件，完全在内存中处理；
         - 返回 ``PIL.Image``，若校正失败则返回原始帧对应的 Image。
         """
-        import tempfile, os
-        self._cleanup_temp_files("tmp_cam_")  # 先清理可能残留的旧文件
-        # ① 创建占位文件（仅为构造 PerspectiveCalibrator 所需的路径）
-        tmp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-        tmp_path = tmp_file.name
-        tmp_file.close()
-        # 把当前帧写成 BGR PNG（OpenCV 读取时需要 BGR）
-        cv2.imwrite(tmp_path, cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR))
-
         try:
-            # ② 实例化校准器（使用占位路径），立刻走自动模式
+            # 直接传入 image_path=None，避免任何磁盘读取
             calibrator = PerspectiveCalibrator(
-                image_path=tmp_path,
+                image_path=None,                   # 不再创建临时文件
                 display_width=640,
                 display_height=360,
-                output_resolution="720p"          # 与主界面保持一致，可自行修改
+                output_resolution="720p"
             )
-            # ③ 只传入图像数据（RGB），不再依赖磁盘读取
+            # 通过 image_data 参数直接传入 numpy 数组，彻底避免磁盘 IO
             warped_bgr = calibrator.run_auto(
-                enable_watch=False,                # 不需要热更新监听
-                save_output=False,                 # 不保存输出文件
-                image_data=frame_rgb               
+                enable_watch=False,
+                save_output=False,
+                image_data=frame_rgb               # 直接使用内存数据
             )
-            # ④ 若得到结果，转回 RGB 并返回 Pillow Image；否则返回原图
+            # 若得到结果，转回 RGB 并返回 Pillow Image；否则返回原图
             if warped_bgr is not None:
                 warped_rgb = cv2.cvtColor(warped_bgr, cv2.COLOR_BGR2RGB)
                 return Image.fromarray(warped_rgb)
             else:
                 return Image.fromarray(frame_rgb)
-        finally:
-            self._cleanup_temp_files("tmp_cam_")  # 清理临时占位文件
+        except Exception as e:
+            # 增加异常保护，防止透视变换失败导致 GUI 线程崩溃
+            print(f"[ERROR] 透视变换处理失败: {e}")
+            return Image.fromarray(frame_rgb)
+
 
     # --------------------- 图像变换相关功能 ---------------------
     def _check_and_save_error_image(self, pil_img, timestamp=None):
