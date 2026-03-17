@@ -33,7 +33,7 @@ class ImageEnhancer:
         self.enable_fast_retinex   = True            # True → Fast‑Retinex；False → 直接使用原始 Y（仅压暗部）
         self.enable_sharpen       = False            # 是否在亮度增强后执行锐化
         self.enable_binary        = True             # 是否对最终亮度图做二值化
-        self.enable_otsu          = False            # True → Otsu，False → 固定阈值
+        self.enable_otsu          = True            # True → Otsu，False → 固定阈值
         self.enable_small_noise_remove = True       # 是否启用小面积噪声去除（新增开关）
 
         # ---------- Fast‑Retinex ----------
@@ -350,12 +350,30 @@ class ImageEnhancer:
         sharpened = cv2.addWeighted(gray, 1.0, high_freq, amount, 0)
         return sharpened
 
-    # ------------------- Otsu 二值化 ------------------- #
+    # ------------------- Otsu 二值化（带阈值调节） ------------------- #
     def _otsu_binary(self, gray: np.ndarray) -> np.ndarray:
         """
-        使用 Otsu 方法自动计算阈值进行二值化
+        使用 Otsu 方法自动计算阈值并根据业务规则进行二值化。
+        规则：
+            - 若 Otsu 计算得到的阈值 > thr，直接使用该阈值；
+            - 否则使用 (otsu_thresh + thr) / 2 作为阈值（四舍五入到最近整数）。
         """
-        _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # 1️⃣ 先使用 OpenCV 计算 Otsu 原始阈值
+        otsu_thresh, _ = cv2.threshold(
+            gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+        )
+        # print(otsu_thresh)
+
+        # 2️⃣ 根据阈值大小决定最终使用的阈值
+        thr = 100  # 预设阈值
+        if otsu_thresh > thr:
+            final_thresh = int(otsu_thresh)
+        else:
+            # (otsu + thr) / 2，四舍五入后转为 int
+            final_thresh = int(round((otsu_thresh + thr) / 2))
+
+        # 3️⃣ 用计算得到的阈值再次二值化并返回
+        _, binary = cv2.threshold(gray, final_thresh, 255, cv2.THRESH_BINARY)
         return binary
 
     # ------------------- 固定阈值二值化 ------------------- #
@@ -605,7 +623,7 @@ if __name__ == "__main__":
 
     # 调用接口（路径输入，保存输出）
     result_image = enhancer.process(
-        image_input="Resources/Captured/14.png",
+        image_input="Resources/Captured/41.png",
         save_output=True
     )
 
