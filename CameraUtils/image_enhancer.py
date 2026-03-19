@@ -208,7 +208,7 @@ class ImageEnhancer:
             thresholds.append(int(median_val))
 
             # 达到停止阈值则退出
-            if median_val > stop_median:
+            if median_val >=  stop_median:
                 break
 
             # 把已经“小于等于 median_val”的计数归零，以便下一轮只统计更大的像素
@@ -369,8 +369,8 @@ class ImageEnhancer:
         if otsu_thresh > thr:
             final_thresh = int(otsu_thresh)
         else:
-            # (otsu + thr) / 2，四舍五入后转为 int
-            final_thresh = int(round((otsu_thresh + thr) / 2))
+            # (3*otsu + thr) / 4，四舍五入后转为 int
+            final_thresh = int(round((3 * otsu_thresh + thr) / 4))
 
         # 3️⃣ 用计算得到的阈值再次二值化并返回
         _, binary = cv2.threshold(gray, final_thresh, 255, cv2.THRESH_BINARY)
@@ -623,7 +623,7 @@ if __name__ == "__main__":
 
     # 调用接口（路径输入，保存输出）
     result_image = enhancer.process(
-        image_input="Resources/Captured/41.png",
+        image_input="Resources/Captured/84.png",
         save_output=True
     )
 
