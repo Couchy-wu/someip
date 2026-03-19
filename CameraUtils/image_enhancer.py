@@ -207,6 +207,11 @@ class ImageEnhancer:
             median_val = 255 - idx
             thresholds.append(int(median_val))
 
+            # 第一次迭代阈值 < 10 → 直接返回，后续不做压暗
+            if iter_cnt == 0 and median_val < 10:
+                # print("\n[AdaptiveMedian] 第一次迭代阈值 < 10，后续低亮度压缩将被跳过。")
+                return thresholds, -1
+
             # 达到停止阈值则退出
             if median_val > stop_median:
                 break
@@ -264,7 +269,7 @@ class ImageEnhancer:
                 if abs(A - C) > 25:                        # 判断 A 与 C 差距
                     best_iter = jump_index - 1             # 直接选 C 所在的迭代（n‑1）
                     return thresholds, best_iter
-            # 若没有 C 或 C 与 A 差距 ≤50，则继续执行原有的跳变后处理逻辑
+            # 若没有 C 或 C 与 A 差距 ≤25，则继续执行原有的跳变后处理逻辑
         else:
             # 没有任何突变，直接使用原始的 fallback 结果
             return thresholds, original_best_iter
@@ -369,8 +374,10 @@ class ImageEnhancer:
         if otsu_thresh > thr:
             final_thresh = int(otsu_thresh)
         else:
-            # (otsu + thr) / 2，四舍五入后转为 int
-            final_thresh = int(round((otsu_thresh + thr) / 2))
+            # (3*otsu + thr) / 4，四舍五入后转为 int
+            final_thresh = int(round((3 * otsu_thresh + thr) / 4))
+
+        # print(final_thresh)
 
         # 3️⃣ 用计算得到的阈值再次二值化并返回
         _, binary = cv2.threshold(gray, final_thresh, 255, cv2.THRESH_BINARY)
@@ -529,27 +536,35 @@ class ImageEnhancer:
                                                 self._adaptive_median_threshold,
                                                 Y_tmp)
 
-        # 确保阈值在 uint8 合法范围 [0,255]，并在极端全黑情况下提供安全默认值
-        if not thresholds:                              # 没有得到阈值 ⇒ 可能是全黑图像
-            best_thr = 0
+        # 如果 best_iter 为 -1，表示第一次阈值 < 10，需要跳过压暗步骤
+        if best_iter == -1:
+            skip_low_compress = True
         else:
-            best_thr = thresholds[best_iter - 1]        # 原有阈值
-            best_thr = int(np.clip(best_thr, 0, 255))   # 防止出现 -1 或 >255
-                    
-        Y_tmp = self._maybe_time("compress_low_levels",
-                                self._compress_low_levels,
-                                Y_tmp,
-                                best_thr)
-        # -------------------------------------------------
-        # 4️⃣ 亮度增强（Fast‑Retinex）——可选
-        # -------------------------------------------------
+            skip_low_compress = False
+
+        if not skip_low_compress:
+            # 仍然走原来的阈值/压暗流程
+            # 确保 best_iter 合法（至少为 1）
+            if not thresholds:                             # 全黑图像的极端情况
+                best_thr = 0
+            else:
+                best_thr = thresholds[best_iter - 1]       # 这里 safe，因为 best_iter ≥ 1
+                best_thr = int(np.clip(best_thr, 0, 255))
+            Y_tmp = self._maybe_time(
+                "compress_low_levels",
+                self._compress_low_levels,
+                Y_tmp,
+                best_thr
+            )
+        # 若 skip_low_compress 为 True，则直接跳过上面的块，继续后续处理
+
+        # ------------------- 亮度增强（Fast‑Retinex） -------------------
         if self.enable_fast_retinex:
             Y_tmp = self._maybe_time("fast_retinex",
-                                    self._fast_retinex_fast,
-                                    Y_tmp)
-        # -------------------------------------------------
-        # 5️⃣ 锐化（可选）
-        # -------------------------------------------------
+                                     self._fast_retinex_fast,
+                                     Y_tmp)
+
+        # ------------------- 锐化 -------------------
         if self.enable_sharpen:
             Y_tmp = self._maybe_time("sharpen",
                                     self._sharpen_unsharp_mask,
@@ -623,7 +638,7 @@ if __name__ == "__main__":
 
     # 调用接口（路径输入，保存输出）
     result_image = enhancer.process(
-        image_input="Resources/Captured/41.png",
+        image_input="Resources/Captured/90.png",
         save_output=True
     )
 
