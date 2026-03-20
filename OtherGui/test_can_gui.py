@@ -176,7 +176,7 @@ class CANFDGUI:
         ttk.Combobox(
             root,
             textvariable=self.transform_option_var,
-            values=["变换A", "变换B", "变换C"],
+            values=["变换A", "变换B", "变换C", "变换D"],
             state="readonly",
             width=12,
             font=("微软雅黑", 10)
@@ -711,9 +711,10 @@ class CANFDGUI:
     def _apply_transform(self, frame_rgb, timestamp=None):
         """
         根据下拉框当前选项返回不同的处理结果。
-        - 变换A → 透视自动校正（原来的变换C）；
+        - 变换A → 透视自动校正；
         - 变换B → 灰度化（保持 3 通道）；
-        - 变换C → 先透视校正（变换A），再进行图像增强（原来的变换A）。
+        - 变换C → 先透视校正（变换A），再进行图像增强；
+        - 变换D → 暂时与变换C 完全相同的实现。
         
         注意：
         * 这里的 ``frame_rgb`` 实际上是 **BGR**（CameraViewer 直接返回的 OpenCV 帧），
@@ -764,6 +765,16 @@ class CANFDGUI:
             enhanced_bgr = self._enhancer.process(corrected_bgr, save_output=False)
             enhanced_rgb = cv2.cvtColor(enhanced_bgr, cv2.COLOR_BGR2RGB)
             return Image.fromarray(enhanced_rgb)       # 返回 Pillow Image (RGB)
+
+        elif option == "变换D":
+            # ---------- 变换D 实现----------
+            corrected_img = self._apply_perspective_auto(frame_rgb)   # 透视校正
+            import numpy as np                                       # 局部导入
+            corrected_rgb = np.array(corrected_img)                   # RGB ndarray
+            corrected_bgr = cv2.cvtColor(corrected_rgb, cv2.COLOR_RGB2BGR)
+            enhanced_bgr = self._enhancer.process(corrected_bgr, save_output=False)
+            enhanced_rgb = cv2.cvtColor(enhanced_bgr, cv2.COLOR_BGR2RGB)
+            return Image.fromarray(enhanced_rgb)                     # 与变换C返回同样的 Pillow Image
 
         else:
             # 兜底：直接返回原始帧（BGR → RGB 再转 Pillow）
