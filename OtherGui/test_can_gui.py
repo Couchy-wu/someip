@@ -975,7 +975,7 @@ class CANFDGUI:
                 cropped = img_arr[y1:y2, x1:x2]
 
                 # 阈值：仅图片→thr 参数，否则固定 40
-                thr = 70 if is_only_image else 40
+                thr = 80 if is_only_image else 40
                 try:
                     same = compare_with_precomputed_hash(
                         cropped,
@@ -990,22 +990,22 @@ class CANFDGUI:
 
             # --------- 保存未通过的图像 ----------
             if mismatched:
-                # 项目根目录 → output/nosuccess
+                # 项目根目录 → output/nosuccess/<测试用例名称>
                 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-                nosuccess_dir = os.path.join(project_root, "output", "nosuccess")
-                os.makedirs(nosuccess_dir, exist_ok=True)
-
+                # 基础 nosuccess 目录
+                nosuccess_base = os.path.join(project_root, "output", "nosuccess")
+                # 为当前 case_id（即测试用例名称）创建子文件夹
+                case_dir = os.path.join(nosuccess_base, str(case_id))
+                os.makedirs(case_dir, exist_ok=True)
                 # 使用已有的时间戳函数生成文件名（毫秒级）
                 timestamp_fname = self._ts_to_fname(time.time())
                 filename = f"{case_id}_{timestamp_fname}.png"
-                save_path = os.path.join(nosuccess_dir, filename)
-
+                save_path = os.path.join(case_dir, filename)
                 try:
                     img.save(save_path, format="PNG")
                     print(f"[INFO] 图标校验未通过，已保存至 {save_path}")
                 except Exception as e:
                     print(f"[WARN] 保存未通过校验的图像失败: {e}")
-
             # 结束本轮处理
             self._verification_queue.task_done()
 

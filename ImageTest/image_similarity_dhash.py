@@ -151,7 +151,7 @@ def compare_with_precomputed_hash(
 
     # 检查哈希值是否为0
     if cur_hash == 0:
-        print("疑似无UI, 图像哈希值为0")
+        # print("疑似无UI, 图像哈希值为0")
         #  直接返回不一致
         return False
 
