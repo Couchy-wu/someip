@@ -7,6 +7,7 @@ import can_control
 import mylog
 import logging
 import threading
+import json
 
 # 模块功能：基于日志文件驱动的 CAN 总线自动化测试用例执行器
 
@@ -158,6 +159,20 @@ class LogParser:
                         break
 
                     case_id = case['id']
+
+                    mylog.info(LOGGER_NAME, "=============================================")
+
+                    # 读取对应的 JSON 配置（可能为空）
+                    cfg = self._load_case_config(case_id)
+                    # 清理/重新保存当前用例的缓存
+                    self.current_case_config = cfg if cfg else {}
+                    if cfg:
+                        mylog.info(LOGGER_NAME,
+                                   f"已加载 JSON 配置: 用例 '{case_id}' 对应的图标信息 ({len(cfg)} 条)")
+                    else:
+                        mylog.info(LOGGER_NAME,
+                                   f"未找到用例 '{case_id}' 的 JSON 配置，继续按原逻辑执行用例。")
+
                     # 进入“未启用”前先设状态
                     if not self.has_script_result(case['content']):
                         self._set_state("等待")
@@ -165,7 +180,6 @@ class LogParser:
                         print("不存在脚本解析结果，跳过该用例", flush=True)
                         continue
 
-                    mylog.info(LOGGER_NAME, "=============================================")
                     mylog.info(LOGGER_NAME, f"开始处理用例: {case_id}")
                     print(f"✅ 开始处理用例: {case_id}", flush=True)
 
@@ -788,6 +802,46 @@ class LogParser:
                 mylog.error(LOGGER_NAME,
                             f"状态回调异常: {e}")
 
+    # 读取 ImageData.json 配置的辅助函数
+    def _load_case_config(self, case_id: str) -> dict:
+        """
+        读取与当前日志同目录、同前缀的 *_ImageData.json*，
+        并返回键为 ``case_id`` 的子字典。
+
+        - 若找不到 JSON 文件 → 返回空 dict 并记录 warning；
+        - 若 JSON 中不存在 ``case_id`` → 返回空 dict 并记录 info；
+        - 只在成功得到非空字典时才在后续流程中使用。
+
+        Returns
+        -------
+        dict
+            对应用例的配置信息（可能为空）。
+        """
+        # 1️⃣ 计算 JSON 文件完整路径
+        log_dir   = os.path.dirname(self.log_path)                         # 日志所在目录
+        log_stem  = os.path.splitext(os.path.basename(self.log_path))[0]   # 如 xx_data
+        json_name = log_stem.replace("_data", "_ImageData") + ".json"      # xx_ImageData.json
+        json_path = os.path.join(log_dir, json_name)
+
+        # 2️⃣ 文件不存在 → 直接返回空 dict
+        if not os.path.isfile(json_path):
+            mylog.warning(LOGGER_NAME,
+                         f"对应的 JSON 配置文件未找到: {json_path}")
+            return {}
+
+        # 3️⃣ 读取 JSON 并返回对应键的子字典
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                full_cfg = json.load(f)
+            case_cfg = full_cfg.get(case_id, {})
+            if not case_cfg:
+                mylog.info(LOGGER_NAME,
+                           f"JSON 中未找到键 '{case_id}'，返回空配置")
+            return case_cfg
+        except Exception as e:
+            mylog.error(LOGGER_NAME,
+                        f"读取 JSON 配置文件出错 ({json_path}): {e}")
+            return {}
 
 
 # ==================== 使用示例 ====================

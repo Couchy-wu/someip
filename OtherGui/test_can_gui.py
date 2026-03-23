@@ -18,6 +18,8 @@ import numpy as np
 from CameraUtils.error_image_detection import is_error_image
 import datetime
 import json
+import queue
+from ImageTest.image_similarity_dhash import compare_with_precomputed_hash
 
 # 判断是否被 import 调用
 IS_STANDALONE = __name__ == "__main__"
@@ -40,6 +42,15 @@ class CANFDGUI:
         # ---------- 线程控制 ----------
         self._stop_camera_thread = False          # 用来在关闭窗口时让摄像头回调提前退出
         self._after_id = None                     # 用来保存 after 的 id
+
+        # ---------- 图标校验线程 ----------
+        self._verification_queue = queue.Queue()          # 用于在每帧变换后传递图像
+        self._stop_verification = threading.Event()       # 关闭 GUI 时用于停止校验线程
+        self._verification_thread = threading.Thread(    # 启动独立校验线程
+            target=self._verification_worker,
+            daemon=True,
+        )
+        self._verification_thread.start()                # GUI 一启动即启动校验线程
 
         # ---------- 、保存最近一帧原始图像 ----------
         self.latest_frame = None                  # 、用于透视校正时取帧
@@ -758,44 +769,49 @@ class CANFDGUI:
         - 变换A → 透视自动校正；
         - 变换B → 灰度化（保持 3 通道）；
         - 变换C → 先透视校正（变换A），再进行图像增强；
-        - 变换D → 暂时与变换C 完全相同的实现。
-        
+        - 变换D → 变换C + 图像分辨率拉伸。
+
         注意：
         * 这里的 ``frame_rgb`` 实际上是 **BGR**（CameraViewer 直接返回的 OpenCV 帧），
           为避免颜色通道错位，所有需要 **RGB** 的地方都会先做 BGR→RGB 转换，
           需要 **BGR** 的地方则直接使用原始数组。
         """
         option = self.transform_option_var.get()
+        # ------------------------------------------------------------------
+        # 统一获取 parser（如果还未创建则为 None），防止属性错误
+        # ------------------------------------------------------------------
+        parser = getattr(self, "parser", None)   # 只在测试已启动后才会有值
 
         if option == "变换A":
             # 先得到透视校正结果
             result_img = self._apply_perspective_auto(frame_rgb)         # 透视自动校正
-            # 在解析器存在且当前工况为 “执行响应” 时启动检查线程
-            if (hasattr(self, "parser") and self.parser
-                    and getattr(self.parser, "get_current_state", None) 
-                    and self.parser.get_current_state() == "执行响应"):
+            # 在解析器存在且当前工况为 “执行响应” 时启动检查线程（原逻辑保持）
+            if (parser and
+                getattr(parser, "get_current_state", None) and
+                parser.get_current_state() == "执行响应"):
                 threading.Thread(
                     target=self._check_and_save_error_image,
                     args=(result_img, timestamp),
                     daemon=True
                 ).start()
+            # 若已有 parser 并已读取当前用例信息，则把图像放入校验队列
+            if parser:
+                case_id = getattr(parser, "current_case_id", None)
+                case_cfg = getattr(parser, "current_case_config", [])
+                if case_id and case_cfg:
+                    self._verification_queue.put((result_img.copy(), case_id, case_cfg))
             return result_img
 
         elif option == "变换B":
-            # 根据当前工况决定是否进行灰度化
-            # 若 parser 存在且当前状态为 “执行响应”，则返回灰度图；
-            # 否则直接返回原始图像
-            if (hasattr(self, "parser") and self.parser
-                    and self.parser.get_current_state() == "执行响应"):
-                # ---------- 灰度化（保持 3 通道） ----------
-                # 直接把 RGB ndarray 转为 Pillow Image，再转为灰度
-                img = Image.fromarray(frame_rgb)
-                gray = img.convert("L")                              # 单通道灰度
-                gray_rgb = Image.merge("RGB", (gray, gray, gray))    # 复原 3 通道
-                return gray_rgb
-            else:
-                # ---------- 其它工况：保持原始 RGB 图像 ----------
-                return Image.fromarray(frame_rgb)
+            # ---------- 灰度化（保持 3 通道） ----------
+            img = Image.fromarray(frame_rgb)
+            # 放入校验队列
+            if parser:
+                case_id = getattr(parser, "current_case_id", None)
+                case_cfg = getattr(parser, "current_case_config", [])
+                if case_id and case_cfg:
+                    self._verification_queue.put((img.copy(), case_id, case_cfg))
+            return img
 
         elif option == "变换C":                         # 先透视校正 → 再图像增强
             # 1️⃣ 透视校正（使用已有的自动函数），得到 Pillow Image (RGB)
@@ -808,12 +824,18 @@ class CANFDGUI:
             # 4️⃣ 进行图像增强（返回 BGR），再转回 RGB 供 Pillow 使用
             enhanced_bgr = self._enhancer.process(corrected_bgr, save_output=False)
             enhanced_rgb = cv2.cvtColor(enhanced_bgr, cv2.COLOR_BGR2RGB)
-            return Image.fromarray(enhanced_rgb)       # 返回 Pillow Image (RGB)
+            final_img = Image.fromarray(enhanced_rgb)       # 返回 Pillow Image (RGB)
+            # 放入校验队列
+            if parser:
+                case_id = getattr(parser, "current_case_id", None)
+                case_cfg = getattr(parser, "current_case_config", [])
+                if case_id and case_cfg:
+                    self._verification_queue.put((final_img.copy(), case_id, case_cfg))
+            return final_img
 
         elif option == "变换D":
             # 前置处理
             corrected_img = self._apply_perspective_auto(frame_rgb)   # 透视校正，返回 Pillow Image
-
             # 根据当前平台分辨率进行尺寸调整（拉伸/压缩）
             if getattr(self, "selected_resolution", None):
                 target_w = self.selected_resolution.get("width")
@@ -821,19 +843,32 @@ class CANFDGUI:
                 if target_w and target_h:
                     # 使用高质量的 Lanczos 插值
                     corrected_img = corrected_img.resize((target_w, target_h), Image.LANCZOS)
-
             # 以下保持变换C的增强流程
             import numpy as np
             corrected_rgb = np.array(corrected_img)                  # Pillow → RGB ndarray
             corrected_bgr = cv2.cvtColor(corrected_rgb, cv2.COLOR_RGB2BGR)
             enhanced_bgr = self._enhancer.process(corrected_bgr, save_output=False)
             enhanced_rgb = cv2.cvtColor(enhanced_bgr, cv2.COLOR_BGR2RGB)
-            return Image.fromarray(enhanced_rgb)                    # 与变换C返回相同的 Pillow Image
+            final_img = Image.fromarray(enhanced_rgb)                # 与变换C返回相同的 Pillow Image
+            # 放入校验队列
+            if parser:
+                case_id = getattr(parser, "current_case_id", None)
+                case_cfg = getattr(parser, "current_case_config", [])
+                if case_id and case_cfg:
+                    self._verification_queue.put((final_img.copy(), case_id, case_cfg))
+            return final_img
 
         else:
             # 兜底：直接返回原始帧（BGR → RGB → Pillow）
             rgb = cv2.cvtColor(frame_rgb, cv2.COLOR_BGR2RGB)
-            return Image.fromarray(rgb)
+            result = Image.fromarray(rgb)
+            # 放入校验队列
+            if parser:
+                case_id = getattr(parser, "current_case_id", None)
+                case_cfg = getattr(parser, "current_case_config", [])
+                if case_id and case_cfg:
+                    self._verification_queue.put((result.copy(), case_id, case_cfg))
+            return result
 
     def _apply_perspective_auto(self, frame_rgb):
         """
@@ -895,6 +930,85 @@ class CANFDGUI:
                 print(f"[INFO] 异常图像已保存 → {save_path}")
         except Exception as e:
             print(f"[WARN] 检查/保存异常图像时出错: {e}")
+
+    # 图标校验工作线程
+    def _verification_worker(self):
+        """
+        持续从 ``self._verification_queue`` 取图像并在满足以下条件时进行图标校验：
+            1.变换已开启（self.transform_enable_var == 1）
+            2.解析器存在且当前工况为 “执行响应”
+        若校验 **不通过**，把整张图像保存到 ``output/nosuccess`` 目录，文件名使用时间戳。
+        """
+        while not self._stop_verification.is_set():
+            try:
+                # 超时 0.2 s 让线程能够及时响应 termination 信号
+                img, case_id, icon_list = self._verification_queue.get(timeout=0.2)
+            except queue.Empty:
+                continue
+
+            # 条件检查
+            if self.transform_enable_var.get() != 1:
+                self._verification_queue.task_done()
+                continue
+            if not (hasattr(self, "parser") and self.parser):
+                self._verification_queue.task_done()
+                continue
+            if self.parser.get_current_state() != "执行响应":
+                self._verification_queue.task_done()
+                continue
+
+            # --------- 开始图标效验 ----------
+            mismatched = []
+            img_arr = np.array(img)                     # 转为 ndarray 供比较函数使用
+            for icon in icon_list:
+                name = icon["name"]
+                top_left = icon["top_left"]
+                bottom_right = icon["bottom_right"]
+                expected_hash = icon["ui_hash"]
+                is_only_image = icon["is_only_image"]
+
+                # 坐标 (x, y) → (y, x)
+                y1, x1 = top_left[1], top_left[0]
+                y2, x2 = bottom_right[1], bottom_right[0]
+                if y1 >= y2 or x1 >= x2:
+                    continue
+                cropped = img_arr[y1:y2, x1:x2]
+
+                # 阈值：仅图片→thr 参数，否则固定 40
+                thr = 70 if is_only_image else 40
+                try:
+                    same = compare_with_precomputed_hash(
+                        cropped,
+                        precomputed_hash=expected_hash,
+                        thr=thr,
+                    )
+                except Exception:
+                    same = False
+
+                if not same:
+                    mismatched.append(name)
+
+            # --------- 保存未通过的图像 ----------
+            if mismatched:
+                # 项目根目录 → output/nosuccess
+                project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+                nosuccess_dir = os.path.join(project_root, "output", "nosuccess")
+                os.makedirs(nosuccess_dir, exist_ok=True)
+
+                # 使用已有的时间戳函数生成文件名（毫秒级）
+                timestamp_fname = self._ts_to_fname(time.time())
+                filename = f"{case_id}_{timestamp_fname}.png"
+                save_path = os.path.join(nosuccess_dir, filename)
+
+                try:
+                    img.save(save_path, format="PNG")
+                    print(f"[INFO] 图标校验未通过，已保存至 {save_path}")
+                except Exception as e:
+                    print(f"[WARN] 保存未通过校验的图像失败: {e}")
+
+            # 结束本轮处理
+            self._verification_queue.task_done()
+
 
     # --------------------- CAN设备初始化 ---------------------
     def start_init(self):
@@ -1227,6 +1341,11 @@ class CANFDGUI:
 
         # 让摄像头线程自行退出，标记回调函数不再处理新帧
         self._stop_camera_thread = True
+
+        # 停止图标校验线程
+        self._stop_verification.set()
+        if self._verification_thread and self._verification_thread.is_alive():
+            self._verification_thread.join(timeout=2)
 
         # 取消所有待处理的 after 调用（使用循环清理）
         for attr in ['_after_id', '_after_id2']:
