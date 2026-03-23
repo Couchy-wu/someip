@@ -17,6 +17,7 @@ import tempfile, glob
 import numpy as np
 from CameraUtils.error_image_detection import is_error_image
 import datetime
+import json
 
 # 判断是否被 import 调用
 IS_STANDALONE = __name__ == "__main__"
@@ -56,6 +57,17 @@ class CANFDGUI:
         # 在 GUI 中创建一次 ImageEnhancer 实例，以便在 “变换” 中复用
         from CameraUtils.image_enhancer import ImageEnhancer
         self._enhancer = ImageEnhancer(enable_timing=False)    
+
+        # 读取平台分辨率 JSON
+        self.platform_resolutions = self._load_platform_resolutions()
+        if self.platform_resolutions:
+            first_platform = list(self.platform_resolutions.keys())[0]
+            self.platform_var = tk.StringVar(value=first_platform)               # 当前平台
+            self.selected_resolution = self.platform_resolutions[first_platform] # 当前分辨率 dict
+        else:
+            self.platform_var = tk.StringVar(value="")
+            self.selected_resolution = None
+
         # GUI显示帧率控制
         self._gui_frame_interval = 0.1          # 0.2 = 200ms间隔 = 5 fps 
         self._last_gui_update_time = 0          # 上次GUI更新时间戳
@@ -160,6 +172,20 @@ class CANFDGUI:
         self.exposure_cb.grid(row=1, column=4, sticky='w', padx=5, pady=5)
         # 绑定选择事件，实时更新摄像头曝光
         self.exposure_cb.bind("<<ComboboxSelected>>", self._on_exposure_change)
+
+        # 平台选择下拉框（单选）
+        ttk.Label(root, text="平台:", font=("微软雅黑", 10)).grid(
+            row=1, column=5, sticky='w', padx=5, pady=5)
+        self.platform_cb = ttk.Combobox(
+            root,
+            textvariable=self.platform_var,
+            values=list(self.platform_resolutions.keys()),
+            state="readonly",
+            width=8,
+            font=("微软雅黑", 10)
+        )
+        self.platform_cb.grid(row=1, column=6, sticky='w', padx=5, pady=5)
+        self.platform_cb.bind("<<ComboboxSelected>>", self._on_platform_change)
 
         # ---------- 变换控制 ----------
         # 勾选框：是否启用变换
@@ -429,7 +455,7 @@ class CANFDGUI:
             else:
                 self._last_transform_c_image = None
 
-            # GUI显示帧率控制（仅显示部分限制为10fps，但保持30fps处理）
+            # GUI显示帧率控制（仅显示部分限制fps，但保持30fps处理）
             current_time = time.time()
             if current_time - self._last_gui_update_time < self._gui_frame_interval:
                 return  # 跳过GUI更新，但保持30fps处理
@@ -707,6 +733,24 @@ class CANFDGUI:
         # %f 给出微秒，取前 3 位即毫秒
         return dt.strftime("%Y%m%d_%H%M%S_%f")[:-3]
 
+    def _load_platform_resolutions(self):
+        """读取平台分辨率的辅助函数: 从 platfoem_resolution.json 加载平台→分辨率映射。"""
+        import json, os
+        json_path = os.path.join(os.path.dirname(__file__), "platfoem_resolution.json")
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data
+        except Exception as e:
+            print(f"[WARN] 加载平台分辨率文件失败: {e}")
+            return {}
+
+    def _on_platform_change(self, event=None):
+        """平台切换回调（更新当前分辨率）: 当用户在平台下拉框中选择新平台时更新分辨率信息。"""
+        platform = self.platform_var.get()
+        self.selected_resolution = self.platform_resolutions.get(platform)
+        # print(f"[INFO] 选择平台: {platform}, 分辨率: {self.selected_resolution}")
+
     # --------------------- 图像变换相关功能 ---------------------
     def _apply_transform(self, frame_rgb, timestamp=None):
         """
@@ -767,17 +811,27 @@ class CANFDGUI:
             return Image.fromarray(enhanced_rgb)       # 返回 Pillow Image (RGB)
 
         elif option == "变换D":
-            # ---------- 变换D 实现----------
-            corrected_img = self._apply_perspective_auto(frame_rgb)   # 透视校正
-            import numpy as np                                       # 局部导入
-            corrected_rgb = np.array(corrected_img)                   # RGB ndarray
+            # 前置处理
+            corrected_img = self._apply_perspective_auto(frame_rgb)   # 透视校正，返回 Pillow Image
+
+            # 根据当前平台分辨率进行尺寸调整（拉伸/压缩）
+            if getattr(self, "selected_resolution", None):
+                target_w = self.selected_resolution.get("width")
+                target_h = self.selected_resolution.get("height")
+                if target_w and target_h:
+                    # 使用高质量的 Lanczos 插值
+                    corrected_img = corrected_img.resize((target_w, target_h), Image.LANCZOS)
+
+            # 以下保持变换C的增强流程
+            import numpy as np
+            corrected_rgb = np.array(corrected_img)                  # Pillow → RGB ndarray
             corrected_bgr = cv2.cvtColor(corrected_rgb, cv2.COLOR_RGB2BGR)
             enhanced_bgr = self._enhancer.process(corrected_bgr, save_output=False)
             enhanced_rgb = cv2.cvtColor(enhanced_bgr, cv2.COLOR_BGR2RGB)
-            return Image.fromarray(enhanced_rgb)                     # 与变换C返回同样的 Pillow Image
+            return Image.fromarray(enhanced_rgb)                    # 与变换C返回相同的 Pillow Image
 
         else:
-            # 兜底：直接返回原始帧（BGR → RGB 再转 Pillow）
+            # 兜底：直接返回原始帧（BGR → RGB → Pillow）
             rgb = cv2.cvtColor(frame_rgb, cv2.COLOR_BGR2RGB)
             return Image.fromarray(rgb)
 
