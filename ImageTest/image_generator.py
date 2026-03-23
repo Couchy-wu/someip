@@ -964,6 +964,13 @@ class ImageGeneratorApp:
                     data = self.config_data[filename]
                     # ----------------- 读取图标的 class_name -----------------
                     class_name = data.get("class_name", "")
+                    # is_only_image 判断(是：纯图像，否：图文)
+                    if class_name.startswith("Icon_"):
+                        is_only_image = True
+                    elif class_name.startswith("Text_Icon_"):
+                        is_only_image = False
+                    else:
+                        is_only_image = True
                     # ----------------- 计算坐标 -----------------
                     if state == "main" or state == "enabled":
                         pos_x = data["left"]
@@ -996,6 +1003,7 @@ class ImageGeneratorApp:
                     item = {
                         "name": data.get("name", ""),
                         "class_name": class_name,
+                        "is_only_image": is_only_image,
                         "ui_hash": data.get("hash"),
                         "top_left": [pos_x, pos_y],
                         "bottom_right": [pos_x + width, pos_y + height]
