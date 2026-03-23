@@ -10,15 +10,6 @@ import sys, traceback, threading, time, platform, datetime, random
 from dataclasses import dataclass
 import queue
 
-# 帮助函数
-def _fmt_ts(ts: float) -> str:
-    """
-    把 Unix epoch 秒统一格式化为 “YYYY‑MM‑DD HH:MM:SS.mmm”
-    （毫秒精度），用于日志打印。
-    """
-    dt = datetime.datetime.fromtimestamp(ts)
-    return dt.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-
 # ----------------------------------------------------------------------
 # 数据结构
 # ----------------------------------------------------------------------
@@ -26,9 +17,9 @@ def _fmt_ts(ts: float) -> str:
 class TimedFrame:
     """包含图像数据及捕获时间戳的容器。"""
     img: np.ndarray          # BGR 图像（原始分辨率）
-    timestamp: float         # Unix epoch 秒（float，精度 µs）
-    cam_index: int = -1
-    exposure: float = None
+    timestamp: float         # 该帧的捕获时间戳，Unix epoch 秒（float，精度 µs）
+    cam_index: int = -1      # 打开的摄像头索引
+    exposure: float = None   # 曝光值
 
 # ----------------------------------------------------------------------
 # 1️⃣ 摄像头打开 & 参数设置
@@ -98,9 +89,11 @@ def resize_with_aspect_ratio(frame, target_width, target_height, interpolation=c
     return result
 
 def rotate_image_180(frame: np.ndarray) -> np.ndarray:
+    """将图像旋转 180 度。"""
     return cv2.rotate(frame, cv2.ROTATE_180)
 
 def draw_centered_text(img, text, color=(0, 255, 0), font=cv2.FONT_HERSHEY_SIMPLEX, scale=0.8, thickness=2):
+    """在图像中心绘制居中文本"""
     (w, h), _ = cv2.getTextSize(text, font, scale, thickness)
     H, W = img.shape[:2]
     x = (W - w) // 2
@@ -108,6 +101,7 @@ def draw_centered_text(img, text, color=(0, 255, 0), font=cv2.FONT_HERSHEY_SIMPL
     cv2.putText(img, text, (x, y), font, scale, color, thickness, cv2.LINE_AA)
 
 def take_screenshot(frame, save_path="Resources/Picture"):
+    """保存图像到指定路径"""
     if not os.path.exists(save_path):
         os.makedirs(save_path)
     # 使用 UUID 避免竞争条件
@@ -120,14 +114,17 @@ def take_screenshot(frame, save_path="Resources/Picture"):
         print(f"[WARN] 截图保存失败: {filepath}")
 
 def set_exposure(cap, exposure_val, verbose=True):
-    """
-    直接尝试设置曝光值，不进行任何验证或反馈。
+    """设置摄像头曝光值（Windows MSMF 后端。
+    Args:
+        cap: 已打开的 VideoCapture 对象
+        exposure_val: 曝光值(后端相关，通常为对数值，如 -4 到 -10)
+        verbose: 是否打印设置信息，默认为 True    
     """
     if not cap.isOpened():
         return False
     # 关闭自动曝光
     cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)  # Windows MSMF 手动模式
-    # 直接设置曝光值（不关心是否成功）
+    # 直接设置曝光值
     cap.set(cv2.CAP_PROP_EXPOSURE, float(exposure_val))
     if verbose:
         print(f"[INFO] 已尝试设置曝光值为 {exposure_val}")
@@ -149,11 +146,11 @@ class CameraViewer:
     def __init__(self,
                  display_callback=None,     # 回调函数 ，用于在捕获到每一帧图像后，把图像数据传递给外部处理函数
                  is_standalone=False,       # 是否是独立程序
-                 screenshot_path="Resources/Picture",
-                 exposure=-4,               # 曝光值
-                 draw_timestamp=False,      # 绘制时间戳文字
+                 screenshot_path="Resources/Picture",  # 截图保存目录
+                 exposure=-4,               # 初始曝光值
+                 draw_timestamp=False,      # 是否在图像上绘制时间戳文字
                  enable_timestamp=True,     # 启用时间戳功能
-                 simulate_error=False,      # 是否开启异常帧模拟
+                 simulate_error=False,      # 是否随机生成异常帧（全白）用于测试
                  error_probability=0.01,    # 异常帧出现概率          
                  target_fps=30              # 摄像头目标帧率     
                 ):   
@@ -165,7 +162,8 @@ class CameraViewer:
         self.enable_timestamp = enable_timestamp
         self._callback_wants_timestamp = enable_timestamp
         self.simulate_error = simulate_error          # 是否启用异常帧
-        self.error_probability = error_probability    # 触发概率 (0~1)        
+        self.error_probability = error_probability    # 触发概率 (0~1)
+        # 配置常量        
         self.CAMERA_INDICES = (0, 1)
         self.CAPTURE_TARGET_WIDTH = 1280
         self.CAPTURE_TARGET_HEIGHT = 720
@@ -175,8 +173,10 @@ class CameraViewer:
         self.OUTPUT_HEIGHT = 360
         self.TARGET_FPS = target_fps
         self.FRAME_DELAY_MS = 1
+        # 线程控制
         self._stop_event = threading.Event()
         self._thread = None
+        # 摄像头资源
         self.cap = None
         self.cam_index = None
         self.capture_w = 1280
@@ -187,6 +187,7 @@ class CameraViewer:
         self._black_frame = None
 
     def _init_camera(self):
+        """初始化摄像头硬件并设置参数"""
         self.cap, self.cam_index = try_open_camera(
             indices=self.CAMERA_INDICES,
             target_width=self.CAPTURE_TARGET_WIDTH,
@@ -200,7 +201,7 @@ class CameraViewer:
             self._black_frame = np.zeros((self.capture_h, self.capture_w, 3), dtype=np.uint8)
         else:
             print("[WARN] 使用默认分辨率 1280x720")
-        # 直接设置曝光（不验证）
+        # 设置曝光
         if self.exposure is not None and self.cap.isOpened():
             set_exposure(self.cap, self.exposure, verbose=True)
 
@@ -307,6 +308,7 @@ class CameraViewer:
             self.cap = None
 
     def start(self):
+        """启动摄像头捕获线程"""
         if self._thread and self._thread.is_alive():
             return
         self._stop_event.clear()
@@ -315,6 +317,7 @@ class CameraViewer:
         self._thread.start()
 
     def stop(self):
+        """停止捕获线程并释放摄像头资源。"""
         self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=2.0)
@@ -338,11 +341,12 @@ class CameraViewer:
                         # 从队列获取帧，超时检查线程状态
                         display_frame, original_frame = self.frame_queue.get(timeout=0.1)
                         cv2.imshow(win_name, display_frame)
-                        
+                        # 截图快捷键
                         key = cv2.waitKey(self.FRAME_DELAY_MS) & 0xFF
                         if self.is_standalone and key == ord('s'):
                             take_screenshot(original_frame, self.screenshot_path)
-                        if cv2.getWindowProperty(win_name, cv2.WND_PROP_VISIBLE) < 1 or key == 27:
+                        # 退出检测
+                        if cv2.getWindowProperty(win_name, cv2.WND_PROP_VISIBLE) < 1 or key == 27: # ESC
                             break
                     except queue.Empty:
                         continue
@@ -358,9 +362,11 @@ class CameraViewer:
 # 工具函数
 # ----------------------------------------------------------------------
 def mirror_flip(frame: np.ndarray) -> np.ndarray:
+    """对图像进行水平镜像翻转"""
     return cv2.flip(frame, 1)
 
 def draw_timestamp_on_frame(frame: np.ndarray, ts: float):
+    """在图像左下角绘制时间戳文字"""
     dt = datetime.datetime.fromtimestamp(ts)
     ts_str = dt.strftime("%H:%M:%S.%f")[:-3]
     cv2.putText(frame, ts_str, (10, frame.shape[0] - 10),
@@ -373,7 +379,7 @@ def main(display_callback=None):
     viewer = CameraViewer(
         display_callback=display_callback,
         is_standalone=True,
-        exposure=-6,  # 可调整
+        exposure=-4,  # 可调整
         draw_timestamp=True,
         enable_timestamp=True,
         simulate_error=False,      # 是否开启异常帧模拟
