@@ -48,7 +48,7 @@ def resize_with_padding(image_array: np.ndarray, target_size=(9, 8)) -> np.ndarr
     使用 PIL 进行高效缩放和填充，最后转回 ndarray
     """
     # 转为 PIL 图像以便使用 resize 和 paste
-    pil_img = Image.fromarray(image_array, mode="L")
+    pil_img = Image.fromarray(image_array)
     target_width, target_height = target_size
 
     # 计算缩放比例，保持宽高比
@@ -197,5 +197,7 @@ if __name__ == "__main__":
     print("比较完成:", result)
     
     # 新增接口函数使用示例
-    hash_val = get_image_hash(ICON_A)
-    print(f"图像 {ICON_A} 的 dHash 值: {hash_val}")
+    hash_val_A = get_image_hash(ICON_A)
+    hash_val_B = get_image_hash(ICON_B)
+    print(f"图像 {ICON_A} 的 dHash 值: {hash_val_A}")
+    print(f"图像 {ICON_B} 的 dHash 值: {hash_val_B}")
