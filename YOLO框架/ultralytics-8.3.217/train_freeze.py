@@ -8,6 +8,9 @@
 """
 
 import os, json, warnings, pathlib, torch, yaml, multiprocessing as mp, cv2
+
+from modelscope.models.cv.video_depth_estimation.utils.image_gt import flip_lr
+
 warnings.filterwarnings('ignore')
 
 # --------------------------------------------------------------
@@ -44,7 +47,7 @@ def get_args():
     parser.add_argument(
         "--weights",
         type=str,
-        default=r"yolov8m.pt",
+        default=r"best.pt",
         help="官方预训练权重路径（训练阶段使用）或任意 .pt 权重（在 --do_train=False 时使用）。"
     )
     parser.add_argument(
@@ -61,7 +64,7 @@ def get_args():
     parser.add_argument("--optimizer", type=str, default="SGD")
     parser.add_argument("--cos_lr", action="store_true", default=True)
     parser.add_argument("--patience", type=int, default=10)
-    parser.add_argument("--freeze", type=int, default=10,
+    parser.add_argument("--freeze", type=str, default="backbone",
                         help="冻结前 N 层，只微调检测头。")
     # ------------------- 推理 & 过滤（与 model.val 保持一致） -------------------
     parser.add_argument("--conf", type=float, default=0.5,
@@ -159,7 +162,9 @@ def main():
             amp=False,
             workers=args.workers,
             freeze=args.freeze,
-            verbose=True
+            verbose=True,
+            fliplr=0.0,
+            flipud=0.0
         )
         print("\n=== 微调结束 ===")
         # 加载微调后得到的 best.pt
@@ -211,34 +216,6 @@ def main():
     print("\n=== 验证指标概览 ===")
     print(val_res)
 
-    # ------------------- 将验证集每张图的框写入 JSON‑Lines（过滤后） -------------------
-    out_jsonl = save_dir / f"{args.out_prefix}val_results.jsonl"
-    with open(out_jsonl, "w", encoding="utf-8") as f_out:
-        for r in val_res.results:          # `val_res.results` 是 list[Result]（YOLO ≥ 8.2）
-            img_path = r.path
-
-            # 原始框已经经过 NMS，仍然需要再次过滤（置信度、类别、面积）
-            if r.boxes is None or r.boxes.shape[0] == 0:
-                filtered = []
-            else:
-                xywhn = r.boxes.xywhn.cpu().numpy()
-                cls   = r.boxes.cls.cpu().numpy()
-                conf  = r.boxes.conf.cpu().numpy()
-                filtered = filter_boxes(cls, conf, xywhn, args)
-
-            line = {
-                "image": str(img_path),
-                "predictions": filtered
-            }
-            f_out.write(json.dumps(line, ensure_ascii=False) + "\n")
-
-    print(f"\n✅ JSON‑Lines 已写入 → {out_jsonl}")
-
-    # ------------------- 保存整体指标文本（可选） -------------------
-    metrics_path = pathlib.Path(val_res.save_dir) / "metrics.txt"
-    with open(metrics_path, "w", encoding="utf-8") as f:
-        f.write(str(val_res))
-    print(f"✅ 整体指标已写入 → {metrics_path}")
 
 # --------------------------------------------------------------
 # 入口点（Windows 必须使用 if __name__ == '__main__'）

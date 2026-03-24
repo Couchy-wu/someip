@@ -20,15 +20,14 @@ if __name__ == '__main__':
     print('\n=== model.model (nn.Module) ===')
     model = YOLO("./yolov8m.pt")
     # 训练
-    results = model.train(
+    results = model.val(
         data='./YOLODataset/dataset.yaml',               # 数据配置
-        epochs=80,
-        batch=16,
+        batch=1,
         imgsz=640,
         lr0=0.001,
         optimizer='SGD',
         cos_lr=True,
-        patience=5,
+        patience=10,
         project='runs/detect',          # 输出根目录
         name='my_yolov8n_finetune',    # 子文件夹
         device='0'                      # GPU id，若为 CPU 可写 'cpu'
