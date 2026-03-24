@@ -947,6 +947,36 @@ class ImageGeneratorApp:
             return
         base_name = input_filename.replace("_data.json", "_ImageData.json")
         output_path = os.path.join(os.path.dirname(input_path), base_name)
+
+        # ---------- 校验图文 UI 必须有数值 ----------
+        missing_values = []   # 用于收集缺失数值的项，结构为 (image_name, icon_display_name)
+        for cfg in self.image_configs:                     # 遍历每张图像
+            img_name = cfg["name"]
+            values_dict = cfg.get("icon_values", {})
+            for filename, state in cfg["icon_states"].items():
+                if filename not in self.config_data:
+                    continue
+                data = self.config_data[filename]
+                class_name = data.get("class_name", "")
+                # 判断是否为图文 UI（非纯图片）
+                is_only_image = not class_name.startswith("Text_Icon_")
+                if not is_only_image:                     # 只在图文 UI 时检查
+                    # 若对应的 value 为空或不存在，记录错误
+                    val = values_dict.get(filename)
+                    if not val or str(val).strip() == "":
+                        missing_values.append((img_name, data.get("name", filename)))
+        if missing_values:
+            # 组装提示信息，只显示前几条以免弹窗过长
+            preview = "\n".join(
+                f'  图像 "{img}" 中的图文 UI "{icon}"' for img, icon in missing_values[:5]
+            )
+            more = f"\n... 等共 {len(missing_values)} 项缺失" if len(missing_values) > 5 else ""
+            messagebox.showwarning(
+                "数值缺失",
+                f"检测到有图文 UI 没有输入数值，请先在 GUI 中为以下项填写数值：\n{preview}{more}"
+            )
+            return                                          # 中止后续写文件
+
         # ---------- 构造 JSON ----------
         try:
             output_parts = []
@@ -1018,9 +1048,10 @@ class ImageGeneratorApp:
             # ---------- 合并并写文件 ----------
             output_content = ',\n'.join(output_parts)
             output_lines = ["{", output_content, "}"]
+            # 判断是“生成”还是“更新”
+            action = "更新" if os.path.exists(output_path) else "生成"
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write('\n'.join(output_lines))
-            action = "更新" if os.path.exists(output_path) else "生成"
             print(f"✅ 已{action}配置文件：{output_path}")
             messagebox.showinfo("成功", f"配置文件已{action}：\n{base_name}\n路径：{os.path.dirname(output_path)}")
         except Exception as e:
