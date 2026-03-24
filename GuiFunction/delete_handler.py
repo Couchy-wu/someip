@@ -53,6 +53,7 @@ def delete_test_case():
     # 构造关联文件路径
     json_file_path = os.path.join(target_folder, f"{base_name}_data.json")
     log_file_path = os.path.join(target_folder, f"{base_name}_data.log")
+    image_json_path = os.path.join(target_folder, f"{base_name}_ImageData.json") 
 
     confirm = messagebox.askyesno("确认删除", f"确定要删除 {file_name} 及其关联文件吗？")
     if not confirm:
@@ -75,6 +76,12 @@ def delete_test_case():
             os.remove(json_file_path)
             deleted_files.append(os.path.basename(json_file_path))
             print(f"已删除 JSON 文件：{json_file_path}")
+
+        # 删除 ImageData JSON 文件
+        if os.path.exists(image_json_path):
+            os.remove(image_json_path)
+            deleted_files.append(os.path.basename(image_json_path))
+            print(f"已删除 ImageData JSON 文件：{image_json_path}")
 
         # 删除 LOG 文件
         if os.path.exists(log_file_path):
