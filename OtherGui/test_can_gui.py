@@ -86,7 +86,7 @@ class CANFDGUI:
         # ---------- 第一块视频显示：右上角摄像头显示区域 ----------
         # 用一个固定大小的 Label 充当画布（640×360）
         self.video_label = tk.Label(root, bg="black")
-        self.video_label.grid(row=0, column=4, rowspan=5, padx=10, pady=5, sticky='e')
+        self.video_label.grid(row=1, column=4, rowspan=5, padx=10, pady=5, sticky='e')
         root.grid_columnconfigure(4, weight=1)
 
         # 立即显示 “Camera is not open” 的占位图（避免首次出现纯黑屏）
@@ -108,7 +108,7 @@ class CANFDGUI:
         # 视频显示
         # 先放一个黑屏占位图（同样 640×360）
         self.video_label2 = tk.Label(root, bg="black")
-        self.video_label2.grid(row=5, column=4, rowspan=5, padx=10, pady=5, sticky='e')
+        self.video_label2.grid(row=6, column=4, rowspan=5, padx=10, pady=5, sticky='e')
         no_cam_img2 = self._make_no_camera_image(text="Not activated transformation")
         self._no_cam_placeholder2 = ImageTk.PhotoImage(no_cam_img2)
         self.video_label2.configure(image=self._no_cam_placeholder2)
@@ -177,7 +177,7 @@ class CANFDGUI:
             textvariable=self.exposure_var,
             values=[0, -1, -2, -3, -4, -5, -6, -7, -8, -9],
             state="readonly",
-            width=6,
+            width=8,
             font=("微软雅黑", 10)
         )
         self.exposure_cb.grid(row=1, column=4, sticky='w', padx=5, pady=5)
@@ -186,7 +186,7 @@ class CANFDGUI:
 
         # 平台选择下拉框（单选）
         ttk.Label(root, text="平台:", font=("微软雅黑", 10)).grid(
-            row=1, column=5, sticky='w', padx=5, pady=5)
+            row=0, column=3, sticky='w', padx=5, pady=5)
         self.platform_cb = ttk.Combobox(
             root,
             textvariable=self.platform_var,
@@ -195,7 +195,7 @@ class CANFDGUI:
             width=8,
             font=("微软雅黑", 10)
         )
-        self.platform_cb.grid(row=1, column=6, sticky='w', padx=5, pady=5)
+        self.platform_cb.grid(row=0, column=4, sticky='w', padx=5, pady=5)
         self.platform_cb.bind("<<ComboboxSelected>>", self._on_platform_change)
 
         # ---------- 变换控制 ----------
@@ -358,10 +358,11 @@ class CANFDGUI:
             font=("微软雅黑", 12),
             bg="#222222",
             fg="#00FF00",
-            anchor="w"
+            anchor="w",
+            width=64,
         )
-        self.state_label.grid(row=0, column=3, sticky="ew", padx=10, pady=5)
-        #root.grid_columnconfigure(0, weight=1)
+        self.state_label.grid(row=0, column=4, padx=10, pady=5, sticky='e')
+
 
         # 输入框：用例重复测试次数
         tk.Label(root, text="用例重复测试次数:", font=("微软雅黑", 10)).grid(row=3, column=0, sticky='w', padx=12, pady=5)
@@ -1186,14 +1187,17 @@ class CANFDGUI:
             # 把 GUI 的截图方法封装为在主线程执行的回调
             self.parser.screenshot_callback = lambda: self.root.after(0, self._save_captured_image)
             
-            # 注册状态回调，使 GUI 实时显示当前工况
+            # 注册状态回调，使 GUI 实时显示当前工况 和 用例编号
             self.parser.set_state_callback(
                 lambda s: self.root.after(
                     0,
-                    lambda txt=s: self.state_label.config(text=f"当前工况: {txt}")
+                    # 读取当前 parser 的 case 编号（在没有用例时为 None）
+                    lambda txt=s, cid=getattr(self.parser, "current_case_id", None):
+                        self.state_label.config(
+                            text=self._format_state_text(txt, cid)
+                        )
                 )
             )
-
             # 直接在当前线程（后台线程）运行解析器
             self.parser.run()
             success = True  # 标记成功
@@ -1203,6 +1207,19 @@ class CANFDGUI:
             self.root.after(0, lambda msg=error_msg: messagebox.showerror("测试错误", f"自动化测试执行失败：\n{msg}"))
         finally:
             self.root.after(0, lambda: self._post_test_finish(success))
+
+    def _format_state_text(self, state: str, case_id: str) -> str:
+        """
+        根据当前工况 `state` 和正在执行的用例编号 `case_id` 生成展示文字。
+        - 当状态为 “等待” 时，只显示 “等待”；
+        - 其它状态下在前面加上用例编号，格式如 “xx1, 执行动作”。
+        """
+        if state == "等待":
+            return f"当前工况：{state}"
+        # 当 case_id 为空或为 None 时，仍只显示状态（防止首次无用例时报错）
+        prefix = f"{case_id}, " if case_id else ""
+        return f"当前工况：{prefix} {state}"
+
 
     def _post_test_finish(self, success=False):
         """测试结束后的 UI 恢复，并弹出独立提示窗口"""
