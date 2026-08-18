@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  docker-tests:
+    name: Docker 完整测试 (Ubuntu 22.04 + Python 3.10)
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 构建 vsomeip 测试镜像 (vsomeip 3.4.10 + vsomeip_py)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          tags: arhud-vsomeip-test:latest
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 解码管线回归测试 (test_pipeline.py)
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/vsomeip_example:/app:ro" \
+            -w /app \
+            arhud-vsomeip-test python3 test_pipeline.py
+
+      - name: vsomeip 真实两进程收发集成测试 (server.py + client.py)
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/vsomeip_example:/app:ro" \
+            -v "${{ github.workspace }}/docker/integration_test.sh:/tests/integration_test.sh:ro" \
+            -w /app \
+            arhud-vsomeip-test bash /tests/integration_test.sh
+
+      - name: C++ 客户端兼容性验证 (min_cli ↔ Python 服务端)
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/vsomeip_example:/app:ro" \
+            -v "${{ github.workspace }}/docker/cpp_client_test.sh:/tests/cpp_client_test.sh:ro" \
+            -v "${{ github.workspace }}/docker/min_cli.cpp:/tests/min_cli.cpp:ro" \
+            -w /app \
+            arhud-vsomeip-test bash /tests/cpp_client_test.sh

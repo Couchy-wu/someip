@@ -1,5 +1,7 @@
 # ArHud SOME/IP (vsomeip) 示例与问题分析
 
+![CI](https://github.com/Couchy-wu/someip/actions/workflows/ci.yml/badge.svg)
+
 ArHud 车道线数据 SOME/IP 通信的完整示例：**PCAP 解码 → 序列化/反序列化 → vsomeip 服务端发送事件 → 客户端订阅**，以及最初"注册超时"问题的深入分析报告。
 
 ## 目录结构
@@ -48,3 +50,5 @@ bash docker/run_tests.sh
 
 - `test_pipeline.py`：pcap 解码/序列化往返回归测试 ✅
 - Docker 集成测试：客户端 `is registered` → `ON_AVAILABLE` → `SUBSCRIBE ACK` → 收到并反序列化事件 ✅
+- C++ 客户端兼容性验证：`min_cli`（C++）连接 Python 服务端收到 `availability=true` ✅
+- GitHub Actions CI：每次 push/PR 自动构建 Docker 镜像并跑以上全部测试（`.github/workflows/ci.yml`）
