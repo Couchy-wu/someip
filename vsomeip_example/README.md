@@ -1,0 +1,92 @@
+# ArHud SOME/IP 完整示例（vsomeip_py，不绕开 vsomeip 库）
+
+一套**可直接运行**的完整示例，覆盖你要求的三件事：
+
+```
+pcap 文件 ──解码──▶ SOME/IP 事件 ──反序列化──▶ NewLaneLineDataNotify 数据对象
+                                                        │ 序列化(to_bytes)
+服务端 (server.py, vsomeip) ──app.notify()──▶ 事件 0x8003
+                                                        │ 订阅(on_event)
+客户端 (client.py, vsomeip) ◀──收到载荷── 反序列化(from_bytes)──▶ 打印结构体
+```
+
+## 文件说明
+
+| 文件 | 作用 |
+|---|---|
+| `arhud_data_types.py` | 数据结构 + 序列化/反序列化（对应 C++ `stNewLanelineDataNotify`，大端布局，可独立自测） |
+| `pcap_decoder.py` | pcap → SOME/IP 头解析 → 事件载荷 → 反序列化（含 `--dump` 排查模式） |
+| `server.py` | **标准 vsomeip 服务端**：解码 pcap → 反序列化 → 重新序列化 → `app.notify()` 发送事件 |
+| `client.py` | vsomeip 客户端：订阅事件 0x8003 → 反序列化 → 打印 |
+
+> 你项目里已经写好的客户端（C++ 或其它 vsomeip 实现）**不需要任何改动**：本示例服务端是标准 vsomeip 服务，发送的事件载荷就是 C++ 结构体的序列化字节。
+
+## 运行步骤
+
+```bash
+# 1) 依赖（vsomeip_py 与 scapy）
+pip install scapy
+# 并确保本机构建安装了 COVESA vsomeip C++ 库 + vsomeip_py（见 SOLUTION.md）
+
+# 2) 终端 A：先启动服务端（参数为 pcap 路径；缺省读当前目录 out.pcap，
+#    没有 pcap 时自动用内置示例数据，保证链路可跑通）
+python3 server.py /path/to/out.pcap
+#    预期日志：服务端就绪 -> 持续打印 [send] #N event=0x8003 payload=XXB ...
+
+# 3) 终端 B：再启动客户端
+python3 client.py
+#    预期日志：收到事件 -> 打印 HEX + 解析出的 NewLaneLineDataNotify 结构体
+```
+
+> 每次重启前先清理残留：`pkill -9 -f "server.py|client.py"` 与 `rm -f /tmp/vsomeip-*`（原因见 SOLUTION.md：包装器退出不干净会留下 socket/锁文件，导致 register timeout 循环）。
+
+## 关键对齐点（对接你现有客户端时逐一核对）
+
+| 参数 | 值 | 说明 |
+|---|---|---|
+| **构造函数第 2 参数** | **`SERVICE_ID (0x000C)`** | **vsomeip_py 的 `vSOMEIP(name, id, instance)` 中 `id` 是【服务 ID】（offer/request/on_event 都用它），不是客户端 ID！** 这是最容易踩的坑（原始报告和我们第一版都传成了客户端 ID，导致服务端 offer 了 0x1201、客户端请求 0x1003，两端永远对不上） |
+| **客户端 ID** | `applications[].id`（server=`0x1201`, client=`0x1003`） | 由配置文件 `"applications"` 段的 `"id"` 决定，与构造函数第 2 参数无关，两端可以不同 |
+| Service ID | `0x000C` | 两端必须一致 |
+| Instance ID | `0x000C` | 两端必须一致 |
+| Event ID | `0x8003` | NewLaneLineDataNotify |
+| **Event Group** | `0x01` | **必须等于你客户端 subscribe 的事件组**（若你的客户端用默认 0xFFFF，把 server.py 的 `EVENT_GROUP` 改成一致） |
+| **Routing Host** | `"arhud_server"` | **多进程场景最关键的一项**：客户端必须显式 `"routing": "arhud_server"`，否则客户端会自建路由管理器、与服务端各自为政，收不到事件。你已写好的 C++ 客户端配置里同样要有 `"routing": "arhud_server"`（或改用 vsomeipd 守护进程） |
+| 端口 | `51402` (UDP) | 服务端 `services.unreliable` 与客户端 `clients.unreliable` 一致 |
+| 载荷格式 | `NewLaneLineDataNotify.to_bytes()` | 即 C++ `stNewLanelineDataNotify` 内存布局（大端）。**若你的 C++ 结构与示例不同（字段顺序/类型/数量），改 `arhud_data_types.py` 一处即可** |
+| 服务发现 | 默认开启 | **事件组订阅要求 SD 开启**（vsomeip 限制，`SOME/IP eventgroups require SD to be enabled!`）；两端一致地开启即可 |
+
+## 兼容性提示
+
+- vsomeip_py 的 `offer_event`/`request_event` 固定使用 `ET_FIELD`（C++ 扩展里硬编码）。如果你的 C++ 客户端按 `is_field=false` 订阅，事件仍会推送（订阅基于事件组）；若出现订阅不生效，优先核对事件组与端口，必要时在你的 C++ 服务端侧保证事件类型一致。
+- 本示例客户端、服务端均在 127.0.0.1 上运行；部署到真机/多机时，把 `configuration["unicast"]` 改为各自主机 IP（并保证两端可路由）。
+
+## 排查工具
+
+```bash
+# 查看 pcap 里到底是不是标准 SOME/IP 报文（前 N 个 UDP 载荷的 HEX + 头解析）
+python3 pcap_decoder.py out.pcap --dump 5
+
+# 单独验证序列化/反序列化往返一致
+python3 arhud_data_types.py
+```
+
+## Docker 完整测试（推荐，目标环境 Ubuntu 22.04 + Python 3.10）
+
+`../docker/` 提供了完整容器化测试：容器内编译安装 **vsomeip 3.4.10 + vsomeip_py**，
+然后用**两个独立进程**跑 `server.py` / `client.py`，走真实 UDS 路由管理器注册与事件收发。
+
+```bash
+bash docker/run_tests.sh
+# 依次执行：
+#   1. 构建镜像（首次约 5-15 分钟，编译 vsomeip）
+#   2. test_pipeline.py 解码管线回归测试
+#   3. 集成测试：server.py(notify) ─▶ client.py(subscribe+反序列化)，断言收到事件
+```
+
+容器内测试细节：
+
+- **SD 保持开启**（vsomeip 事件组订阅要求 SD）；同一容器内两个进程通过多播回环完成发现；
+- 可用环境变量控制行为：`ARHUD_SD`(true/false)、`ARHUD_SEND_COUNT`(服务端发送条数)、
+  `ARHUD_INTERVAL`(发送间隔秒)、`ARHUD_EXIT_AFTER`(客户端收到 N 条后退出)；
+- 手动进容器调试：`docker run --rm -it -v $PWD:/app:ro arhud-vsomeip-test bash`，
+  然后 `cd /tmp && cp -r /app/* . && python3 server.py & sleep 2 && python3 client.py`。

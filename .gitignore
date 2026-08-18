@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.pipcache/
+.testdeps/
+
+# Docker 本地配置（由 run_tests.sh 生成）
+.dockerconfig/
+
+# 临时/构建产物
+.dist/
