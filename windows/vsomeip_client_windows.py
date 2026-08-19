@@ -66,6 +66,14 @@ def make_callback(service_index: int, service_id: int):
             got = sorted(_received_services)
         print(f"[Client] 收到 Service=0x{sid:x} Event=0x{eid:04X} "
               f"len={len(data)} data={bytes(data)[:48]!r}  已收齐 {len(got)}/{len(SERVICE_IDS)}")
+        # 尝试反序列化（pcap 回放时为 ArHud 结构体；合成数据为非结构体，忽略）
+        try:
+            from arhud_data_types import NewLaneLineDataNotify
+            n = NewLaneLineDataNotify.from_bytes(bytes(data))
+            print(f"         解析: version={n.version} timestamp=0x{n.timestamp:08X} "
+                  f"lane_count={n.lane_count}")
+        except Exception:
+            pass
         return None
     return callback
 

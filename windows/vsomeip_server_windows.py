@@ -51,6 +51,32 @@ SERVICE_PORT_BASE = int(os.environ.get("ARHUD_PORT_BASE", "51400"))
 SD_ENABLE = os.environ.get("ARHUD_SD", "true")
 SEND_INTERVAL_S = float(os.environ.get("ARHUD_INTERVAL", "0.2"))
 SEND_COUNT = int(os.environ.get("ARHUD_SEND_COUNT", "0"))  # 总发送条数上限，0=无限
+PCAP_FILE = os.environ.get("ARHUD_PCAP", "")              # 设置后从 pcap 回放真实数据
+
+
+def load_pcap_payloads(pcap_file: str, service_ids, event_id):
+    """
+    从 pcap 解码各服务的通知载荷（与 Ubuntu 版同一套 pcap_decoder/arhud_data_types）。
+    返回: {service: [payload_bytes, ...]}
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates = [here, os.environ.get("ARHUD_EXAMPLE_DIR", ""),
+                  os.path.abspath(os.path.join(here, "..", "vsomeip_example"))]
+    sys.path[:0] = [c for c in candidates if c and os.path.isdir(c)]
+    from pcap_decoder import decode_pcap
+
+    result = {}
+    for svc in service_ids:
+        events = decode_pcap(pcap_file, svc, event_id)
+        payloads = []
+        for ev in events:
+            if ev.notify is not None:
+                payloads.append(ev.notify.to_bytes())   # 反序列化成功 → 重新序列化（干净字节）
+            else:
+                payloads.append(ev.payload)             # 原始载荷兜底
+        result[svc] = payloads
+        print(f"  [pcap] svc=0x{svc:X} 解码 {len(payloads)} 条通知")
+    return result
 
 
 def main():
@@ -88,6 +114,14 @@ def main():
     print(f"[Server] 启动服务... 事件 0x{EVENT_ID:04X} 组 0x{EVENT_GROUP:04X}（Ctrl+C 退出）")
     print(f"[Server] 开始发送事件通知...")
 
+    # 载荷来源：ARHUD_PCAP 指定则从 pcap 回放（完整链路测试），否则用内置合成数据
+    pcap_payloads = {}
+    if PCAP_FILE and os.path.exists(PCAP_FILE):
+        print(f"[Server] 从 pcap 回放: {PCAP_FILE}")
+        pcap_payloads = load_pcap_payloads(PCAP_FILE, SERVICE_IDS, EVENT_ID)
+    else:
+        print("[Server] 未设置 ARHUD_PCAP，使用内置合成数据")
+
     counter = 0
     try:
         while True:
@@ -96,9 +130,14 @@ def main():
                 if SEND_COUNT and counter > SEND_COUNT:
                     print(f"[Server] 已发送 {SEND_COUNT} 条，退出")
                     return
-                payload = bytearray(f"svc_{i}_data_{counter}".encode())
-                print(f"[Server] 已通知 Service=0x{SERVICE_IDS[i]:x}, "
-                      f"Event=0x{EVENT_ID:04X}, Counter={counter}")
+                svc = SERVICE_IDS[i]
+                pool = pcap_payloads.get(svc)
+                if pool:
+                    payload = bytearray(pool[(counter - 1) % len(pool)])
+                else:
+                    payload = bytearray(f"svc_{i}_data_{counter}".encode())
+                print(f"[Server] 已通知 Service=0x{svc:x}, "
+                      f"Event=0x{EVENT_ID:04X}, Counter={counter}, payload={len(payload)}B")
                 app.notify(EVENT_ID, payload)
                 time.sleep(SEND_INTERVAL_S)
     except KeyboardInterrupt:

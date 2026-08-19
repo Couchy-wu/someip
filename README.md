@@ -28,8 +28,12 @@ ArHud 车道线数据 SOME/IP 通信的完整示例：**PCAP 解码 → 序列�
 │   ├── client.py               #   vsomeip 客户端：订阅 + 反序列化
 │   ├── server_multi.py         #   20 服务版服务端（ARHUD_SERVICES 可调）
 │   ├── client_multi.py         #   20 服务版客户端（订阅全部服务）
+│   ├── make_test_pcap.py       #   生成 SOME/IP 测试 pcap（可复现）
 │   ├── test_pipeline.py        #   解码管线回归测试
 │   └── README.md               #   运行与对接说明
+├── testdata/                   # 现成测试 pcap（仓库内可直接下载使用）
+│   ├── test_arhud_000c_8003.pcap    #   Ubuntu 程序：服务 0x000C/事件 0x8003，6 条通知+噪声
+│   └── test_windows_000a_8001.pcap  #   Windows 程序：服务 0xA/0xB/0xC/事件 0x8001，9 条通知+噪声
 └── docker/                     # Docker 完整测试（目标: Ubuntu 22.04 + Python 3.10）
     ├── Dockerfile              #   编译 vsomeip 3.4.10 + vsomeip_py
     ├── run_tests.sh            #   一键: 构建 + 6 项测试
@@ -40,7 +44,8 @@ ArHud 车道线数据 SOME/IP 通信的完整示例：**PCAP 解码 → 序列�
     ├── min_cli_multi.cpp       #   C++ 单应用订阅 20 服务（标准 vsomeip 用法）
     ├── cpp_client_test.sh      #   C++ 客户端 ↔ Python 服务端 验证
     ├── cpp_client_test_multi.sh #  C++ 单应用 ↔ 20 服务服务端 验证
-    └── cross_check_windows.sh  #   windows/ 修复代码跨平台校验
+    ├── cross_check_windows.sh  #   windows/ 修复代码跨平台校验
+    └── integration_test_pcap.sh #  pcap 全链路测试（Ubuntu+Windows 程序）
 ```
 
 ## 快速开始
@@ -62,6 +67,27 @@ bash docker/run_tests.sh
 1. **vsomeip_py 构造函数第 2 个参数 `id` 是"服务 ID"不是"客户端 ID"**——传错会导致服务端 offer 的服务 ID 与客户端请求的服务 ID 永远对不上；
 2. 客户端配置必须显式声明 `"routing": "<服务端应用名>"`（否则每个进程自建路由管理器）；
 3. 事件组订阅要求开启服务发现（vsomeip 限制）。
+
+## pcap 测试数据
+
+仓库 `testdata/` 提供两份现成 pcap（可下载直接用，也可用 `make_test_pcap.py` 重新生成）：
+
+```bash
+# 查看/校验 pcap 内容
+python3 vsomeip_example/pcap_decoder.py testdata/test_arhud_000c_8003.pcap --dump 3
+python3 vsomeip_example/pcap_decoder.py testdata/test_arhud_000c_8003.pcap
+
+# Ubuntu 程序回放
+python3 vsomeip_example/server.py testdata/test_arhud_000c_8003.pcap   # 终端 A
+python3 vsomeip_example/client.py                                      # 终端 B
+
+# Windows 程序回放（在 Windows 上）
+set ARHUD_PCAP=test_windows_000a_8001.pcap && py vsomeip_server_windows.py
+```
+
+pcap 内容：SOME/IP NOTIFICATION 报文（UDP），载荷为 `NewLaneLineDataNotify` 序列化字节，
+`timestamp` 字段 = 0x1000+包序号，用于断言"客户端收到的数据与 pcap 一致"；另含噪声报文
+（其它服务/其它事件/垃圾 UDP）验证解码过滤。
 
 ## 测试状态
 
