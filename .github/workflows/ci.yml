@@ -67,3 +67,11 @@ jobs:
             -v "${{ github.workspace }}/docker/min_cli_multi.cpp:/tests/min_cli_multi.cpp:ro" \
             -w /app \
             arhud-vsomeip-test bash /tests/cpp_client_test_multi.sh
+
+      - name: Windows 修复代码跨平台校验 (windows/ ↔ vsomeip)
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/windows:/win:ro" \
+            -v "${{ github.workspace }}/docker/cross_check_windows.sh:/tests/cross_check_windows.sh:ro" \
+            -w /win \
+            arhud-vsomeip-test bash /tests/cross_check_windows.sh

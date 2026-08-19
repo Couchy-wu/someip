@@ -1,0 +1,125 @@
+someip
+vSomeIP Python库在Windows上的网络接口选择问题
+问题概述
+在使用vsomeip_py库（Python的vSomeIP绑定）在Windows上运行SOME/IP客户端和服务端程序时，客户端无法稳定接收服务端发送的数据。客户端会反复出现"DEREGISTERED"断开连接的错误。
+问题背景
+测试环境
+* 操作系统: Windows 10
+* Python版本: Python 3.13
+* 网络适配器:
+    * 以太网适配器: 10.13.90.164 (主要网络)
+    * VMware网络适配器: 192.168.137.1, 192.168.126.1
+    * 回环适配器: 127.0.0.1
+* 测试程序
+    * 客户端: demo/tools/ArHud/python/vsomeip_client.py
+    * 服务端: demo/tools/ArHud/python/vsomeip_server.py
+    * 依赖库: vsomeip_py (安装于 C:\Users\wu.nengfa\AppData\Local\Programs\Python\Python313\Lib\site-packages\vsomeip_py)
+* 复现步骤 1. 安装依赖 pip install vsomeip_py 确保Python环境可以访问vsomeip_py库。 2. 准备配置文件 在运行目录下创建 vsomeip.json 配置文件： {
+*   "applications": [
+*     {
+*       "id": 4099,
+*       "name": "arhud_client"
+*     }
+*   ],
+*   "clients": [
+*     {
+*       "event_group": 4353,
+*       "events": [
+*         {"event": 32769, "name": "event_0x8001"}
+*       ],
+*       "instance": 10,
+*       "major": 1,
+*       "minor": 0,
+*       "service": 10,
+*       "unreliable": [51400]
+*     }
+*   ],
+*   "unicast": "10.13.90.164",
+*   "netmask": "255.255.255.0",
+*   "network": "arhud01",
+*   "routing": "arhud01",
+*   "service-discovery": {
+*     "enable": "true",
+*     "multicast": "224.0.2.4",
+*     "port": 30490
+*   }
+* } 3. 运行服务端 cd demo/tools/ArHud/python
+* py vsomeip_server.py 服务端应该成功启动并持续发送通知： [Server] 启动服务...
+* [Server] 开始发送事件通知...
+* [Server] 已通知 Service=0xa, Event=0x8001, Counter=1
+* [Server] 已通知 Service=0xa, Event=0x8001, Counter=2
+* ... 4. 运行客户端 在另一个终端运行： cd demo/tools/ArHud/python
+* py vsomeip_client.py 错误日志 客户端错误日志 ArHud SOME/IP Client (使用 vsomeip_py)
+* 应用名称: arhud_client
+* 应用ID: 0x1003
+* 本机IP: 127.0.0.1      <-- 问题! 应该是 10.13.90.164
+* 服务发现: 224.0.2.4:30490
+* ...
+* [error] Routing info for remote service could not be found! (1003): [000a.000a.0001]
+* 
+* routing_manager_client::on_disconnect: Client 0x1003 calling host_->on_state with DEREGISTERED
+* routing_manager_client::on_disconnect: Client 0x1003 calling host_->on_state with DEREGISTERED
+* routing_manager_client::on_disconnect: Client 0x1003 calling host_->on_state with DEREGISTERED
+* ... (持续重复) 服务端正常运行日志 ArHud SOME/IP Server (使用 vsomeip_py)
+* 提供服务:
+*   0xa (Instance=0xa, Port=51400) - 车辆位置信息
+*   0xb (Instance=0xb, Port=51401) - RTK/IMU 信息
+*   0xc (Instance=0xc, Port=51402) - 障碍物/车道线
+* [Server] 启动服务...
+* [Server] 开始发送事件通知...
+* [Server] 已通知 Service=0xa, Event=0x8001, Counter=1
+* [Server] 已通知 Service=0xa, Event=0x8001, Counter=2
+* ... (持续发送) 问题根因分析 根因1: 网络接口选择错误（已修复） 在 vsomeip_py/vsomeip.py 文件的第140-143行，默认配置模板使用了以下代码获取本机IP： configuration["unicast"] = '127.0.0.1'
+* if is_windows:
+*     configuration["unicast"] = socket.gethostbyname(socket.gethostname()) 问题：socket.gethostbyname(socket.gethostname()) 在Windows上有多个网络适配器时，会返回错误的IP地址（可能是回环地址127.0.0.1或VMware私有地址）。 在当前环境中：
+    * 期望IP: 10.13.90.164 (以太网)
+    * 实际返回: 127.0.0.1 (回环) 或 192.168.x.x (VMware)
+* 修复方案：使用socket连接外部DNS (8.8.8.8) 来获取正确的本地IP地址。 根因2: vSOMEIP构造函数参数使用错误 根据 C:\Users\wu.nengfa\Desktop\someip-main\SOLUTION.md 的分析： 核心问题：vSOMEIP构造函数第2个参数是"服务ID"而不是"客户端ID"  错误代码： app = vSOMEIP("arhud_server", 0x1201, 0x000C)  # 0x1201 被当作服务ID 正确代码： app = vSOMEIP("arhud_server", 0x000C, 0x000C)  # 服务ID放第2参数，客户端ID放配置 根因3: 使用app.request()而不是app.register()
+    * app.request(SERVICE_ID) 是"发送请求报文"，不是"请求服务订阅"
+    * app.register() 才是向路由管理器请求服务订阅
+* 根因4: vSomeIP路由机制在Windows上的已知限制 即使配置了正确的IP地址，vSomeIP的路由服务在Windows上仍然存在稳定性问题。客户端会反复尝试注册到路由服务，但立即被断开（DEREGISTERED），导致无法稳定接收服务端数据。 这是vSomeIP库本身在Windows平台上的已知限制：
+    * https://github.com/COVESA/vsomeip/issues/289
+    * https://github.com/COVESA/vsomeip/issues/615
+    * https://github.com/COVESA/vsomeip/issues/537
+* 参考解决方案 根据 C:\Users\wu.nengfa\Desktop\someip-main\SOLUTION.md 和 arhud_client_fixed.py、arhud_server_fixed.py： 关键修复点
+    1. 配置使用官方模板
+* configuration = vSOMEIP.configuration()  # 使用模板，补齐全部必需键
+    2. vSOMEIP构造函数参数
+    * 第2参数：服务ID（不是客户端ID）
+    * 客户端ID放在 applications[].id 中
+    3. 使用app.register()而不是app.request()
+* app.register()  # 请求服务订阅
+    4. 使用force=True清理残留锁文件
+* app = vSOMEIP(..., force=True)
+    5. 事件组配置一致
+* app.on_event(EVENT_ID, callback, group=EVENT_GROUP)  # 客户端
+* app.offer(events=[EVENT_ID], group=EVENT_GROUP)       # 服务端
+    6. 启动顺序：先启动服务端，再启动客户端
+* 结论 问题状态: 部分解决 vSomeIP Python库 (vsomeip_py) 在Windows上存在以下问题：
+    1. 网络接口选择问题 [表情] 已修复
+    * 原因: socket.gethostbyname() 返回错误IP
+    * 解决方案: 修改库代码使用socket连接外部DNS获取正确IP
+    2. 构造函数参数错误 [表情] 代码已修正
+    * 原因: 服务ID和客户端ID混淆
+    * 解决方案: 按正确参数顺序传入
+    3. 路由服务稳定性问题 [表情] Windows平台限制
+    * 原因: vSomeIP在Windows上的路由机制存在已知限制
+    * 影响: 客户端无法与服务端建立稳定的通信连接
+    * 解决方案建议:
+    * 使用C++编译的程序代替Python脚本
+    * 或在Linux环境下运行vSomeIP程序
+    * 或使用纯UDP socket替代方案
+* 相关文件修改
+    1. vsomeip.py修复:
+    * 源文件: D:\vsomeip_py-main\vsomeip_py\vsomeip.py
+    * 复制到: C:\Users\wu.nengfa\AppData\Local\Programs\Python\Python313\Lib\site-packages\vsomeip_py\vsomeip.py
+    2. 测试脚本修改:
+    * demo/tools/ArHud/python/vsomeip_client.py - 添加routing配置，修正端口
+    * demo/tools/ArHud/python/vsomeip_server.py - 添加routing配置，修正端口
+    * demo/tools/ArHud/python/vsomeip.json - 配置文件
+    3. 问题文档:
+    * demo/tools/ArHud/python/ISSUE_WINDOWS_VSOMEIP_NETWORK.md
+* 建议
+    1. 对于生产环境: 使用C++版本的vSomeIP程序（参考 someip/windows_dll 目录）
+    2. 对于测试环境: 可以使用纯Python的UDP socket测试（参考 test_loopback.py）
+    3. 对于跨平台: 考虑在Linux环境下运行vSomeIP应用

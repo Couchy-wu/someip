@@ -8,9 +8,19 @@ ArHud 车道线数据 SOME/IP 通信的完整示例：**PCAP 解码 → 序列�
 
 ```
 ├── SOLUTION.md                 # 问题分析报告（日志解读、根因、解决方案）
+├── SOLUTION_WINDOWS.md         # Windows 版问题分析（DEREGISTERED 循环根因与修复）
 ├── problem.txt                 # 原始问题描述
+├── windows_problem.txt         # Windows 版问题描述
 ├── arhud_client_fixed.py       # 最小修正版客户端
 ├── arhud_server_fixed.py       # 最小修正版服务端
+├── windows/                    # Windows 部署（vsomeip_py）
+│   ├── vsomeip_server_windows.py  #   修正服务端（3 服务，routing=arhud_server）
+│   ├── vsomeip_client_windows.py  #   修正客户端（订阅 3 服务）
+│   ├── get_local_ip.py            #   健壮的本机 IP 获取（多网卡）
+│   ├── diagnose_windows.py        #   自诊断（routing 配置一致性校验）
+│   ├── udp_loopback_check.py      #   纯 UDP 通路检查（防火墙隔离）
+│   ├── vsomeip_windows.json       #   参考配置
+│   └── README.md                  #   Windows 构建/安装/运行/防火墙
 ├── vsomeip_example/            # 完整可运行示例（推荐）
 │   ├── arhud_data_types.py     #   数据结构序列化/反序列化（对应 C++ stNewLanelineDataNotify）
 │   ├── pcap_decoder.py         #   pcap → SOME/IP 事件载荷 → 数据对象
@@ -22,14 +32,15 @@ ArHud 车道线数据 SOME/IP 通信的完整示例：**PCAP 解码 → 序列�
 │   └── README.md               #   运行与对接说明
 └── docker/                     # Docker 完整测试（目标: Ubuntu 22.04 + Python 3.10）
     ├── Dockerfile              #   编译 vsomeip 3.4.10 + vsomeip_py
-    ├── run_tests.sh            #   一键: 构建 + 5 项测试
+    ├── run_tests.sh            #   一键: 构建 + 6 项测试
     ├── integration_test.sh     #   单服务两进程收发断言
     ├── integration_test_multi.sh # 20 服务两进程收发断言
     ├── min_cli.cpp             #   最小 C++ 客户端（验证服务端兼容性）
     ├── min_svc.cpp             #   最小 C++ 服务端（验证客户端兼容性）
     ├── min_cli_multi.cpp       #   C++ 单应用订阅 20 服务（标准 vsomeip 用法）
     ├── cpp_client_test.sh      #   C++ 客户端 ↔ Python 服务端 验证
-    └── cpp_client_test_multi.sh #  C++ 单应用 ↔ 20 服务服务端 验证
+    ├── cpp_client_test_multi.sh #  C++ 单应用 ↔ 20 服务服务端 验证
+    └── cross_check_windows.sh  #   windows/ 修复代码跨平台校验
 ```
 
 ## 快速开始

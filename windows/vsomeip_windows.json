@@ -1,0 +1,34 @@
+{
+  "unicast": "10.13.90.164",
+  "netmask": "255.255.255.0",
+  "logging": {
+    "level": "info",
+    "console": "true",
+    "file": { "enable": "false", "path": "vsomeip_windows.log" }
+  },
+  "applications": [
+    { "name": "arhud_server",   "id": "0x1200" },
+    { "name": "arhud_server_b", "id": "0x1201" },
+    { "name": "arhud_server_c", "id": "0x1202" },
+    { "name": "arhud_client",   "id": "0x1000" },
+    { "name": "arhud_client_b", "id": "0x1001" },
+    { "name": "arhud_client_c", "id": "0x1002" }
+  ],
+  "services": [
+    { "service": "0x000A", "instance": "0x000A", "unreliable": 51400 },
+    { "service": "0x000B", "instance": "0x000B", "unreliable": 51401 },
+    { "service": "0x000C", "instance": "0x000C", "unreliable": 51402 }
+  ],
+  "clients": [
+    { "service": "0x000A", "instance": "0x000A", "unreliable": 51400 },
+    { "service": "0x000B", "instance": "0x000B", "unreliable": 51401 },
+    { "service": "0x000C", "instance": "0x000C", "unreliable": 51402 }
+  ],
+  "routing": "arhud_server",
+  "service-discovery": {
+    "enable": "true",
+    "multicast": "224.0.2.4",
+    "port": "30490",
+    "protocol": "udp"
+  }
+}
