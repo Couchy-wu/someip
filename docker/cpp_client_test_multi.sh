@@ -12,10 +12,10 @@ cd /tmp/cppmulti
 rm -f /tmp/vsomeip-* vsomeip.json
 
 echo "=== 启动 Python 20 服务服务端 ==="
-ARHUD_SD=true ARHUD_SERVICES=20 ARHUD_SEND_COUNT=100 ARHUD_INTERVAL=0.2 \
+ARHUD_SD=true ARHUD_SERVICES=20 ARHUD_SEND_COUNT=300 ARHUD_INTERVAL=0.2 \
     python3 server_multi.py > server.log 2>&1 &
 SPID=$!
-sleep 6
+sleep 8
 
 cat > vsomeip.json <<'JSON'
 {"unicast":"127.0.0.1","logging":{"level":"info","console":"true"},
@@ -25,7 +25,7 @@ JSON
 
 echo "=== 运行单应用 C++ 客户端 (30s) ==="
 set +e
-timeout -k 3 30 /tmp/min_cli_multi > cli.log 2>&1
+timeout -k 3 45 /tmp/min_cli_multi > cli.log 2>&1
 CLI_RC=$?
 set -e
 kill -9 "$SPID" 2>/dev/null || true

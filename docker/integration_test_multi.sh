@@ -10,14 +10,14 @@ cd /tmp/multi
 rm -f /tmp/vsomeip-* vsomeip.json
 
 echo "--- 启动 20 服务服务端 ---"
-ARHUD_SD=true ARHUD_SERVICES=20 ARHUD_SEND_COUNT=80 ARHUD_INTERVAL=0.2 \
+ARHUD_SD=true ARHUD_SERVICES=20 ARHUD_SEND_COUNT=500 ARHUD_INTERVAL=0.2 \
     python3 server_multi.py > server.log 2>&1 &
 SPID=$!
-sleep 6   # 20 个服务应用启动/注册/offer 需要更长时间
+sleep 8   # 20 个服务应用启动/注册/offer 需要更长时间（CI 慢速环境留足余量）
 
 echo "--- 启动客户端（收齐 20 个服务即退出，60s 超时保护）---"
 set +e
-ARHUD_SD=true ARHUD_SERVICES=20 ARHUD_EXIT_ALL=1 timeout -k 3 60 \
+ARHUD_SD=true ARHUD_SERVICES=20 ARHUD_EXIT_ALL=1 timeout -k 3 90 \
     python3 client_multi.py > client.log 2>&1
 CLIENT_RC=$?
 set -e

@@ -60,9 +60,9 @@ int main(int argc, char **argv) {
     // 需放入独立线程（vsomeip_py 包装器同样如此处理）
     std::thread io_thread([&app]() { app->start(); });
     io_thread.detach();
-    std::cout << "min_cli_multi started: 1 个应用订阅 " << SERVICES << " 个服务, 等待 25s..." << std::endl;
+    std::cout << "min_cli_multi started: 1 个应用订阅 " << SERVICES << " 个服务, 等待 40s..." << std::endl;
 
-    for (int s = 0; s < 25; ++s) {
+    for (int s = 0; s < 40; ++s) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
         if (received_services.size() >= SERVICES) {
             std::cout << "DONE: 全部 " << SERVICES << " 个服务均已收到事件 ✔" << std::endl;
