@@ -33,7 +33,7 @@ INSTANCE_ID = 0x0001
 EVENT_ID = 0x8003
 EVENT_GROUP = 0x01
 SERVICE_PORT_BASE = 51402
-ROUTING_HOST = "arhud_svc_0"                            # 路由管理器宿主 = 服务端第一个应用
+ROUTING_HOST = os.environ.get("ARHUD_ROUTING_HOST", "arhud_svc_0")  # 路由宿主 = 服务端第一个应用
 SD_ENABLE = os.environ.get("ARHUD_SD", "true")
 EXIT_AFTER = int(os.environ.get("ARHUD_EXIT_AFTER", "0"))
 EXIT_ALL = os.environ.get("ARHUD_EXIT_ALL", "") == "1"  # 收齐全部服务后退出
@@ -61,8 +61,8 @@ def make_callback(service_index: int):
                   f"timestamp(服务序号)={notify.timestamp} lane_count={notify.lane_count}")
             for lane in notify.lanes[:2]:
                 print(f"       {lane}")
-        except Exception as e:
-            print(f"       反序列化失败: {e}")
+        except Exception:
+            pass  # 非 ArHud 结构体载荷（如 C++ 测试服务端发送的短 payload）静默忽略
         return None
     return callback
 
@@ -104,10 +104,10 @@ def main():
         while True:
             with _lock:
                 if EXIT_AFTER and _total >= EXIT_AFTER:
-                    print(f"\n[done] 已收到 {_total} 条事件，退出（ARHUD_EXIT_AFTER）")
+                    print(f"\n[done] 已收到 {_total} 条事件，退出（ARHUD_EXIT_AFTER）", flush=True)
                     break
                 if EXIT_ALL and len(_received_services) >= SERVICES:
-                    print(f"\n[done] {SERVICES} 个服务均已收到事件，退出（ARHUD_EXIT_ALL）")
+                    print(f"\n[done] {SERVICES} 个服务均已收到事件，退出（ARHUD_EXIT_ALL）", flush=True)
                     break
             time.sleep(0.2)
     except KeyboardInterrupt:

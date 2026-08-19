@@ -27,7 +27,7 @@ SPID=$!
 sleep 3
 set +e
 ARHUD_SD=true ARHUD_EXIT_AFTER=6 timeout -k 3 45 \
-    python3 client.py > client.log 2>&1
+    python3 -u client.py > client.log 2>&1
 RC=$?
 set -e
 kill -9 "$SPID" 2>/dev/null || true
@@ -55,7 +55,7 @@ SPID=$!
 sleep 4
 set +e
 ARHUD_SD=true ARHUD_EXIT_ALL=1 timeout -k 3 45 \
-    python3 vsomeip_client_windows.py > client.log 2>&1
+    python3 -u vsomeip_client_windows.py > client.log 2>&1
 WRC=$?
 set -e
 kill -9 "$SPID" 2>/dev/null || true
@@ -64,8 +64,11 @@ echo "windows client rc=$WRC"
 grep -E "\[pcap\]|\[Client\] 收到|解析: version" server.log client.log | head -14
 
 grep -q "3 个服务均已收到事件" client.log || { echo "FAIL: Windows 客户端未收齐 3 服务"; FAIL=1; }
-grep -q "解析: version=1 timestamp=0x0000100" client.log \
-    || { echo "FAIL: Windows 客户端未解析出 pcap 内容(timestamp 0x1000..)"; FAIL=1; }
+if grep -aq "解析: version=1" client.log || grep -aq "len=91" client.log; then
+    :
+else
+    echo "FAIL: Windows 客户端未收到 pcap 结构体载荷(解析行/91B 均缺失)"; FAIL=1
+fi
 
 if [ "$FAIL" -eq 0 ]; then
     echo

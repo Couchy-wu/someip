@@ -84,3 +84,13 @@ jobs:
             -v "${{ github.workspace }}/docker/integration_test_pcap.sh:/tests/integration_test_pcap.sh:ro" \
             -w /app \
             arhud-vsomeip-test bash /tests/integration_test_pcap.sh
+
+      - name: C++ 单应用服务端提供 20 服务验证 (min_svc_multi ↔ C++/Python 客户端)
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/vsomeip_example:/app:ro" \
+            -v "${{ github.workspace }}/docker/cpp_server_test_multi.sh:/tests/cpp_server_test_multi.sh:ro" \
+            -v "${{ github.workspace }}/docker/min_svc_multi.cpp:/tests/min_svc_multi.cpp:ro" \
+            -v "${{ github.workspace }}/docker/min_cli_multi.cpp:/tests/min_cli_multi.cpp:ro" \
+            -w /app \
+            arhud-vsomeip-test bash /tests/cpp_server_test_multi.sh

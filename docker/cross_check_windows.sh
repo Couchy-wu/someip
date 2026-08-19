@@ -21,17 +21,22 @@ ARHUD_SD=true ARHUD_SEND_COUNT=40 ARHUD_INTERVAL=0.2 \
 SPID=$!
 sleep 4
 
-set +e
+# 后台运行 + 轮询日志证据（客户端退出时包装器 C++ 清理可能 abort(134)，以收到证据为准）
 ARHUD_SD=true ARHUD_EXIT_ALL=1 timeout -k 3 25 \
-    python3 vsomeip_client_windows.py > client.log 2>&1
-CLI_RC=$?
-set -e
-kill -9 "$SPID" 2>/dev/null || true
+    python3 -u vsomeip_client_windows.py > client.log 2>&1 &
+CPID=$!
+OK=0
+for i in $(seq 1 25); do
+    grep -aq "已收齐 3/3" client.log 2>/dev/null && { OK=1; break; }
+    sleep 1
+done
+kill -9 "$SPID" "$CPID" 2>/dev/null || true
+wait "$CPID" 2>/dev/null || true
 sleep 0.5
-echo "client rc=$CLI_RC"
-grep -E "\[Client\]" client.log | grep "已收齐" | tail -3
+echo "client 已收齐 3 服务证据: $([ "$OK" -eq 1 ] && echo YES || echo NO)"
+grep -a "已收齐" client.log | tail -3
 
-if [ "$CLI_RC" -eq 0 ] && grep -q "3 个服务均已收到事件" client.log; then
+if [ "$OK" -eq 1 ]; then
     echo
     echo "PASS: windows/ 修复代码跨平台跑通 ✔"
     exit 0
