@@ -44,6 +44,7 @@ sys.modules["vsomeip_py.vsomeip"] = _STUB
 
 from arhud_data_types import (LaneLineData, LaneLinePoint, LaneLineType,
                               NewLaneLineDataNotify, make_sample_notify)
+import endian
 from pcap_decoder import (MSG_TYPE_NOTIFICATION, SERVICE_ID, EVENT_ID,
                           SomeIpMessage, decode_pcap, decode_udp_payloads)
 import server
@@ -91,6 +92,30 @@ def test_round_trip():
     n2 = NewLaneLineDataNotify.from_bytes(buf)
     assert n2.to_bytes() == buf, "round-trip 字节不一致"
     print(f"[PASS] 1. 序列化/反序列化往返一致 ({len(buf)}B)")
+
+
+def test_endianness():
+    """字节序：大端(网络序)序列化与主机端序无关 —— 字节精确断言在任何主机上都必须成立"""
+    # 端序工具自测（机器端序识别 + 大端编解码固定字节）
+    msg = endian.self_test()
+    assert "大端(网络序)编解码自测通过" in msg
+
+    # struct '>' 显式大端：固定字节（无论本机是小端还是大端，输出必须完全一致）
+    assert endian.pack_u16(0x0102) == b"\x01\x02"
+    assert endian.pack_u32(0x01020304) == b"\x01\x02\x03\x04"
+    assert endian.pack_u64(0x0102030405060708) == bytes(range(1, 9))
+    assert endian.unpack_u16(b"\x12\x34") == 0x1234
+    assert endian.unpack_u32(b"\xDE\xAD\xBE\xEF") == 0xDEADBEEF
+
+    # ArHud 结构体大端布局：version=0x0001, timestamp=0x11223344 在字节 0..5 中可见
+    n = make_sample_notify()
+    buf = n.to_bytes()
+    assert buf[0] == 0x00 and buf[1] == 0x01, "version 应为大端 0x0001"
+    assert buf[2:6] == b"\x11\x22\x33\x44", "timestamp 应为大端 0x11223344"
+
+    # 往返一致（任意端序主机）
+    assert NewLaneLineDataNotify.from_bytes(buf).to_bytes() == buf
+    print(f"[PASS] 5. 字节序: 大端(网络序)输出与主机端序无关 (本机: {endian.detect_endian()})")
 
 
 def test_strict_decode(tmp):

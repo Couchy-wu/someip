@@ -7,6 +7,13 @@ ArHud 数据类型定义：序列化 / 反序列化
 
 内存布局（大端，与 C++ #pragma pack(1) 一致）：
 
+    【字节序 = 网络字节序（大端），自动适配任意主机端序】
+    本文件所有 struct 编解码都使用显式前缀 '>'（大端），与主机是
+    小端(x86/ARM)还是大端(s390x)无关——同样的代码在任何机器上产生完全相同的字节，
+    无需任何大小端判断/分支（见 endian.py 的自测证明）。
+    C++ 端注意：载荷不要用 memcpy 原生结构体（小端主机会发出小端字节），
+    应使用协议序列化（htonl/显式移位）或与本文件一致的逐字段大端写入。
+
     NewLaneLineDataNotify:
         version       uint16   2 字节
         timestamp     uint32   4 字节
@@ -172,6 +179,11 @@ def make_sample_notify() -> NewLaneLineDataNotify:
 
 
 if __name__ == "__main__":
+    # 端序自测：大端字节与主机端序无关（小端/大端主机输出一致）
+    import endian
+    print(endian.self_test())
+    print()
+
     # 自测：序列化 -> 反序列化 往返一致性
     n = make_sample_notify()
     buf = n.to_bytes()

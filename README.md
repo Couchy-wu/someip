@@ -29,6 +29,7 @@ ArHud 车道线数据 SOME/IP 通信的完整示例：**PCAP 解码 → 序列�
 │   ├── server_multi.py         #   20 服务版服务端（ARHUD_SERVICES 可调）
 │   ├── client_multi.py         #   20 服务版客户端（订阅全部服务）
 │   ├── make_test_pcap.py       #   生成 SOME/IP 测试 pcap（可复现）
+│   ├── endian.py               #   端序工具：大小端识别 + 网络序(大端)编解码自测
 │   ├── test_pipeline.py        #   解码管线回归测试
 │   └── README.md               #   运行与对接说明
 ├── testdata/                   # 现成测试 pcap（仓库内可直接下载使用）
@@ -88,6 +89,13 @@ set ARHUD_PCAP=test_windows_000a_8001.pcap && py vsomeip_server_windows.py
 pcap 内容：SOME/IP NOTIFICATION 报文（UDP），载荷为 `NewLaneLineDataNotify` 序列化字节，
 `timestamp` 字段 = 0x1000+包序号，用于断言"客户端收到的数据与 pcap 一致"；另含噪声报文
 （其它服务/其它事件/垃圾 UDP）验证解码过滤。
+
+## 字节序（大小端）
+
+网络传输使用大端（SOME/IP 与 ArHud 结构均为网络字节序）。代码全部用 `struct '>'` 显式大端，
+**自动适配任意主机端序**（小端 x86/ARM 与大端 s390x 输出字节完全一致，无需分支）。
+识别与自测：`python3 vsomeip_example/endian.py`；C++ 参考实现见 `docker/endian_check.cpp`
+（含"不要 memcpy 原生结构体当载荷"的警告）。
 
 ## 测试状态
 

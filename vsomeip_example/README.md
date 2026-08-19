@@ -156,3 +156,29 @@ python3 client_multi.py          # 终端 B：订阅全部 20 个服务
 > 结论：两种方式对**客户端完全透明**（同一个客户端既能消费"1 应用 20 服务"也能消费"20 应用 20 服务"，
 > 上面的 a/b 两个组合均已实测）。区别只在服务端自身的资源开销：
 > 需要单应用时用 C++（`min_svc_multi.cpp` 为参考实现）；Python 侧受包装层限制用 20 应用即可。
+
+## 字节序（大小端）处理 —— 网络用大端，代码自动适配
+
+SOME/IP 报文头与 ArHud 数据结构均按 AUTOSAR 规范使用**网络字节序（大端）**。
+
+**本仓库代码已自动适配任意主机端序**：所有 `struct.pack/unpack` 都使用显式前缀 `>`（大端），
+转换由 Python struct 内部完成，与主机是小端(x86/ARM)还是大端(s390x)完全无关——
+同样的代码在任何机器上产生**完全相同的字节**，不需要任何"判断大小端再分支"的逻辑。
+
+```bash
+# 识别本机端序 + 大端编解码自测（任意主机输出一致）
+python3 endian.py
+# 机器端序: little (little), 大端(网络序)编解码自测通过 ✓ 字节与主机端序无关
+
+# arhud_data_types.py 自测也会先打印端序信息
+python3 arhud_data_types.py
+```
+
+要点：
+- 识别主机端序：Python `sys.byteorder`（`endian.detect_endian()`）；C++ 用
+  `std::endian`(C++20) 或运行时探测（见 `../docker/endian_check.cpp`）。
+- 网络字节序编解码：Python 用 `>` 前缀；C++ 用 `htonl/htons` 或逐字节显式移位
+  （`../docker/endian_check.cpp` 两种都演示了）。
+- **C++ 客户端注意**：载荷**不要直接 `memcpy` 原生结构体**！小端主机的原生 struct
+  是小端字节，与网络大端不一致，会导致 Python 端解析错乱。应逐字段按大端写入，
+  或使用协议序列化器，保证与 `arhud_data_types.py` 的 `>` 布局一致。
