@@ -16,14 +16,20 @@ ArHud 车道线数据 SOME/IP 通信的完整示例：**PCAP 解码 → 序列�
 │   ├── pcap_decoder.py         #   pcap → SOME/IP 事件载荷 → 数据对象
 │   ├── server.py               #   vsomeip 服务端：回放 pcap 事件
 │   ├── client.py               #   vsomeip 客户端：订阅 + 反序列化
+│   ├── server_multi.py         #   20 服务版服务端（ARHUD_SERVICES 可调）
+│   ├── client_multi.py         #   20 服务版客户端（订阅全部服务）
 │   ├── test_pipeline.py        #   解码管线回归测试
 │   └── README.md               #   运行与对接说明
 └── docker/                     # Docker 完整测试（目标: Ubuntu 22.04 + Python 3.10）
     ├── Dockerfile              #   编译 vsomeip 3.4.10 + vsomeip_py
-    ├── run_tests.sh            #   一键: 构建 + 解码管线测试 + 真实 vsomeip 收发集成测试
-    ├── integration_test.sh     #   两进程 server↔client 收发断言
+    ├── run_tests.sh            #   一键: 构建 + 5 项测试
+    ├── integration_test.sh     #   单服务两进程收发断言
+    ├── integration_test_multi.sh # 20 服务两进程收发断言
     ├── min_cli.cpp             #   最小 C++ 客户端（验证服务端兼容性）
-    └── min_svc.cpp             #   最小 C++ 服务端（验证客户端兼容性）
+    ├── min_svc.cpp             #   最小 C++ 服务端（验证客户端兼容性）
+    ├── min_cli_multi.cpp       #   C++ 单应用订阅 20 服务（标准 vsomeip 用法）
+    ├── cpp_client_test.sh      #   C++ 客户端 ↔ Python 服务端 验证
+    └── cpp_client_test_multi.sh #  C++ 单应用 ↔ 20 服务服务端 验证
 ```
 
 ## 快速开始

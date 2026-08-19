@@ -18,6 +18,8 @@ pcap 文件 ──解码──▶ SOME/IP 事件 ──反序列化──▶ New
 | `pcap_decoder.py` | pcap → SOME/IP 头解析 → 事件载荷 → 反序列化（含 `--dump` 排查模式） |
 | `server.py` | **标准 vsomeip 服务端**：解码 pcap → 反序列化 → 重新序列化 → `app.notify()` 发送事件 |
 | `client.py` | vsomeip 客户端：订阅事件 0x8003 → 反序列化 → 打印 |
+| `server_multi.py` | **20 服务版服务端**：提供 `ARHUD_SERVICES`(默认 20) 个服务，每个服务一个事件，周期 notify |
+| `client_multi.py` | **20 服务版客户端**：订阅全部 20 个服务，收齐后打印每服务的事件 |
 
 > 你项目里已经写好的客户端（C++ 或其它 vsomeip 实现）**不需要任何改动**：本示例服务端是标准 vsomeip 服务，发送的事件载荷就是 C++ 结构体的序列化字节。
 
@@ -90,3 +92,40 @@ bash docker/run_tests.sh
   `ARHUD_INTERVAL`(发送间隔秒)、`ARHUD_EXIT_AFTER`(客户端收到 N 条后退出)；
 - 手动进容器调试：`docker run --rm -it -v $PWD:/app:ro arhud-vsomeip-test bash`，
   然后 `cd /tmp && cp -r /app/* . && python3 server.py & sleep 2 && python3 client.py`。
+
+## 20 服务版（server_multi.py + client_multi.py）
+
+```
+服务端(一个进程)                         客户端(一个进程)
+├─ arhud_svc_0  offer 服务 0x0100 ──▶  ├─ arhud_cli_0  订阅 0x0100 事件
+├─ arhud_svc_1  offer 服务 0x0101 ──▶  ├─ arhud_cli_1  订阅 0x0101 事件
+│  ...                                   │  ...
+└─ arhud_svc_19 offer 服务 0x0113 ──▶  └─ arhud_cli_19 订阅 0x0113 事件
+```
+
+运行（先服务端后客户端）：
+
+```bash
+python3 server_multi.py          # 终端 A：默认 20 个服务，事件 0x8003
+python3 client_multi.py          # 终端 B：订阅全部 20 个服务
+# 环境变量: ARHUD_SERVICES=个数  ARHUD_SD=true/false  ARHUD_INTERVAL=秒  ARHUD_SEND_COUNT=条数
+# 客户端:   ARHUD_EXIT_ALL=1(收齐退出)  ARHUD_EXIT_AFTER=N(收N条退出)
+```
+
+每个服务的数据用 `timestamp` 字段携带服务序号(0..19)，客户端可据此验证数据来源。
+
+### 一个应用能否订阅 20 个服务？
+
+- **vsomeip（C++ 层面）：可以，而且是标准用法。** 一个 application 对每个服务分别
+  `request_service` + `request_event` + `subscribe` 即可（见 `../docker/min_cli_multi.cpp`，
+  单应用订阅 20 个服务，已实测收齐）。两个注意点：
+  1. 消息处理器要按 `(service, instance, method)` 各注册一次（可共用同一回调），
+     vsomeip 不会把通知分发给 `ANY_SERVICE/ANY_INSTANCE` 注册的处理器；
+  2. `subscribe` 的 major 版本必须与服务端 offer 的 major 一致（`DEFAULT_MAJOR=0`），
+     否则 pending 订阅永远不会被冲刷发出。
+- **vsomeip_py 高层包装：不可以（一个 `vSOMEIP` 对象 = 一个服务）。** 原因：
+  1. `vSOMEIP(name, id, instance)` 的 `id` 即服务 ID，`on_event/register/offer` 都用它；
+  2. vsomeip 运行时对同名 `create_application` 会**自动改名**（`name_0/name_1/...`），
+     无法让多个实体共享一个应用。
+  所以 Python 侧用 20 个 `vSOMEIP` 对象（20 个应用）——但仍是**一个进程、一个逻辑客户端**，
+  对外行为与单应用等价。若必须单应用，请用 C++ 客户端（min_cli_multi.cpp）或扩展包装器。
