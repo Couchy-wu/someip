@@ -1,0 +1,7 @@
+{
+  "unicast": "127.0.0.1",
+  "logging": { "level": "info", "console": "true" },
+  "applications": [ { "name": "hud_client_cpp", "id": "0x2100" } ],
+  "routing": "arhud01",
+  "service-discovery": { "enable": "true", "multicast": "224.0.2.4", "port": "30490" }
+}

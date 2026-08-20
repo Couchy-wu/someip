@@ -149,6 +149,7 @@ Windows 自诊断：`py diagnose_windows.py`（打印网卡/IP + 校验 routing 
 | 20 服务 | `python3 server_multi.py` | `ARHUD_EXIT_ALL=1 python3 client_multi.py` | `20 个服务均已收到事件` |
 | HUD 23 服务 | `python3 hud_server.py` | `ARHUD_EXIT_ALL=1 python3 hud_client.py` | `已收 23/23`，解析失败 0 |
 | HUD pcap 回放 | `ARHUD_PCAP=testdata/test_arhud_hud_23events.pcap python3 hud_server.py` | 同上 | 客户端 Counter 与 pcap 帧序一致 |
+| **HUD C++ 客户端** | `python3 hud_server.py` | `cd hud_cpp && make && ./hud_client` | C++ 客户端收齐 23/23（单应用） |
 | 字节序自测 | — | `python3 vsomeip_example/endian.py` | `大端编解码自测通过 ✓` |
 | pcap 内容查看 | — | `python3 vsomeip_example/pcap_decoder.py testdata/test_arhud_hud_23events.pcap --dump 3` | 打印 SOME/IP 头解析 |
 | 序列化往返自测 | — | `python3 hud/hud_data_types.py`(无) / `python3 -c "..."` | 12 种类型往返一致 |
