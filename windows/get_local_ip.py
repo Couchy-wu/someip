@@ -34,6 +34,26 @@ PROBE_TARGETS = [
     ("223.5.5.5", 53),   # 阿里 DNS（国内网络）
     ("114.114.114.114", 53),
 ]
+# 不依赖外网的探测：非路由地址/保留地址（UDP connect 不真正发包，
+# 只要存在默认路由即可选出本机源 IP；局域网/容器/断网环境也能用）
+LOCAL_PROBE_TARGETS = [
+    ("192.0.2.1", 9),     # TEST-NET-1（RFC 5737）
+    ("10.255.255.255", 1),
+]
+
+
+def _default_gateway():
+    """解析 /proc/net/route 的默认网关（Linux）；Windows 返回 None（用上面探测替代）"""
+    try:
+        with open("/proc/net/route", "r") as f:
+            for line in f.readlines()[1:]:
+                parts = line.split()
+                if len(parts) >= 3 and parts[1] == "00000000":  # Destination 0.0.0.0
+                    ip = ".".join(str(int(parts[2][i:i + 2], 16)) for i in (6, 4, 2, 0))
+                    return ip
+    except OSError:
+        pass
+    return None
 
 
 def _udp_connect_ip(target):
@@ -87,6 +107,18 @@ def get_local_ip() -> str:
             return ip
         if ip:
             return ip  # 非回环即接受（即使像虚拟网段也优于 127.0.0.1）
+
+    # 2.5) 默认网关（不依赖外网）：经网关发包源地址即本机主 IP
+    gw = _default_gateway()
+    if gw:
+        ip = _udp_connect_ip((gw, 53))
+        if ip:
+            return ip
+    # 2.6) 非路由地址探测（存在默认路由即可，断网/局域网/容器通用）
+    for target in LOCAL_PROBE_TARGETS:
+        ip = _udp_connect_ip(target)
+        if ip:
+            return ip
 
     # 3) 主机名解析 + 过滤
     for ip in list_candidate_ips():

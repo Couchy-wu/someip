@@ -102,6 +102,28 @@ docker rm -f arhud-manual
 
 ---
 
+## 方式一.5：双机（跨主机）手动测试
+
+两台机器（或两个容器/两个网段）各跑一端：
+
+```bash
+# 主机A：服务端（unicast 自动探测；多网卡可显式指定）
+cd someip/hud
+ARHUD_SD=true python3 hud_server.py
+
+# 主机B：客户端 —— 关键：routing 指向【本机】RM 宿主（客户端首应用自持 RM）
+cd someip/hud
+ARHUD_SD=true ARHUD_ROUTING_HOST=arhud_client_0 ARHUD_EXIT_ALL=1 python3 hud_client.py
+#   若 B 机跑 vsomeipd 守护进程，则 routing=routingmanagerd
+
+# 前提：两端 service-discovery 开启；多播 224.0.2.4:30490 网络可达；
+#       防火墙放行 UDP 51400-51409/52001、30490
+```
+
+验证：`bash docker/integration_test_dual_host.sh`（双容器自动化）。
+
+---
+
 ## 方式二：本机 Linux（已装好 vsomeip + vsomeip_py）
 
 安装参考 `docker/Dockerfile`（Ubuntu 22.04 + vsomeip 3.4.10 + vsomeip_py + scapy）。

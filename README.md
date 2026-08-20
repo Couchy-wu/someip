@@ -103,6 +103,14 @@ pcap 内容：SOME/IP NOTIFICATION 报文（UDP），载荷为 `NewLaneLineDataN
 识别与自测：`python3 vsomeip_example/endian.py`；C++ 参考实现见 `docker/endian_check.cpp`
 （含"不要 memcpy 原生结构体当载荷"的警告）。
 
+## 双机（跨主机）通信
+
+**支持，已实测**：vsomeip 天生支持多主机（每主机各自 RM，SD 多播发现 + 网络 UDP/TCP 数据通道）。
+双机需 3 处配置调整：① `unicast`=各自主机真实 IP（`get_local_ip` 自动探测，含无外网回退）；
+② 客户端 `routing` 指向**本机** RM 宿主（无服务端的主机用客户端首应用自持，如
+`ARHUD_ROUTING_HOST=arhud_client_0`，或跑 vsomeipd）；③ SD 开启 + 多播/防火墙放行。
+自动化验证：`docker/integration_test_dual_host.sh`（A 机服务端 → B 机客户端收齐 23/23 事件）。
+
 ## 测试状态
 
 - `test_pipeline.py`：pcap 解码/序列化往返回归测试 ✅

@@ -121,3 +121,7 @@ jobs:
             -v "${{ github.workspace }}/docker/integration_test_hud_cpp.sh:/tests/integration_test_hud_cpp.sh:ro" \
             -w /hudcpp \
             arhud-vsomeip-test bash /tests/integration_test_hud_cpp.sh
+
+      - name: 双机通信测试 (双容器/双网络命名空间, SD 多播)
+        run: |
+          bash ${{ github.workspace }}/docker/integration_test_dual_host.sh
