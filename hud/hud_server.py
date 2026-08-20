@@ -33,7 +33,24 @@ except ImportError:
 SD_ENABLE = os.environ.get("ARHUD_SD", "true")
 SEND_INTERVAL_S = float(os.environ.get("ARHUD_INTERVAL", "0.2"))
 SEND_COUNT = int(os.environ.get("ARHUD_SEND_COUNT", "0"))
+PCAP_FILE = os.environ.get("ARHUD_PCAP", "")   # 设置后从 pcap 回放（与 make_hud_pcap.py 字节一致）
 SERVER_ID_BASE = int(os.environ.get("ARHUD_SERVER_ID_BASE", "0x1443"), 0)  # 第一个=0x1443(文档应用ID)
+
+
+def load_pcap_replay(pcap_file: str):
+    """从 pcap 解码各 (service,event) 的载荷（严格 SOME/IP 过滤：本服务+本事件+NOTIFICATION）"""
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates = [here, os.environ.get("ARHUD_EXAMPLE_DIR", ""),
+                  os.path.abspath(os.path.join(here, "..", "vsomeip_example"))]
+    sys.path[:0] = [c for c in candidates if c and os.path.isdir(c)]
+    from pcap_decoder import decode_pcap
+    replay = {}
+    for svc, inst, event, name, group, port, kind in HUD_EVENTS:
+        events = decode_pcap(pcap_file, svc, event)
+        replay[(svc, event)] = [e.payload for e in events]
+    total = sum(len(v) for v in replay.values())
+    print(f"[Server] 从 pcap 回放: {pcap_file}  共 {total} 条通知")
+    return replay
 
 
 def main():
@@ -73,6 +90,7 @@ def main():
                   f"event=0x{event:04X} group=0x{group:04X} port={cfg['port']} {name}")
 
     print(f"[Server] 启动完成，开始发送 23 个事件（Ctrl+C 退出）")
+    replay = load_pcap_replay(PCAP_FILE) if (PCAP_FILE and os.path.exists(PCAP_FILE)) else None
     counter = 0
     try:
         while True:
@@ -83,11 +101,16 @@ def main():
                     if SEND_COUNT and counter > SEND_COUNT:
                         print(f"[Server] 已发送 {SEND_COUNT} 条，退出")
                         return
-                    payload = bytearray(make_sample(kind, counter))
+                    key = (svc, event)
+                    if replay and key in replay and replay[key]:
+                        pool = replay[key]
+                        payload = bytearray(pool[(counter - 1) % len(pool)])
+                    else:
+                        payload = bytearray(make_sample(kind, counter))
                     apps[i].notify(event, payload)
-                    if SEND_COUNT == 0 or counter <= 5:
-                        print(f"  [send] #{counter} svc=0x{svc:04X} event=0x{event:04X} "
-                              f"{name} payload={len(payload)}B")
+                    print(f"[send] #{counter} svc=0x{svc:04X} event=0x{event:04X} "
+                          f"{name:34s} len={len(payload):4d}B hex={bytes(payload)[:16].hex().upper()}",
+                          flush=True)
                     time.sleep(SEND_INTERVAL_S / max(1, len(cfg["events"])))
     except KeyboardInterrupt:
         print("\n[Server] 正在退出...")

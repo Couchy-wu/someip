@@ -103,3 +103,12 @@ jobs:
             -v "${{ github.workspace }}/docker/integration_test_hud.sh:/tests/integration_test_hud.sh:ro" \
             -w /app \
             arhud-vsomeip-test bash /tests/integration_test_hud.sh
+
+      - name: AR-HUD pcap 全链路测试 (生成 pcap → 服务端回放 → 客户端接收)
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/vsomeip_example:/app:ro" \
+            -v "${{ github.workspace }}/hud:/hud:ro" \
+            -v "${{ github.workspace }}/docker/integration_test_hud_pcap.sh:/tests/integration_test_hud_pcap.sh:ro" \
+            -w /hud \
+            arhud-vsomeip-test bash /tests/integration_test_hud_pcap.sh

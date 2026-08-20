@@ -17,17 +17,17 @@ echo " ArHud SOME/IP Docker 测试 (目标: Ubuntu 22.04 + Python 3.10)"
 echo "============================================================"
 
 # ---- 1) 构建镜像 ----
-echo "[1/9] 构建镜像 (编译 vsomeip 3.4.10 + vsomeip_py，首次约 5-15 分钟)..."
+echo "[1/10] 构建镜像 (编译 vsomeip 3.4.10 + vsomeip_py，首次约 5-15 分钟)..."
 docker build -t "$IMAGE" -f "$ROOT/docker/Dockerfile" "$ROOT"
 
 # ---- 2) 解码管线回归测试（pcap 生成/解码/序列化往返，不依赖 vsomeip 运行时）----
 echo
-echo "[2/9] 解码管线回归测试 (test_pipeline.py)..."
+echo "[2/10] 解码管线回归测试 (test_pipeline.py)..."
 docker run --rm -v "$ROOT/vsomeip_example:/app:ro" -w /app "$IMAGE" python3 test_pipeline.py
 
 # ---- 3) 真实 vsomeip 两进程收发集成测试 ----
 echo
-echo "[3/9] vsomeip 真实收发集成测试 (server.py + client.py)..."
+echo "[3/10] vsomeip 真实收发集成测试 (server.py + client.py)..."
 docker run --rm \
     -v "$ROOT/vsomeip_example:/app:ro" \
     -v "$ROOT/docker/integration_test.sh:/tests/integration_test.sh:ro" \
@@ -36,7 +36,7 @@ docker run --rm \
 
 # ---- 4) 20 服务集成测试 ----
 echo
-echo "[4/9] 20 服务集成测试 (server_multi.py + client_multi.py)..."
+echo "[4/10] 20 服务集成测试 (server_multi.py + client_multi.py)..."
 docker run --rm \
     -v "$ROOT/vsomeip_example:/app:ro" \
     -v "$ROOT/docker/integration_test_multi.sh:/tests/integration_test_multi.sh:ro" \
@@ -45,7 +45,7 @@ docker run --rm \
 
 # ---- 5) C++ 单应用订阅 20 服务验证 ----
 echo
-echo "[5/9] C++ 单应用订阅 20 服务验证 (min_cli_multi ↔ server_multi.py)..."
+echo "[5/10] C++ 单应用订阅 20 服务验证 (min_cli_multi ↔ server_multi.py)..."
 docker run --rm \
     -v "$ROOT/vsomeip_example:/app:ro" \
     -v "$ROOT/docker/cpp_client_test_multi.sh:/tests/cpp_client_test_multi.sh:ro" \
@@ -55,7 +55,7 @@ docker run --rm \
 
 # ---- 6) Windows 修复代码跨平台校验 ----
 echo
-echo "[6/9] Windows 修复代码跨平台校验 (windows/ ↔ vsomeip)..."
+echo "[6/10] Windows 修复代码跨平台校验 (windows/ ↔ vsomeip)..."
 docker run --rm \
     -v "$ROOT/windows:/win:ro" \
     -v "$ROOT/docker/cross_check_windows.sh:/tests/cross_check_windows.sh:ro" \
@@ -64,7 +64,7 @@ docker run --rm \
 
 # ---- 7) pcap 全链路测试（构造 pcap → Ubuntu + Windows 程序）----
 echo
-echo "[7/9] pcap 全链路测试 (构造 pcap → Ubuntu + Windows 程序)..."
+echo "[7/10] pcap 全链路测试 (构造 pcap → Ubuntu + Windows 程序)..."
 docker run --rm \
     -v "$ROOT/vsomeip_example:/app:ro" \
     -v "$ROOT/windows:/win:ro" \
@@ -74,7 +74,7 @@ docker run --rm \
 
 # ---- 8) C++ 单应用服务端提供 20 服务验证 ----
 echo
-echo "[8/9] C++ 单应用服务端提供 20 服务验证 (min_svc_multi ↔ C++/Python 客户端)..."
+echo "[8/10] C++ 单应用服务端提供 20 服务验证 (min_svc_multi ↔ C++/Python 客户端)..."
 docker run --rm \
     -v "$ROOT/vsomeip_example:/app:ro" \
     -v "$ROOT/docker/cpp_server_test_multi.sh:/tests/cpp_server_test_multi.sh:ro" \
@@ -85,13 +85,23 @@ docker run --rm \
 
 # ---- 9) AR-HUD 23 服务集成测试 ----
 echo
-echo "[9/9] AR-HUD 23 服务集成测试 (hud_server.py + hud_client.py)..."
+echo "[9/10] AR-HUD 23 服务集成测试 (hud_server.py + hud_client.py)..."
 docker run --rm \
     -v "$ROOT/vsomeip_example:/app:ro" \
     -v "$ROOT/hud:/hud:ro" \
     -v "$ROOT/docker/integration_test_hud.sh:/tests/integration_test_hud.sh:ro" \
     -w /app \
     "$IMAGE" bash /tests/integration_test_hud.sh
+
+# ---- 10) AR-HUD pcap 全链路测试（生成 pcap → 服务端回放 → 客户端接收）----
+echo
+echo "[10/10] AR-HUD pcap 全链路测试 (生成 23 事件 pcap → 回放 → 接收)..."
+docker run --rm \
+    -v "$ROOT/vsomeip_example:/app:ro" \
+    -v "$ROOT/hud:/hud:ro" \
+    -v "$ROOT/docker/integration_test_hud_pcap.sh:/tests/integration_test_hud_pcap.sh:ro" \
+    -w /hud \
+    "$IMAGE" bash /tests/integration_test_hud_pcap.sh
 
 echo
 echo "============================================================"
