@@ -119,7 +119,10 @@ int main(int argc, char** argv) {
         std::set<vsomeip::eventgroup_t> groups = { e.group };
         app->request_event(e.service, e.instance, e.event, groups,
                            vsomeip::event_type_e::ET_FIELD);
-        app->subscribe(e.service, e.instance, e.group, 0x00 /* DEFAULT_MAJOR: 与服务端 offer 一致 */);
+        // 5 参 subscribe(service, instance, group, major, event)：按具体事件订阅。
+        // 【双机必须】vsomeip 3.4.10 远程订阅中，同一事件组内多个事件用 4 参(仅按组, ANY_EVENT)
+        // 只投递组内首个事件；5 参按事件订阅才能远程收到组内每个事件（单机本地路径无此限制）。
+        app->subscribe(e.service, e.instance, e.group, 0x00 /* DEFAULT_MAJOR */, e.event);
         app->register_message_handler(e.service, e.instance, e.event, on_message);
         app->register_availability_handler(e.service, e.instance, on_availability);
     }

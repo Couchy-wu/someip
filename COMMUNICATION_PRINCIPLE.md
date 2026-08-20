@@ -284,6 +284,12 @@ A 容器服务端 / B 容器客户端 → 断言 B 机 `已收 23/23`），已�
 > 注意：Docker 默认 bridge 多播可能不通；自定义 bridge 网络或真实局域网（交换机支持多播）可以。
 > C++ 客户端双机同理：`hud_client.cpp` 配置 `routing` 指向本机 RM（vsomeipd 或自身应用名）。
 
+**双机多事件同组的关键坑（实测发现）**：vsomeip 3.4.10 中，远程订阅同一事件组内的多个事件，
+若用 4 参 `subscribe(service, instance, group, major)`（仅按组，ANY_EVENT），**只投递组内首个事件**；
+必须用 **5 参 `subscribe(service, instance, group, major, event)`（按具体事件订阅）** 才能远程收到
+组内每个事件（单机本地路径无此限制，Python 客户端因每服务独立应用恰好规避）。
+本仓库 C++ 客户端（`hud_client.cpp` / `min_cli_multi.cpp`）已全部使用 5 参。
+
 ---
 
 ## 8. 常见理解误区

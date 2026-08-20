@@ -28,9 +28,11 @@ docker network create --driver bridge "$NET" >/dev/null
 
 docker run --rm -d --name "$A" --network "$NET" \
     -v "$ROOT/hud:/hud:ro" -v "$ROOT/vsomeip_example:/app:ro" -v "$ROOT/windows:/win:ro" \
+    -v "$ROOT/hud_cpp:/hudcpp:ro" \
     arhud-vsomeip-test sleep 900 >/dev/null
 docker run --rm -d --name "$B" --network "$NET" \
     -v "$ROOT/hud:/hud:ro" -v "$ROOT/vsomeip_example:/app:ro" -v "$ROOT/windows:/win:ro" \
+    -v "$ROOT/hud_cpp:/hudcpp:ro" \
     arhud-vsomeip-test sleep 900 >/dev/null
 
 AIP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$A")
@@ -60,6 +62,33 @@ echo "B 接收总数: $(docker exec "$B" bash -c 'grep -ac "\[recv\]" /tmp/r/cli
 echo "B 去重事件数: $(docker exec "$B" bash -c 'grep -a "\[recv\]" /tmp/r/client.log | grep -oE "svc=0x[0-9A-F]+ inst=0x[0-9A-F]+ event=0x[0-9A-F]+" | sort -u | wc -l | tr -d " "')"
 
 FAIL=0
+
+echo
+echo "=== 双机 C++ 客户端 (Python 服务端 ⇄ C++ 客户端, 5 参 subscribe) ==="
+# 先停掉 B 机 Python 客户端（它占着 B 机 RM 宿主与 UDS 套接字，会让 C++ 客户端无法成为本机 RM 宿主）
+docker exec "$B" bash -c 'pkill -9 -x python3 2>/dev/null; sleep 1; rm -f /tmp/vsomeip-* /tmp/hud_cpp_done.marker' || true
+# 用修复后的 hud_cpp 代码重新编译 C++ 客户端，并在 B 机以本机 RM 宿主方式运行
+docker exec "$B" bash -c 'cp /hudcpp/hud_client.cpp /hudcpp/hud_data_types.cpp /hudcpp/hud_data_types.hpp /tmp/r/ && cd /tmp/r && g++ -std=c++14 -O2 -I. hud_client.cpp hud_data_types.cpp -L/usr/local/lib -lvsomeip3 -o hud_client'     || { echo "FAIL: C++ 客户端编译失败"; FAIL=1; }
+BIP2=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$B")
+docker exec "$B" bash -c "python3 - <<EOF
+import json
+json.dump({'unicast': '$BIP2', 'logging': {'level': 'info', 'console': 'true'},
+           'applications': [{'name': 'hud_client_cpp', 'id': '0x2100'}],
+           'routing': 'hud_client_cpp',
+           'service-discovery': {'enable': 'true', 'multicast': '224.0.2.4', 'port': '30490'}},
+          open('/tmp/r/vsomeip_dual.json', 'w'), indent=2)
+EOF"
+docker exec -d "$B" bash -c 'cd /tmp/r && rm -f /tmp/vsomeip-* /tmp/hud_cpp_done.marker && VSOMEIP_CONFIGURATION=/tmp/r/vsomeip_dual.json timeout -k 3 60 ./hud_client > cpp_client.log 2>&1'
+CPPOK=0
+for i in $(seq 1 90); do
+    docker exec "$B" bash -c 'grep -aq "已收 23/23" /tmp/r/cpp_client.log 2>/dev/null' && { CPPOK=1; break; }
+    docker exec "$B" bash -c 'grep -aq "\[done\]" /tmp/r/cpp_client.log 2>/dev/null' && break
+    sleep 1
+done
+echo "C++ 客户端收齐证据: $([ "$CPPOK" -eq 1 ] && echo YES || echo NO)"
+docker exec "$B" bash -c 'echo "去重: $(grep -a "\[recv\]" /tmp/r/cpp_client.log | sed -E "s/.*svc=(0x[0-9A-F]+) inst=.*event=(0x[0-9A-F]+).*/:/" | sort -u | wc -l | tr -d " ") 接收: $(grep -ac "\[recv\]" /tmp/r/cpp_client.log) 解析失败: $(grep -ac "解析失败" /tmp/r/cpp_client.log)"'
+[ "$CPPOK" -eq 1 ] || { echo "FAIL: 双机 C++ 客户端未收齐 23 事件"; FAIL=1; }
+
 [ "$OK" -eq 1 ] || { echo "FAIL: B 机客户端未收齐 23 事件"; FAIL=1; }
 [ -n "$AIP" ] && [ "$AIP" != "$BIP" ] || { echo "FAIL: 双机 IP 未区分"; FAIL=1; }
 docker exec "$B" bash -c 'grep -aq "已收 23/23" /tmp/r/client.log' || { echo "FAIL: 无 23/23 证据"; FAIL=1; }

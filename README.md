@@ -109,7 +109,8 @@ pcap 内容：SOME/IP NOTIFICATION 报文（UDP），载荷为 `NewLaneLineDataN
 双机需 3 处配置调整：① `unicast`=各自主机真实 IP（`get_local_ip` 自动探测，含无外网回退）；
 ② 客户端 `routing` 指向**本机** RM 宿主（无服务端的主机用客户端首应用自持，如
 `ARHUD_ROUTING_HOST=arhud_client_0`，或跑 vsomeipd）；③ SD 开启 + 多播/防火墙放行。
-自动化验证：`docker/integration_test_dual_host.sh`（A 机服务端 → B 机客户端收齐 23/23 事件）。
+自动化验证：`docker/integration_test_dual_host.sh`（A 机服务端 → B 机客户端收齐 23/23 事件，含 Python 与 C++ 客户端）。
+**C++ 客户端多事件同组远程订阅须用 5 参 `subscribe(..., event)`**（vsomeip 3.4.10 实测：4 参只投递组内首个事件）。
 
 ## 测试状态
 

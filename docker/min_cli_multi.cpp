@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
         std::set<vsomeip::eventgroup_t> groups = { EVENT_GROUP };
         app->request_event(svc, INSTANCE_ID, EVENT_ID, groups,
                            vsomeip::event_type_e::ET_FIELD);
-        app->subscribe(svc, INSTANCE_ID, EVENT_GROUP, 0x00 /* DEFAULT_MAJOR: 与服务端 offer 的 major 一致 */);
+        app->subscribe(svc, INSTANCE_ID, EVENT_GROUP, 0x00 /* DEFAULT_MAJOR */, EVENT_ID /* 按事件订阅: 双机远程多事件需要 */);
         app->register_message_handler(svc, INSTANCE_ID, EVENT_ID, on_notification);
     }
 

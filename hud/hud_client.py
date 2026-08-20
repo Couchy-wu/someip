@@ -87,6 +87,8 @@ def main():
             {"service": svc, "instance": cfg["instance"], "unreliable": cfg["port"]})
     configuration["routing"] = ROUTING_HOST      # 关键：指向服务端第一个应用
     configuration["service-discovery"]["enable"] = SD_ENABLE
+    # 多播组统一用 new_describe.md 规定的 224.0.2.4（与 C++ 客户端一致；双机两端必须同组）
+    configuration["service-discovery"]["multicast"] = "224.0.2.4"
 
     apps = []
     for i, svc in enumerate(svc_ids):

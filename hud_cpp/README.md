@@ -55,10 +55,17 @@ cp vsomeip_client.json ./vsomeip.json
 | | C++ 客户端（本目录） | Python 客户端（hud/hud_client.py） |
 |---|---|---|
 | 应用数 | **1 个**（标准 vsomeip） | 11 个（vsomeip_py 包装层限制） |
-| 订阅 | `request_service/request_event/subscribe` ×23 | `on_event` ×23 |
+| 订阅 | `request_service/request_event/subscribe(5参, 按事件)` ×23 | `on_event` ×23 |
 | 序列化 | C++ 大端编解码（hud_data_types.cpp） | Python struct `>` |
 | 依赖 | vsomeip C++ 库 | vsomeip_py |
 | 与 Python 服务端兼容 | ✅ 已实测（23/23） | ✅ 已实测 |
+
+## 双机注意
+
+双机（跨主机）时：`unicast`=本机真实 IP、`routing` 指向本机 RM 宿主（vsomeipd 或自身应用名）、
+SD 开启；**多事件同组必须用 5 参 `subscribe(..., event)` 按事件订阅**（4 参只按组在远程只投递组内
+首个事件，vsomeip 3.4.10 实测行为）。仓库双机测试 `docker/integration_test_dual_host.sh` 已覆盖
+C++ 客户端双机（23/23）。
 
 ## 测试
 
