@@ -9,6 +9,7 @@
 #include <set>
 #include <mutex>
 #include <atomic>
+#include <cstdio>
 
 #define SERVICES 20
 #define SERVICE_ID_BASE 0x0100
@@ -67,6 +68,10 @@ int main(int argc, char **argv) {
         if (received_services.size() >= SERVICES) {
             std::cout << "DONE: 全部 " << SERVICES << " 个服务均已收到事件 ✔" << std::endl;
             fflush(stdout);
+            {   // 独立标记文件（stdout 与 vsomeip 日志共享 fd 会行交错，标记文件不受影响）
+                FILE *f = fopen("/tmp/min_cli_done.marker", "w");
+                if (f) { fprintf(f, "DONE %d/%d", (int)received_services.size(), SERVICES); fclose(f); }
+            }
             std::_Exit(0);   // 跳过 vsomeip stop()（已知可能挂起），测试场景直接退出
         }
     }

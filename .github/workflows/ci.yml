@@ -94,3 +94,12 @@ jobs:
             -v "${{ github.workspace }}/docker/min_cli_multi.cpp:/tests/min_cli_multi.cpp:ro" \
             -w /app \
             arhud-vsomeip-test bash /tests/cpp_server_test_multi.sh
+
+      - name: AR-HUD 23 服务集成测试 (hud_server.py + hud_client.py)
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/vsomeip_example:/app:ro" \
+            -v "${{ github.workspace }}/hud:/hud:ro" \
+            -v "${{ github.workspace }}/docker/integration_test_hud.sh:/tests/integration_test_hud.sh:ro" \
+            -w /app \
+            arhud-vsomeip-test bash /tests/integration_test_hud.sh

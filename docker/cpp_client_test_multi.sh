@@ -34,7 +34,8 @@ sleep 0.5
 echo "--- cli.log 摘要 ---"
 grep -E "RECV|DONE|TIMEOUT|started" cli.log | tail -25
 
-if [ "$CLI_RC" -eq 0 ] && grep -q "DONE: 全部 20 个服务均已收到事件" cli.log; then
+rm -f /tmp/min_cli_done.marker
+if [ "$CLI_RC" -eq 0 ] && { grep -aq "已收齐 20/20" cli.log || [ -f /tmp/min_cli_done.marker ]; }; then
     echo
     echo "PASS: 单应用 C++ 客户端收齐全部 20 个服务的事件 ✔"
     exit 0

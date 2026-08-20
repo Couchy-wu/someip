@@ -63,8 +63,9 @@ timeout -k 3 45 /tmp/min_cli_multi > cli.log 2>&1
 CLI_RC=$?
 set -e
 echo "C++ 客户端 rc=$CLI_RC"
-grep -E "DONE|TIMEOUT|已收齐 20/20" cli.log | tail -3
-if grep -q "DONE: 全部 20 个服务均已收到事件" cli.log; then
+rm -f /tmp/min_cli_done.marker
+grep -aE "DONE|TIMEOUT|已收齐 20/20" cli.log | tail -3
+if grep -aq "已收齐 20/20" cli.log || [ -f /tmp/min_cli_done.marker ]; then
     echo "  [OK] C++ 单应用客户端收齐 20/20"
 else
     echo "  [FAIL] C++ 单应用客户端未收齐"; FAIL=1

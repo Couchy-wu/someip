@@ -9,10 +9,15 @@ ArHud 车道线数据 SOME/IP 通信的完整示例：**PCAP 解码 → 序列�
 ```
 ├── SOLUTION.md                 # 问题分析报告（日志解读、根因、解决方案）
 ├── SOLUTION_WINDOWS.md         # Windows 版问题分析（DEREGISTERED 循环根因与修复）
+├── SOLUTION_HUD.md             # AR-HUD 23 服务方案（new_describe.md 的 Python 化实现）
 ├── problem.txt                 # 原始问题描述
 ├── windows_problem.txt         # Windows 版问题描述
 ├── arhud_client_fixed.py       # 最小修正版客户端
 ├── arhud_server_fixed.py       # 最小修正版服务端
+├── hud/                        # AR-HUD 23 服务/11 个服务（new_describe.md）
+│   ├── hud_data_types.py       #   23 事件注册表 + 12 种类型序列化/反序列化
+│   ├── hud_server.py           #   11 服务应用服务端（端口/实例按修正表）
+│   └── hud_client.py           #   11 应用客户端订阅 23 事件（含 0x000E 三事件组）
 ├── windows/                    # Windows 部署（vsomeip_py）
 │   ├── vsomeip_server_windows.py  #   修正服务端（3 服务，routing=arhud_server）
 │   ├── vsomeip_client_windows.py  #   修正客户端（订阅 3 服务）
@@ -46,7 +51,8 @@ ArHud 车道线数据 SOME/IP 通信的完整示例：**PCAP 解码 → 序列�
     ├── cpp_client_test.sh      #   C++ 客户端 ↔ Python 服务端 验证
     ├── cpp_client_test_multi.sh #  C++ 单应用 ↔ 20 服务服务端 验证
     ├── cross_check_windows.sh  #   windows/ 修复代码跨平台校验
-    └── integration_test_pcap.sh #  pcap 全链路测试（Ubuntu+Windows 程序）
+    ├── integration_test_pcap.sh #  pcap 全链路测试（Ubuntu+Windows 程序）
+    └── integration_test_hud.sh  #  AR-HUD 23 服务集成测试
 ```
 
 ## 快速开始
