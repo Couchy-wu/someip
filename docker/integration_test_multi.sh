@@ -15,27 +15,31 @@ ARHUD_SD=true ARHUD_SERVICES=20 ARHUD_SEND_COUNT=500 ARHUD_INTERVAL=0.2 \
 SPID=$!
 sleep 8   # 20 个服务应用启动/注册/offer 需要更长时间（CI 慢速环境留足余量）
 
-echo "--- 启动客户端（收齐 20 个服务即退出，60s 超时保护）---"
-set +e
+echo "--- 启动客户端（后台 + 轮询收齐证据，规避 GIL 高负载下退出延迟）---"
 ARHUD_SD=true ARHUD_SERVICES=20 ARHUD_EXIT_ALL=1 timeout -k 3 90 \
-    python3 client_multi.py > client.log 2>&1
-CLIENT_RC=$?
-set -e
-echo "客户端退出码: $CLIENT_RC"
-
-kill -9 "$SPID" 2>/dev/null || true
-wait "$SPID" 2>/dev/null || true
+    python3 -u client_multi.py > client.log 2>&1 &
+CPID=$!
+OK=0
+for i in $(seq 1 90); do
+    grep -aq "已收齐 20/20" client.log 2>/dev/null && { OK=1; break; }
+    grep -aq "\[done\]" client.log 2>/dev/null && break
+    sleep 1
+done
+kill -9 "$SPID" "$CPID" 2>/dev/null || true
+wait "$CPID" 2>/dev/null || true
+echo "客户端已收齐 20 服务证据: $([ "$OK" -eq 1 ] && echo YES || echo NO)"
+sleep 0.5
 
 echo
 echo "==================== 客户端日志(摘要) ===================="
-grep -E "\[recv\]|\[done\]|反序列化失败" client.log | head -30
+grep -m 30 -aE "\[recv\]|\[done\]|反序列化失败" client.log || true
 echo
 echo "==================== 服务端日志(摘要) ===================="
-grep -E "就绪|\[send\]|error|Error" server.log | head -8
+grep -m 8 -aE "就绪|\[send\]|error|Error" server.log || true
 
 # ---- 断言 ----
 FAIL=0
-grep -q "20 个服务均已收到事件" client.log \
+[ "$OK" -eq 1 ] && grep -aq "已收齐 20/20" client.log \
     || { echo "FAIL: 客户端未收齐全部 20 个服务的事件"; FAIL=1; }
 grep -q "反序列化失败" client.log \
     && { echo "FAIL: 存在反序列化失败"; FAIL=1; }

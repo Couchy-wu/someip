@@ -28,7 +28,7 @@ kill -9 "$SPID" 2>/dev/null || true
 sleep 0.5
 
 echo "--- cli.log ---"
-grep -E "AVAILABILITY|registered|error|Error" cli.log | head -10
+grep -m 10 -aE "AVAILABILITY|registered|error|Error" cli.log || true
 
 if grep -q "AVAILABILITY: c.c = true" cli.log; then
     echo

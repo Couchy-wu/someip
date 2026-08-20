@@ -33,7 +33,7 @@ set -e
 kill -9 "$SPID" 2>/dev/null || true
 sleep 0.5
 echo "ubuntu client rc=$RC"
-grep -E "解码出|收到事件|timestamp=" server.log client.log | head -14
+grep -m 14 -aE "解码出|收到事件|timestamp=" server.log client.log || true
 
 grep -q "解码出 6 条事件" server.log || { echo "FAIL: 服务端未从 pcap 解码出 6 条(噪声应被过滤)"; FAIL=1; }
 [ "$RC" -eq 0 ] || { echo "FAIL: Ubuntu 客户端未收齐 (rc=$RC)"; FAIL=1; }
@@ -61,7 +61,7 @@ set -e
 kill -9 "$SPID" 2>/dev/null || true
 sleep 0.5
 echo "windows client rc=$WRC"
-grep -E "\[pcap\]|\[Client\] 收到|解析: version" server.log client.log | head -14
+grep -m 14 -aE "\[pcap\]|\[Client\] 收到|解析: version" server.log client.log || true
 
 grep -q "3 个服务均已收到事件" client.log || { echo "FAIL: Windows 客户端未收齐 3 服务"; FAIL=1; }
 if grep -aq "解析: version=1" client.log || grep -aq "len=91" client.log; then
