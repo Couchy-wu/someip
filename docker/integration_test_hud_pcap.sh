@@ -12,7 +12,7 @@ cd /tmp/hudpcap
 rm -f /tmp/vsomeip-* vsomeip.json
 
 echo "--- 1) 生成 23 事件 pcap（载荷 = hud_data_types 序列化字节）---"
-python3 make_hud_pcap.py /tmp/arhud_hud.pcap --rounds 1 | head -6
+python3 make_hud_pcap.py /tmp/arhud_hud.pcap --rounds 1 | sed -n "1,6p"
 echo "  ..."
 grep -c "svc=0x" /tmp/arhud_hud.pcap 2>/dev/null || true
 
@@ -40,10 +40,10 @@ sleep 0.5
 
 echo
 echo "==================== 服务端发送结果（前 46 条） ===================="
-grep -a "\[send\]" server.log | head -46
+grep -am 46 -a "\[send\]" server.log || true
 echo
 echo "==================== 客户端接收结果 ===================="
-grep -a "\[recv\]" client.log | grep -aE "已收 (23|2[0-2])/23|\[done\]" | head -30
+grep -am 30 -aE "\[recv\].*(已收 (23|2[0-2])/23|\[done\])" client.log || true
 
 echo
 echo "--- 统计 ---"
