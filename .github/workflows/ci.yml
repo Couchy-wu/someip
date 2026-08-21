@@ -130,3 +130,8 @@ jobs:
         run: |
           bash ${{ github.workspace }}/docker/integration_test_longjie.sh
         timeout-minutes: 10
+
+      - name: to_longjie 固定配置客户端 ⇄ Python 服务端 (RM宿主 + 不改客户端配置)
+        run: |
+          bash ${{ github.workspace }}/docker/integration_test_longjie_fixedcfg.sh
+        timeout-minutes: 10

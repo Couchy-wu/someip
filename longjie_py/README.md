@@ -109,6 +109,45 @@ to_longjie_demo_20250625/                 # 板子工程（源码 + 编译产物
 
 ---
 
+## 三.5 客户端配置固定（已烧录在板子，无法修改）时的部署 ★
+
+**结论：可以，客户端配置一行都不用改。** 前提是板子上保留一个 SP 分支的 RM 宿主进程
+（原始部署中它就是 C++ 服务端 `hud_pcap_huifang_server`——客户端 `routing=arhud01`
+必须连本机 UDS 的 RM，这个 RM 只能由 SP 分支进程托管）。
+
+```
+PC(192.168.x.x)                         板子(192.168.195.11)
+┌──────────────────────┐                ┌──────────────────────────────┐
+│ Python 服务端         │                │ ① RM 宿主（SP 分支，不提供服务）│
+│ (vsomeip_py 3.4.10)  │                │    = C++服务端二进制 + 空services│
+│  · offer 23事件 major1│   SD 多播      │    配置 + 静默pcap（只含SD包）  │
+│  · 0x000E 额外组0x0000│◄──────────────►│ ② 原版客户端（配置完全不动）    │
+│  · 事件 → 板子RM      │   事件UDP      │    routing=arhud01 → UDS→①    │
+└──────────────────────┘                └──────────────────────────────┘
+```
+
+**关键点（全部实测）**：
+1. **RM 宿主必须用 SP 分支进程**：标准 vsomeip 3.4.10 的 UDS 协议与 SP 分支不兼容，
+   Python 服务端无法托管这个 RM（客户端 register timeout）。
+2. RM 宿主 = 板上的 `hud_pcap_huifang_server` 二进制 + **空 `services` 配置**
+   （`longjie_py/someip_arhud01_rm_host.json`，改 unicast）+ **静默 pcap**
+   （`longjie_py/rm_host_silent.pcap`，只含 SD 包：解析器跳过不发送，时间戳提供喘息）。
+   空 services 避免本地 offer 遮蔽远程 Python 服务端；静默 pcap 避免空循环饿死 RM 线程。
+3. **启动顺序敏感**：Python 服务端 → RM 宿主 → 等 8s → 客户端（客户端注册握手机敏，
+   顺序不当会 register timeout 循环；多试几次或拉长间隔即可）。
+4. Python 服务端为 0x000E 额外 offer 了 eventgroup 0x0000（固定配置下 SP 包装器用
+   组 0 订阅 0x000E 事件）。
+5. **实测结果**：16/17 个 pcap 事件 + 生成事件全部收到（每事件 200+ 条，0 注册超时）。
+   **已知限制：0x000E:8001（组 0x0000 订阅）无法经 SD 远程投递**——SP 包装器把
+   per-event `event_groups` 解析为组 0，而 SOME/IP-SD 协议中组 0 无法承载事件；
+   该事件在板端同机（UDS 直连，原始部署）场景不受影响。
+6. 自动化测试：`bash docker/integration_test_longjie_fixedcfg.sh`（PASS）。
+
+**如果板子上没有任何 SP 分支进程（只有客户端）**：客户端本身就无法工作（缺本地 RM），
+这与 Python/其他服务端无关，是客户端二进制的硬性要求——必须先跑起 RM 宿主。
+
+---
+
 ## 四、部署指南
 
 ### 4.1 跨机部署（推荐：PC 跑 Python 服务端，板子跑客户端）

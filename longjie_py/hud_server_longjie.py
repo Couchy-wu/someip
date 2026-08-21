@@ -9,11 +9,17 @@ to_longjie_demo_20250625 真实客户端专用 Python 服务端
   1. 11 个服务 / 23 个事件，offer 版本 major=1（客户端配置 "major":"1" 按 1.0 请求/订阅）
   2. 路由管理器宿主 = arhud01（客户端配置 routing="arhud01" 经 UDS 连它；跨机时客户端改 routing=自身）
   3. 服务端口按附录A修正表：51400-51409 / 0x010A→52001；0x010A instance=0x0001，其余 instance=service_id
-  4. 0x000E 三事件分属 0x1101/0x1102/0x1103
+  4. 0x000E 三事件分属 0x1101/0x1102/0x1103；另在 eventgroup 0x0000 也 offer（固定配置的
+     SP 客户端用组 0 订阅 0x000E，见 README 三.5 节）
   5. SD: 224.0.2.4:30490, enable=true
   6. max-payload-size-unreliable=3000000 + 0x010A someip-tp(0x8001/0x8003)：大帧走 SOME/IP-TP
   7. 载荷来源：out.pcap 回放（含 SOME/IP-TP 重组，与 C++ 服务端一致）；pcap 缺失的事件可选项生成
   8. 生成载荷自动计算 Checksum = CRC32(payload[4:])（与 pcap 实测语义一致）
+
+两种部署模式：
+  A. 客户端配置可改（推荐）→ 客户端 routing=arhud02 自托管 RM，跨机网络模式（README 四章）
+  B. 客户端配置固定（板端烧录）→ 板子保留 SP 分支 RM 宿主（C++服务端+空services+静默pcap），
+     Python 服务端跨机；客户端 UDS→本地RM→SD→本服务端（README 三.5 节）
 
 运行:  python3 hud_server_longjie.py
 环境变量:
@@ -118,6 +124,10 @@ def main():
         cfg = svc_map[svc]
         for event, name, group, kind in cfg["events"]:
             app.offer(events=[event], group=group)
+            if svc == 0x000E:
+                # 客户端配置固定时(板端烧录, 无法改 0x000E 拆分)，SP 包装器会以 eventgroup
+                # 0x0000 订阅 0x000E 事件 → 服务端额外在组 0x0000 提供这三个事件
+                app.offer(events=[event], group=0x0000)
             print(f"  offer: svc=0x{svc:04X} inst=0x{cfg['instance']:04X} "
                   f"event=0x{event:04X} group=0x{group:04X} port={cfg['port']} {name}",
                   flush=True)
