@@ -1,0 +1,57 @@
+{
+    "unicast" : "192.168.195.11",
+    "netmask" : "255.255.255.0",
+    "network" : "arhud01",
+    "logging" : 
+    {
+        "level" : "debug",
+        "console" : "true",
+        "file":
+        {
+            "enable":"false",
+            "path":"/tmp/someip_arhud01.log"
+        },
+        "dlt":"false",
+        "dds_log_enable":"false",
+        "dmesg_log_enable":"false"
+    },
+    "applications" :
+    [
+        {
+            "name" : "arhud02",
+            "id" : "0x1002",
+            "max_dispatchers" : "25",
+	        "threads":"13"
+        }
+    ],
+    "clients" :
+    [
+        {"service":"0x000A","instance":"0x000A","major":"1","minor":"0","events":[{"name":"VehiclePositionInfoNotify","event":"0x8001"}],"event_group":"0x1101","unreliable":["52001"]},
+        {"service":"0x000B","instance":"0x000B","major":"1","minor":"0","events":[{"name":"RTKInfoNotify","event":"0x8001"},{"name":"IMUInfoNotify","event":"0x8002"}],"event_group":"0x1101","unreliable":["52002"]},
+        {"service":"0x000C","instance":"0x000C","major":"1","minor":"0","events":[{"name":"ObstacleInfoNotify","event":"0x8001"},{"name":"LaneLineDataNotify","event":"0x8002"},{"name":"NewLaneLineDataNotify","event":"0x8003"}],"event_group":"0x1101","unreliable":["52003"]},
+        {"service":"0x000D","instance":"0x000D","major":"1","minor":"0","events":[{"name":"ChangeLaneDataNotify","event":"0x8001"},{"name":"PilotStatusNofity","event":"0x8002"},{"name":"PilotAlarmAndNoticeInfoNotify","event":"0x8003"},{"name":"BroadcastInfoNotify","event":"0x8004"},{"name":"NewBroadcastInfoNotify","event":"0x8005"}],"event_group":"0x1101","unreliable":["52005"]},
+        {"service":"0x010A","instance":"0x0001","major":"1","minor":"0","events":[{"name":"HudRoadInfo_EG","event":"0x8001"},{"name":"HudMappathInfo_EG","event":"0x8002"},{"name":"HudNavigationmap","event":"0x8003"},{"name":"HudNavigationmap","event":"0x8004"}],"event_group":"0x1101","unreliable":["52011"],"someip-tp":{"client-to-service":["0x8001","0x8003"]}},
+        {"service":"0x000E","instance":"0x000E","major":"1","minor":"0","events":[{"name":"PlanningLineInfoNotify","event":"0x8001","event_groups":"0x1101"},{"name":"newPlanningLineInfo","event":"0x8002","event_groups":"0x1102"},{"name":"drivingAreaIdentification","event":"0x8003","event_groups":"0x1103"}],"unreliable":["52006"]},
+
+        {"service":"0x0007","instance":"0x0007","major":"1","minor":"0","events":[{"name":"NavigationStatus_LinkInfoNotify","event":"0x8001"}],"event_group":"0x1101","unreliable":["52007"]},
+        {"service":"0x0017","instance":"0x0017","major":"1","minor":"0","events":[{"name":"NewParkingRealTimeDataNotify","event":"0x8003"}],"event_group":"0x1101","unreliable":["52008"]},
+        {"service":"0x002B","instance":"0x002B","major":"1","minor":"0","events":[{"name":"NavigationHDLink2Info","event":"0x8001"}],"event_group":"0x1101","unreliable":["52009"]},
+        {"service":"0x8202","instance":"0x8202","major":"1","minor":"0","events":[{"name":"sdTraffiIncident","event":"0x8002"}],"event_group":"0x1101","unreliable":["52010"]},
+        {"service":"0x0018","instance":"0x0018","major":"1","minor":"0","events":[{"name":"hpaMapDataNotify","event":"0x8001"}],"event_group":"0x1101","unreliable":["52012"]}
+    ],
+    "routing":"arhud01",
+    "service-discovery" :
+    {
+        "enable" : "true",
+        "multicast" : "224.0.2.4",
+        "port" : "30490",
+        "protocol" : "udp",
+        "initial_delay_min" : "0",
+        "initial_delay_max" : "100",
+        "repetitions_base_delay" : "100",
+        "repetitions_max" : "3",
+        "ttl" : "3",
+        "cyclic_offer_delay" : "1000",
+        "request_response_delay" : "0"
+    }
+}

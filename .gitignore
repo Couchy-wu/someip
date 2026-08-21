@@ -12,3 +12,6 @@ __pycache__/
 
 # 临时/构建产物
 .dist/
+
+# to_longjie x86 SP 库（76MB，zip 内已含，需要时解压）
+to_longjie_demo_20250625/libs/lib_x86/

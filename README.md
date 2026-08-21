@@ -40,6 +40,12 @@ ArHud 车道线数据 SOME/IP 通信的完整示例：**PCAP 解码 → 序列�
 ├── testdata/                   # 现成测试 pcap（仓库内可直接下载使用）
 │   ├── test_arhud_000c_8003.pcap    #   Ubuntu 程序：服务 0x000C/事件 0x8003，6 条通知+噪声
 │   └── test_windows_000a_8001.pcap  #   Windows 程序：服务 0xA/0xB/0xC/事件 0x8001，9 条通知+噪声
+├── longjie_py/                 # ★ to_longjie 板端真实客户端 ⇄ Python 服务端（2025-06-25 工程）
+│   ├── hud_server_longjie.py   #   真实客户端专用服务端（major=1 / someip-tp / pcap TP 重组）
+│   ├── pcap_replay_tp.py       #   pcap 解析 + SOME/IP-TP 分片重组
+│   ├── someip_arhud01_client_crosshost.json  # 修正后的客户端配置模板
+│   └── README.md               #   部署指南 + 实测踩坑记录
+├── to_longjie_demo_20250625/   # ★ 板子拉取的原始工程（客户端二进制/SP库/pcap/源码）
 └── docker/                     # Docker 完整测试（目标: Ubuntu 22.04 + Python 3.10）
     ├── Dockerfile              #   编译 vsomeip 3.4.10 + vsomeip_py
     ├── run_tests.sh            #   一键: 构建 + 6 项测试
@@ -52,7 +58,8 @@ ArHud 车道线数据 SOME/IP 通信的完整示例：**PCAP 解码 → 序列�
     ├── cpp_client_test_multi.sh #  C++ 单应用 ↔ 20 服务服务端 验证
     ├── cross_check_windows.sh  #   windows/ 修复代码跨平台校验
     ├── integration_test_pcap.sh #  pcap 全链路测试（Ubuntu+Windows 程序）
-    └── integration_test_hud.sh  #  AR-HUD 23 服务集成测试
+    ├── integration_test_hud.sh  #  AR-HUD 23 服务集成测试
+    └── integration_test_longjie.sh # ★ 真实客户端 ⇄ Python 服务端 双机测试
 ```
 
 ## 快速开始
