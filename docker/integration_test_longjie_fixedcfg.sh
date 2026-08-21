@@ -21,18 +21,18 @@ NET="ljfix-$$"
 A="ljfix-srv-$$"; B="ljfix-brd-$$"
 CLIENT_CFG="$ROOT/to_longjie_demo_20250625/build/someip_arhud01.json"
 PCAP="$ROOT/to_longjie_demo_20250625/build/out.pcap"
-RM_HOST_BIN="$ROOT/to_longjie_demo_20250625/build/hud_pcap_huifang_server"
 RM_HOST_CFG="$ROOT/longjie_py/someip_arhud01_rm_host.json"
 RM_HOST_PCAP="$ROOT/longjie_py/rm_host_silent.pcap"
+ZIP="$ROOT/to_longjie_demo_20250625.zip"
 IMAGE="${IMAGE:-arhud-vsomeip-test}"
 FILL="${FILL:-1}"
 DURATION="${DURATION:-70}"
 
-[ -x "$RM_HOST_BIN" ] || { echo "缺少 RM 宿主二进制: $RM_HOST_BIN"; exit 1; }
 [ -f "$CLIENT_CFG" ] || { echo "缺少客户端配置: $CLIENT_CFG"; exit 1; }
 [ -f "$RM_HOST_CFG" ] || { echo "缺少 RM 宿主配置: $RM_HOST_CFG"; exit 1; }
 [ -f "$RM_HOST_PCAP" ] || { echo "缺少静默 pcap: $RM_HOST_PCAP"; exit 1; }
 [ -f "$PCAP" ] || { echo "缺少 pcap: $PCAP"; exit 1; }
+[ -f "$ZIP" ] || { echo "缺少工程 zip: $ZIP"; exit 1; }
 
 cleanup() {
     docker rm -f "$A" "$B" >/dev/null 2>&1 || true
@@ -41,6 +41,25 @@ cleanup() {
 trap cleanup EXIT
 
 echo "=== 固定配置客户端 ⇄ Python 服务端 测试（客户端配置不改） ==="
+
+# 二进制按镜像架构选择：aarch64 用 build/ + lib_bst_t517；x86_64 用 x86 二进制 + 从 zip 解压 x86 库
+ARCH=$(docker run --rm --entrypoint uname "$IMAGE" -m 2>/dev/null | tr -d '[:space:]')
+if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+    RM_HOST_BIN="$ROOT/to_longjie_demo_20250625/build/hud_pcap_huifang_server"
+    CLIENT_BIN="$ROOT/to_longjie_demo_20250625/build/hud_huifang_client"
+    LIBS_SRC="$ROOT/to_longjie_demo_20250625/libs/lib_bst_t517"
+else
+    RM_HOST_BIN="$ROOT/to_longjie_demo_20250625/build/hud_pcap_huifang_server_x86"
+    CLIENT_BIN="$ROOT/to_longjie_demo_20250625/build/hud_huifang_client_x86"
+    TMPX="$(mktemp -d)"
+    unzip -o -q "$ZIP" -d "$TMPX" 'to_longjie_demo_20250625/libs/lib_x86/*' 2>/dev/null || unzip -o -q "$ZIP" -d "$TMPX" '*/lib_x86/*' 2>/dev/null
+    LIBS_SRC="$(find "$TMPX" -type d -name lib_x86 | head -1)"
+    [ -n "$LIBS_SRC" ] || { echo "zip 中未找到 x86 库"; exit 1; }
+fi
+[ -x "$RM_HOST_BIN" ] || { echo "缺少 RM 宿主二进制: $RM_HOST_BIN"; exit 1; }
+[ -x "$CLIENT_BIN" ] || { echo "缺少客户端二进制: $CLIENT_BIN"; exit 1; }
+echo "镜像架构: $ARCH  RM宿主: $(basename "$RM_HOST_BIN")  客户端: $(basename "$CLIENT_BIN")"
+
 docker network create --driver bridge "$NET" >/dev/null
 
 docker run --rm -d --name "$A" --network "$NET" \
@@ -49,7 +68,7 @@ docker run --rm -d --name "$A" --network "$NET" \
     "$IMAGE" sleep 900 >/dev/null
 docker run --rm -d --name "$B" --network "$NET" \
     -v "$ROOT/to_longjie_demo_20250625/build:/cb:ro" \
-    -v "$ROOT/to_longjie_demo_20250625/libs/lib_bst_t517:/clibs:ro" \
+    -v "$LIBS_SRC:/clibs:ro" \
     -v "$ROOT/longjie_py:/ljcfg:ro" \
     "$IMAGE" sleep 900 >/dev/null
 
@@ -65,7 +84,7 @@ docker exec "$A" bash -c "grep -aE '\[Server\]' /tmp/r/server.log | head -1"
 
 echo "--- B: RM 宿主（C++ 服务端二进制 + 空 services + 静默 pcap） ---"
 docker exec "$B" bash -c "mkdir -p /lj/rm"
-docker exec "$B" bash -c "cp /cb/hud_pcap_huifang_server /lj/rm/ && chmod +x /lj/rm/hud_pcap_huifang_server"
+docker exec "$B" bash -c "cp /cb/$(basename "$RM_HOST_BIN") /lj/rm/hud_pcap_huifang_server && chmod +x /lj/rm/hud_pcap_huifang_server"
 docker exec "$B" bash -c "python3 - <<PYEOF
 import json
 cfg = json.load(open('/ljcfg/someip_arhud01_rm_host.json'))
@@ -78,7 +97,7 @@ docker exec -d "$B" bash -c "cd /lj/rm && rm -f /tmp/arhud01* /tmp/*.lck && LD_L
 sleep 8
 
 echo "--- B: 原版客户端（配置只改 unicast，routing=arhud01 不变） ---"
-docker exec "$B" bash -c "cp /cb/hud_huifang_client /lj/ && chmod +x /lj/hud_huifang_client"
+docker exec "$B" bash -c "cp /cb/$(basename "$CLIENT_BIN") /lj/hud_huifang_client && chmod +x /lj/hud_huifang_client"
 docker exec "$B" bash -c "python3 - <<PYEOF
 import json
 cfg = json.load(open('/cb/someip_arhud01.json'))
