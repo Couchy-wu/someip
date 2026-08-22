@@ -84,36 +84,48 @@
 
 ## 2. 最终方案：RM 宿主架构
 
-### 2.1 架构总览
+### 2.1 架构总览（实际部署拓扑）
+
+**实际部署**：Python 服务端跑在**本机**（替代原 C++ 服务端），通过**车载以太盒子**
+（透明网桥）连接开发板；板子上只有**既有 SOME/IP 中间件**（托管 RM）和**已烧录的客户端**，
+什么都不用新增、不用改动。
 
 ```
-PC / 服务器 (Python 服务端)                  板子 (客户端已烧录, 配置不可改)
-┌─────────────────────────────┐             ┌──────────────────────────────────┐
-│ Python 服务端                │             │ ① RM 宿主（SP 分支, 不提供服务）   │
-│ (vsomeip_py + 标准 3.4.10)   │             │    = C++服务端二进制              │
-│  · 11 应用 offer 23 事件      │  SD 多播    │    + 空 services 配置            │
-│  · major=1                   │◄──────────►│    + 静默 pcap（只含 SD 包）      │
-│  · 0x000E 额外 offer 组 0x0000│   事件 UDP  │ ② 原版客户端（配置完全不动）       │
-│  · 载荷: out.pcap 回放+生成   │             │    routing=arhud01               │
-└─────────────────────────────┘             │    → UDS 连接 ① 的 RM            │
-                                            └──────────────────────────────────┘
+本机 / PC (Python 服务端 = C++服务端替代者)        板子 (严格管控, 零改动)
+┌──────────────────────────────────┐   车载以太盒子   ┌─────────────────────────────┐
+│ Python 服务端                     │   (透明网桥)    │ ① 既有 SOME/IP 中间件         │
+│ (vsomeip_py + 标准 3.4.10)       │◄──SD多播+UDP──►│    (SP 分支, 托管 arhud01 RM) │
+│  · 11 应用 offer 23 事件          │                │ ② 原版客户端（配置烧录不动）   │
+│  · major=1                       │                │    routing=arhud01           │
+│  · 0x000E 额外 offer 组 0x0000    │                │    → UDS 连接 ① 的 RM        │
+│  · 载荷: out.pcap 回放+生成        │                │                             │
+└──────────────────────────────────┘                └─────────────────────────────┘
 ```
+
+**与原始部署（C++ 服务端）的对应关系**：
+
+| 原始部署 | Python 方案 | 位置 |
+|----------|-------------|------|
+| C++ 服务端 `hud_pcap_huifang_server`（回放 out.pcap 发数据） | **Python 服务端** `hud_server_longjie.py`（同样回放 out.pcap + 生成缺失事件） | 本机，经车载以太盒子连板子 |
+| 板子 SOME/IP 中间件（托管 arhud01 的 RM） | **不变**（既有程序） | 板子 |
+| 客户端 `hud_huifang_client`（配置烧录） | **不变** | 板子 |
 
 数据流（客户端视角与原始部署完全一致）：
 ```
-客户端订阅(组) --UDS--> 本地 RM(SP分支) --SD多播 Find/Subscribe--> Python服务端
-Python服务端 ACK + 事件 --UDP单播--> 本地 RM --UDS--> 客户端回调
+客户端订阅(组) --UDS--> 板子中间件RM --SD多播 Find/Subscribe--[车载以太盒子]--> 本机Python服务端
+本机Python服务端 ACK + 事件 --UDP单播--[车载以太盒子]--> 板子中间件RM --UDS--> 客户端回调
 ```
 
 ### 2.2 三个关键组件
 
-**① RM 宿主**（板子上必须有的 SP 分支进程）
+**① RM 宿主**（实际部署中 = 板子既有 SOME/IP 中间件）
 - 作用：托管 `arhud01` 的 routing manager（UDS socket `/tmp/arhud01-0`），替本地客户端
-  与远端做 SD 发现、订阅转发、事件回传。
-- 实现：直接用板子上已有的 `hud_pcap_huifang_server` 二进制（SP 分支编译，协议天然兼容），
-  配合两个关键文件：
-  - `longjie_py/someip_arhud01_rm_host.json`：**空 `services`** 配置 —— 不提供任何服务，
-    避免本地 offer 遮蔽远程 Python 服务端；
+  与远端做 SD 发现、订阅转发、事件回传。**实际部署中它已经存在**（板子中间件），无需新增。
+- 前提确认：板子中间件**不应 offer 这 11 个服务**（它只托管 RM + 转发 SD）。
+  若它 offer 了服务，本地 offer 会遮蔽远程 Python 服务端（见 5.9 问题⑤），需在中间件
+  配置里关闭 offer。
+- 自动化测试里用 `hud_pcap_huifang_server` 二进制（SP 分支）**模拟**板子中间件：
+  - `longjie_py/someip_arhud01_rm_host.json`：**空 `services`** 配置 —— 不提供任何服务；
   - `longjie_py/rm_host_silent.pcap`：**静默 pcap**（60 个间隔 1 秒的 SD 包）——
     SD 包被解析器跳过、不发送，时间戳提供喘息，避免空循环饿死 RM 线程。
 
@@ -137,27 +149,26 @@ Python服务端 ACK + 事件 --UDP单播--> 本地 RM --UDS--> 客户端回调
 
 ## 3. 部署指南
 
-### 3.1 板子侧（RM 宿主 + 原版客户端）
+### 3.1 实际部署：板子零改动，本机只跑 Python 服务端
 
+**板子侧**：什么都不用做（中间件 + 客户端都是既有程序）。只需确认：
+- 中间件在托管 `arhud01` 的 RM（`/tmp/arhud01-0` 存在）；
+- 中间件**不 offer** 这 11 个服务（否则遮蔽远程 Python 服务端）。
+
+**本机侧**（Python 服务端，替代 C++ 服务端）：
 ```bash
-# 1) 建目录，放入 C++ 服务端二进制 + SP 库 + 修正后的 RM 宿主配置 + 静默 pcap
-mkdir -p /data/someip/rm
-cp hud_pcap_huifang_server      /data/someip/rm/
-cp -r libs/lib_bst_t517         /data/someip/rm/libs/
-cp longjie_py/someip_arhud01_rm_host.json /data/someip/rm/someip_arhud01_pcap_server.json
-cp longjie_py/rm_host_silent.pcap        /data/someip/rm/out.pcap
-
-# 2) 改配置里的 unicast 为板子实际 IP（如 192.168.195.11）
-sed -i 's/192.168.195.11/<板子实际IP>/' /data/someip/rm/someip_arhud01_pcap_server.json
-
-# 3) 启动 RM 宿主（先启动！）
-cd /data/someip/rm
-LD_LIBRARY_PATH=$PWD/libs ./hud_pcap_huifang_server &
-
-# 4) 等 8 秒，再启动原版客户端（目录里有原版 someip_arhud01.json）
-cd /data/someip/client
-LD_LIBRARY_PATH=$PWD/libs ./hud_huifang_client
+# 依赖：Python 3.10 + vsomeip_py（构建方法见 docker/Dockerfile）
+python3 longjie_py/hud_server_longjie.py
+# 环境变量（按需）：
+#   ARHUD_UNICAST=<本机在车载以太盒子网络的 IP>   （默认自动探测）
+#   ARHUD_PCAP=<out.pcap 路径>                    （默认自动探测仓库内 pcap）
+#   ARHUD_FILL_MISSING=1                          （默认，缺失事件生成数据）
 ```
+
+**车载以太盒子**（透明网桥）要求：
+- PC 与板子同网段（板子固定 `192.168.195.11`，PC 配同网段 IP）；
+- 多播 `224.0.2.4:30490` 跨盒子转发（透明网桥默认转发多播）；
+- UDP 放行：30490、51400-51409、52001-52012。
 
 ### 3.2 PC 侧（Python 服务端）
 
@@ -319,6 +330,8 @@ vsomeip_py 加载 SP 库时也出现同样的 `std::length_error`。
 
 **想法**：板子上已有的 `hud_pcap_huifang_server`（SP 分支编译）本身就是"arhud01 应用 +
 RM 宿主"。它的行为和客户端天然兼容（原始部署就是这么工作的）。
+**在自动化测试中我们用这个二进制模拟"板子既有 SOME/IP 中间件"的 RM 角色**——
+实际部署里这个角色由板子中间件承担，无需任何新程序。
 
 **首次尝试**：直接跑 C++ 服务端（原版全配置）+ 客户端，同机：
 - 服务端 RM 日志出现 `REGISTERED_ACK(1002)` + 23 个 `REGISTER EVENT` —— **客户端注册成功**！

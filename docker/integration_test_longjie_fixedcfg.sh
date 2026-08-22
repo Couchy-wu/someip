@@ -2,9 +2,10 @@
 # to_longjie 固定配置客户端 ⇄ Python 服务端 双机测试（客户端配置完全不改）
 # ==========================================================================
 # 场景（客户端 someip_arhud01.json 已烧录在板子上，无法修改）：
-#   B 容器 = 板子：RM 宿主（C++ 服务端 hud_pcap_huifang_server + 空 services 配置
-#           + 静默 pcap）+ 原版客户端（routing=arhud01，经 UDS 连本地 RM）
-#   A 容器 = PC：Python 服务端（vsomeip_py）
+#   B 容器 = 板子：RM 宿主（用 C++ 服务端 hud_pcap_huifang_server 模拟板子既有
+#           SOME/IP 中间件 —— 空 services 配置 + 静默 pcap）+ 原版客户端
+#           （routing=arhud01，经 UDS 连本地 RM）
+#   A 容器 = 本机：Python 服务端（vsomeip_py，替代 C++ 服务端，经"以太网"连板子）
 # 原理：客户端订阅 → 本地 RM(UDS) → SD 多播 → Python 服务端 → 事件回传 RM → 客户端
 #
 # 关键点（实测）：
