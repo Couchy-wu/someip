@@ -1,7 +1,8 @@
 # to_longjie 真实客户端 ⇄ Python 服务端
 
-> **📄 详细方案与问题定位全记录见 [`FIXED_CONFIG_SOLUTION.md`](FIXED_CONFIG_SOLUTION.md)**
-> （含固定配置客户端的 RM 宿主架构 + 6 个关键问题的完整定位过程）
+> **📄 相关文档**
+> - [`FIXED_CONFIG_SOLUTION.md`](FIXED_CONFIG_SOLUTION.md) —— 固定配置完整方案 + 问题定位全记录
+> - [`DEVELOPMENT_AND_TROUBLESHOOTING.md`](DEVELOPMENT_AND_TROUBLESHOOTING.md) —— ★ 代码编写流程 + 排查方法论 + 现象速查表
 
 让板子上编译好的 **真实 C++ 客户端**（`hud_huifang_client`，比亚迪 AR-HUD，SP 协议栈/SomeipCom）
 正确订阅并收到 **Python 服务端**（vsomeip_py + 标准 vsomeip 3.4.10）发送的数据。
