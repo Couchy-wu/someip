@@ -44,6 +44,9 @@ ArHud 车道线数据 SOME/IP 通信的完整示例：**PCAP 解码 → 序列�
 │   ├── hud_server_longjie.py   #   真实客户端专用服务端（major=1 / someip-tp / pcap TP 重组）
 │   ├── pcap_replay_tp.py       #   pcap 解析 + SOME/IP-TP 分片重组
 │   ├── someip_arhud01_client_crosshost.json  # 修正后的客户端配置模板
+│   ├── someip_arhud01_rm_host.json    # RM 宿主配置模板（固定配置方案）
+│   ├── rm_host_silent.pcap            # 静默 pcap（RM 宿主用）
+│   ├── FIXED_CONFIG_SOLUTION.md       # ★ 固定配置完整方案 + 问题定位全记录
 │   └── README.md               #   部署指南 + 实测踩坑记录
 ├── to_longjie_demo_20250625/   # ★ 板子拉取的原始工程（客户端二进制/SP库/pcap/源码）
 └── docker/                     # Docker 完整测试（目标: Ubuntu 22.04 + Python 3.10）
