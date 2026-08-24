@@ -11,10 +11,12 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 NET="ljcpp-$$"
 A="ljcpp-a-$$"; B="ljcpp-b-$$"
 PCAP="$ROOT/to_longjie_demo_20250625/build/out.pcap"
+ZIP="$ROOT/to_longjie_demo_20250625.zip"
 IMAGE="${IMAGE:-arhud-vsomeip-test}"
 DURATION="${DURATION:-50}"
 
 [ -f "$PCAP" ] || { echo "缺少 pcap: $PCAP"; exit 1; }
+[ -f "$ZIP" ] || { echo "缺少工程 zip: $ZIP"; exit 1; }
 
 cleanup() {
     docker rm -f "$A" "$B" >/dev/null 2>&1 || true
@@ -23,6 +25,22 @@ cleanup() {
 trap cleanup EXIT
 
 echo "=== C++ 库服务端 ⇄ Python 调用 ⇄ 真实客户端 测试 ==="
+
+# 客户端二进制按镜像架构选择（CI 为 amd64 → x86 客户端 + zip 解压 x86 库）
+ARCH=$(docker run --rm --entrypoint uname "$IMAGE" -m 2>/dev/null | tr -d '[:space:]')
+if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+    CLIENT_BIN="$ROOT/to_longjie_demo_20250625/build/hud_huifang_client"
+    LIBS_SRC="$ROOT/to_longjie_demo_20250625/libs/lib_bst_t517"
+else
+    CLIENT_BIN="$ROOT/to_longjie_demo_20250625/build/hud_huifang_client_x86"
+    TMPX="$(mktemp -d)"
+    unzip -o -q "$ZIP" -d "$TMPX" 'to_longjie_demo_20250625/libs/lib_x86/*' 2>/dev/null || unzip -o -q "$ZIP" -d "$TMPX" '*/lib_x86/*' 2>/dev/null
+    LIBS_SRC="$(find "$TMPX" -type d -name lib_x86 | head -1)"
+    [ -n "$LIBS_SRC" ] || { echo "zip 中未找到 x86 库"; exit 1; }
+fi
+[ -x "$CLIENT_BIN" ] || { echo "缺少客户端二进制: $CLIENT_BIN"; exit 1; }
+echo "镜像架构: $ARCH  客户端: $(basename "$CLIENT_BIN")"
+
 docker network create --driver bridge "$NET" >/dev/null
 
 docker run --rm -d --name "$A" --network "$NET" \
@@ -30,7 +48,7 @@ docker run --rm -d --name "$A" --network "$NET" \
     "$IMAGE" sleep 900 >/dev/null
 docker run --rm -d --name "$B" --network "$NET" \
     -v "$ROOT/to_longjie_demo_20250625/build:/cb:ro" \
-    -v "$ROOT/to_longjie_demo_20250625/libs/lib_bst_t517:/clibs:ro" \
+    -v "$LIBS_SRC:/clibs:ro" \
     -v "$ROOT/longjie_py:/ljcfg:ro" \
     "$IMAGE" sleep 900 >/dev/null
 
@@ -53,7 +71,7 @@ PYEOF"
 docker exec "$B" bash -c "cp /ljcfg/rm_host_silent.pcap /lj/rm/out.pcap"
 docker exec -d "$B" bash -c "cd /lj/rm && rm -f /tmp/arhud01* /tmp/*.lck && LD_LIBRARY_PATH=/clibs ./hud_pcap_huifang_server > rm.log 2>&1"
 sleep 8
-docker exec "$B" bash -c "cp /cb/hud_huifang_client /lj/ && chmod +x /lj/hud_huifang_client"
+docker exec "$B" bash -c "cp /cb/$(basename "$CLIENT_BIN") /lj/hud_huifang_client && chmod +x /lj/hud_huifang_client"
 docker exec "$B" bash -c "python3 - <<PYEOF
 import json
 cfg = json.load(open('/cb/someip_arhud01.json'))

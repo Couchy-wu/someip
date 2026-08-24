@@ -135,3 +135,8 @@ jobs:
         run: |
           bash ${{ github.workspace }}/docker/integration_test_longjie_fixedcfg.sh
         timeout-minutes: 10
+
+      - name: C++ 服务端库 + Python 调用 ⇄ 真实客户端 (libarhud_server.so)
+        run: |
+          bash ${{ github.workspace }}/docker/integration_test_cpplib.sh
+        timeout-minutes: 10
