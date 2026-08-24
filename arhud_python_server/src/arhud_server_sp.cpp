@@ -30,10 +30,20 @@
 #include <vector>
 #ifdef _WIN32
 #include <process.h>
+#include <windows.h>
+#include <cstring>
 #define GETPID _getpid
+static void cfg_path(char* buf, size_t n, const char* name) {
+    DWORD len = GetTempPathA((DWORD)n, buf);
+    if (!len || len >= n) { strcpy(buf, ".\\"); }
+    strncat(buf, name, n - strlen(buf) - 1);
+}
 #else
 #include <unistd.h>
 #define GETPID getpid
+static void cfg_path(char* buf, size_t n, const char* name) {
+    snprintf(buf, n, "/tmp/%s", name);
+}
 #endif
 
 namespace {
@@ -89,7 +99,7 @@ std::string gen_sp_config(const std::string& unicast,
     o << "  \"netmask\": \"255.255.255.0\",\n";
     o << "  \"network\": \"arhud01\",\n";
     o << "  \"logging\": { \"level\": \"info\", \"console\": \"true\", "
-         "\"file\": { \"enable\": \"false\", \"path\": \"/tmp/arhud_server_sp.log\" }, \"dlt\": \"false\" },\n";
+         "\"file\": { \"enable\": \"false\", \"path\": \"arhud_server_sp.log\" }, \"dlt\": \"false\" },\n";
     o << "  \"applications\": [ { \"name\": \"arhud01\", \"id\": \"0x1443\" } ],\n";
     o << "  \"services\": [\n";
     for (size_t i = 0; i < svcs.size(); ++i) {
@@ -196,7 +206,9 @@ arhud_server_t* arhud_server_create(const char* unicast, const char* config_path
         srv->config_path = config_path;
     } else {
         char path[256];
-        std::snprintf(path, sizeof(path), "/tmp/arhud_server_sp_%d.json", (int)GETPID());
+        char name[64];
+        std::snprintf(name, sizeof(name), "arhud_server_sp_%d.json", (int)GETPID());
+        cfg_path(path, sizeof(path), name);
         std::string cfg = gen_sp_config(unicast, srv->services);
         std::ofstream f(path);
         if (!f) { delete srv; return nullptr; }

@@ -23,9 +23,13 @@ Python 负责业务：指定 pcap 回放、对数据结构赋值后组包发送�
 import ctypes
 import os
 import socket
+import sys
+
+def _default_lib_name():
+    return "libarhud_server.dll" if sys.platform == "win32" else "libarhud_server.so"
 
 LIB_PATH = os.environ.get("ARHUD_LIB_PATH") or os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "libarhud_server.so")
+    os.path.dirname(os.path.abspath(__file__)), _default_lib_name())
 _lib = ctypes.CDLL(LIB_PATH)
 
 # ---------------- ctypes 结构体（与 arhud_types.h 对齐，#pragma pack(1)） ----------------

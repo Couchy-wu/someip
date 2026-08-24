@@ -110,6 +110,50 @@ New-NetFirewallRule -DisplayName "ARHUD SD multicast" -Direction Inbound -Protoc
 
 ---
 
+## 3.7 ★ 如果你已有 Windows 版 SP 分支 DLL（推荐方案）
+
+> 前提：拿到 SP 分支的 **Windows DLL 版**（`libsomeip.dll` + `libsomeip-cfg.dll` +
+> `libsomeip-sd.dll` + `libsomeip-e2e.dll`，及配套 `someip_com.h`）。
+> SP 的 C 接口（`SPInit/SPStart/SPServerSendNotify`）跨平台稳定，**改动极小**：
+
+| 项 | 需要改动 | 状态 |
+|----|----------|------|
+| `src/arhud_server_sp.cpp` | 配置/日志路径跨平台（`cfg_path`，`_WIN32` 用 `GetTempPathA`） | ✅ 已完成 |
+| `src/arhud_pcap.cpp` | `<arpa/inet.h>` → `<winsock2.h>` | ✅ 已完成 |
+| `src/arhud_types.cpp` | zlib → Windows 版 zlib（链接层面，代码不变） | 链接时处理 |
+| 头文件 | 用 DLL 配套的 `someip_com.h`（DLL 导出宏 `SOMEIP_DLL_EXPORT` 等按需定义） | 替换即可 |
+| 构建 | CMake：`-DBUILD_SP=ON`（Windows 分支已加），链接 `libsomeip.dll` 等 | ✅ 已提供 |
+| 产物 | `libarhud_server.dll` | CMake 生成 |
+| `python/arhud_py.py` | 库名按平台自动选 `.dll`；加载路径 `os.add_dll_directory`/同目录 | ✅ 已兼容 |
+| 配置 | SP 栈配置格式不变（本地通道 Windows 版可能为 TCP，跨机不涉及） | 无需改 |
+| 防火墙 | UDP 30490/51400-51409/52001-52012 + 多播 224.0.2.4 | 部署时执行 |
+
+**构建命令（有 Windows SP DLL 时）**：
+```bash
+cmake -B build-win -DBUILD_SP=ON -DSP_LIBS_DIR=C:\path\to\sp-dll ^
+      -DZLIB_ROOT=<zlib路径> -G "MinGW Makefiles"   # 或 VS 生成器
+cmake --build build-win --config Release
+# 产物 build-win/libarhud_server.dll + 依赖 libsomeip*.dll
+```
+
+**Python 运行（Windows）**：
+```python
+# arhud_py.py 已自动选 libarhud_server.dll；DLL 搜索路径：
+import os
+os.add_dll_directory(r"C:\arhud-server")          # SP 各 dll 所在目录
+os.add_dll_directory(r"C:\arhud-server\libs")    # vsomeip/zlib dll（如有）
+# 或把全部 dll 与 libarhud_server.dll 放同一目录
+import arhud_py
+srv = arhud_py.ArHudServer(unicast="192.168.1.10")
+srv.start()
+srv.replay("data/out.pcap", loop=True, interval_ms=10)
+```
+
+> **此方案下服务端与板端 C++ 服务端是同一协议栈（SP 分支）**，行为与 Linux 版完全一致
+> （51KB 大消息自动分片、结构化数据、pcap 回放）。
+
+---
+
 ## 4. 验证步骤（Windows）
 
 ```bash
