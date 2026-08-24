@@ -63,7 +63,9 @@ ArHud 车道线数据 SOME/IP 通信的完整示例：**PCAP 解码 → 序列�
     ├── cross_check_windows.sh  #   windows/ 修复代码跨平台校验
     ├── integration_test_pcap.sh #  pcap 全链路测试（Ubuntu+Windows 程序）
     ├── integration_test_hud.sh  #  AR-HUD 23 服务集成测试
-    └── integration_test_longjie.sh # ★ 真实客户端 ⇄ Python 服务端 双机测试
+    ├── integration_test_longjie.sh # ★ 真实客户端 ⇄ Python 服务端 双机测试
+    ├── integration_test_longjie_fixedcfg.sh # ★ 固定配置客户端 ⇄ Python 服务端
+    └── integration_test_cpplib.sh # ★ C++库+Python调用 ⇄ 真实客户端 测试
 ```
 
 ## 快速开始
