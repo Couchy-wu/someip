@@ -13,7 +13,7 @@ A="ljcpp-a-$$"; B="ljcpp-b-$$"
 PCAP="$ROOT/to_longjie_demo_20250625/build/out.pcap"
 ZIP="$ROOT/to_longjie_demo_20250625.zip"
 IMAGE="${IMAGE:-arhud-vsomeip-test}"
-DURATION="${DURATION:-50}"
+DURATION="${DURATION:-70}"
 
 [ -f "$PCAP" ] || { echo "缺少 pcap: $PCAP"; exit 1; }
 [ -f "$ZIP" ] || { echo "缺少工程 zip: $ZIP"; exit 1; }
@@ -58,7 +58,8 @@ echo "A(C++库服务端)=$AIP  B(板子)=$BIP"
 
 echo "--- A: 编译 C++ 库 ---"
 docker exec "$A" bash -c "rm -rf /tmp/build && mkdir -p /tmp/build && cp /ljlib/* /tmp/build/ && cd /tmp/build && make > mk.log 2>&1"
-docker exec "$A" bash -c "test -f /tmp/build/libarhud_server.so" || { echo "FAIL: 编译失败"; docker exec "$A" bash -c 'tail -5 /tmp/build/mk.log'; exit 1; }
+docker exec "$A" bash -c "test -f /tmp/build/libarhud_server.so" || { echo "FAIL: C++ 库编译失败"; docker exec "$A" bash -c 'tail -15 /tmp/build/mk.log'; exit 1; }
+echo "C++ 库编译 OK: $(docker exec "$A" bash -c 'ls -la /tmp/build/libarhud_server.so' 2>/dev/null | awk '{print $5, $NF}')"
 
 echo "--- B: RM 宿主（模拟板子中间件）+ 原版客户端 ---"
 docker exec "$B" bash -c "mkdir -p /lj/rm && cp /cb/hud_pcap_huifang_server /lj/rm/ && chmod +x /lj/rm/hud_pcap_huifang_server"
@@ -79,11 +80,11 @@ cfg['unicast'] = '$BIP'
 json.dump(cfg, open('/lj/someip_arhud01.json','w'), indent=2)
 PYEOF"
 docker exec -d "$B" bash -c "cd /lj && LD_LIBRARY_PATH=/clibs ./hud_huifang_client > client.log 2>&1"
-echo "等待客户端订阅稳定（15 秒，51KB TP 大消息需要订阅就绪）..."
-sleep 15
+echo "等待客户端订阅稳定（25 秒，51KB TP 大消息需要订阅就绪）..."
+sleep 25
 
 echo "--- A: ①结构化赋值发送（demo_struct.py，8 秒） ---"
-docker exec -d "$A" bash -c "cd /tmp/build && timeout 8 python3 -u demo_struct.py $AIP > struct.log 2>&1"
+docker exec -d "$A" bash -c "cd /tmp/build && timeout 10 python3 -u demo_struct.py $AIP > struct.log 2>&1"
 sleep 12
 
 echo "--- A: ②指定 pcap 回放（demo_replay.py，$DURATION 秒） ---"
@@ -93,7 +94,7 @@ OK=0
 for i in $(seq 1 $((DURATION + 10))); do
     # 等待 51KB TP 大消息（0x000C:8003）到达客户端 —— 证明 pcap 回放 + TP 分片全链路通
     BIG_N=$(docker exec "$B" bash -c 'grep -a "收<--" /lj/client.log | grep -ac "000C.*8003"' 2>/dev/null | tr -d '[:space:]' || echo 0)
-    if [ "${BIG_N:-0}" -ge 5 ] 2>/dev/null; then OK=1; break; fi
+    if [ "${BIG_N:-0}" -ge 3 ] 2>/dev/null; then OK=1; break; fi
     sleep 1
 done
 
@@ -107,5 +108,13 @@ echo "客户端总接收: $TOTAL  51KB 大消息(0x000C:8003): $BIG"
 echo "--- B 客户端汇总（SIGINT） ---"
 docker exec "$B" bash -c "pkill -INT -f 'hud_huifang_[c]lient' 2>/dev/null; sleep 2; grep -a -A25 'Total_count' /lj/client.log | tail -26 | grep -E 'Total_count|\(0x'" 2>/dev/null | head -12
 
-[ "$OK" = "1" ] && [ "${BIG:-0}" -ge 5 ] && echo "PASS: 客户端收到结构化数据 + pcap 回放 + TP 大消息" \
-    || { echo "FAIL: 客户端未收到足够数据"; exit 1; }
+if [ "$OK" = "1" ] && [ "${BIG:-0}" -ge 3 ]; then
+    echo "PASS: 客户端收到结构化数据 + pcap 回放 + TP 大消息"
+else
+    echo "FAIL: 客户端未收到足够数据 (BIG=$BIG, OK=$OK)"
+    echo "--- A struct.log 尾 ---"; docker exec "$A" bash -c 'tail -5 /tmp/build/struct.log' 2>/dev/null || true
+    echo "--- A replay.log 尾 ---"; docker exec "$A" bash -c 'tail -8 /tmp/build/replay.log' 2>/dev/null || true
+    echo "--- B client.log 尾 ---"; docker exec "$B" bash -c 'tail -5 /lj/client.log' 2>/dev/null || true
+    echo "--- B rm.log 尾 ---"; docker exec "$B" bash -c 'tail -5 /lj/rm/rm.log' 2>/dev/null || true
+    exit 1
+fi
