@@ -57,9 +57,19 @@ BIP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}
 echo "A(C++库服务端)=$AIP  B(板子)=$BIP"
 
 echo "--- A: 编译 C++ 库 ---"
-docker exec "$A" bash -c "rm -rf /tmp/build && mkdir -p /tmp/build && cp /ljlib/* /tmp/build/ && cd /tmp/build && make > mk.log 2>&1"
-docker exec "$A" bash -c "test -f /tmp/build/libarhud_server.so" || { echo "FAIL: C++ 库编译失败"; docker exec "$A" bash -c 'tail -15 /tmp/build/mk.log'; exit 1; }
-echo "C++ 库编译 OK: $(docker exec "$A" bash -c 'ls -la /tmp/build/libarhud_server.so' 2>/dev/null | awk '{print $5, $NF}')"
+if ! docker exec "$A" bash -c "rm -rf /tmp/build && mkdir -p /tmp/build && cp /ljlib/* /tmp/build/ && cd /tmp/build && make > mk.log 2>&1"; then
+    echo "FAIL: make 命令失败"
+    docker exec "$A" bash -c 'tail -30 /tmp/build/mk.log' 2>/dev/null || true
+    exit 1
+fi
+if ! docker exec "$A" bash -c "test -f /tmp/build/libarhud_server.so"; then
+    echo "FAIL: libarhud_server.so 未生成"
+    docker exec "$A" bash -c 'tail -30 /tmp/build/mk.log' 2>/dev/null || true
+    exit 1
+fi
+echo "C++ 库编译 OK"
+echo "--- A mk.log 尾部（诊断） ---"
+docker exec "$A" bash -c 'tail -6 /tmp/build/mk.log' 2>/dev/null || true
 
 echo "--- B: RM 宿主（模拟板子中间件）+ 原版客户端 ---"
 docker exec "$B" bash -c "mkdir -p /lj/rm && cp /cb/hud_pcap_huifang_server /lj/rm/ && chmod +x /lj/rm/hud_pcap_huifang_server"
@@ -83,12 +93,17 @@ docker exec -d "$B" bash -c "cd /lj && LD_LIBRARY_PATH=/clibs ./hud_huifang_clie
 echo "等待客户端订阅稳定（25 秒，51KB TP 大消息需要订阅就绪）..."
 sleep 25
 
-echo "--- A: ①结构化赋值发送（demo_struct.py，8 秒） ---"
+echo "--- A: ①结构化赋值发送（demo_struct.py，10 秒） ---"
 docker exec -d "$A" bash -c "cd /tmp/build && timeout 10 python3 -u demo_struct.py $AIP > struct.log 2>&1"
-sleep 12
+sleep 15
+echo "--- A struct.log 尾部（诊断） ---"
+docker exec "$A" bash -c 'tail -5 /tmp/build/struct.log' 2>/dev/null || true
 
 echo "--- A: ②指定 pcap 回放（demo_replay.py，$DURATION 秒） ---"
 docker exec -d "$A" bash -c "cd /tmp/build && python3 -u demo_replay.py /cb/out.pcap $AIP > replay.log 2>&1"
+sleep 12
+echo "--- A replay.log 头部（诊断） ---"
+docker exec "$A" bash -c 'head -8 /tmp/build/replay.log' 2>/dev/null || true
 
 OK=0
 for i in $(seq 1 $((DURATION + 10))); do
