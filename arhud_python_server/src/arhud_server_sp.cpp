@@ -28,7 +28,13 @@
 #include <string>
 #include <thread>
 #include <vector>
+#ifdef _WIN32
+#include <process.h>
+#define GETPID _getpid
+#else
 #include <unistd.h>
+#define GETPID getpid
+#endif
 
 namespace {
 
@@ -190,7 +196,7 @@ arhud_server_t* arhud_server_create(const char* unicast, const char* config_path
         srv->config_path = config_path;
     } else {
         char path[256];
-        std::snprintf(path, sizeof(path), "/tmp/arhud_server_sp_%d.json", (int)getpid());
+        std::snprintf(path, sizeof(path), "/tmp/arhud_server_sp_%d.json", (int)GETPID());
         std::string cfg = gen_sp_config(unicast, srv->services);
         std::ofstream f(path);
         if (!f) { delete srv; return nullptr; }

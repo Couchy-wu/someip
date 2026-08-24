@@ -13,6 +13,24 @@
 #include <vsomeip/vsomeip_sec.h>
 #include <zlib.h>
 
+#ifdef _WIN32
+#include <process.h>
+#include <windows.h>
+#include <cstring>
+#define GETPID _getpid
+static void cfg_path(char* buf, size_t n, const char* name) {
+    DWORD len = GetTempPathA((DWORD)n, buf);
+    if (!len || len >= n) { strcpy(buf, ".\\"); }
+    strncat(buf, name, n - strlen(buf) - 1);
+}
+#else
+#include <unistd.h>
+#define GETPID getpid
+static void cfg_path(char* buf, size_t n, const char* name) {
+    snprintf(buf, n, "/tmp/%s", name);
+}
+#endif
+
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -151,7 +169,9 @@ arhud_server_t* arhud_server_create(const char* unicast, const char* config_path
         srv->config_path = config_path;
     } else {
         char path[256];
-        std::snprintf(path, sizeof(path), "/tmp/arhud_server_%d.json", (int)getpid());
+        char name[64];
+        std::snprintf(name, sizeof(name), "arhud_server_%d.json", (int)GETPID());
+        cfg_path(path, sizeof(path), name);
         std::string cfg = gen_config(unicast, srv->services);
         std::ofstream f(path);
         if (!f) { delete srv; return nullptr; }
