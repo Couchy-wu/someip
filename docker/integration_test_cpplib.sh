@@ -30,16 +30,19 @@ echo "=== C++ 库服务端 ⇄ Python 调用 ⇄ 真实客户端 测试 ==="
 ARCH=$(docker run --rm --entrypoint uname "$IMAGE" -m 2>/dev/null | tr -d '[:space:]')
 if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
     CLIENT_BIN="$ROOT/to_longjie_demo_20250625/build/hud_huifang_client"
+    RM_HOST_BIN="$ROOT/to_longjie_demo_20250625/build/hud_pcap_huifang_server"
     LIBS_SRC="$ROOT/to_longjie_demo_20250625/libs/lib_bst_t517"
 else
     CLIENT_BIN="$ROOT/to_longjie_demo_20250625/build/hud_huifang_client_x86"
+    RM_HOST_BIN="$ROOT/to_longjie_demo_20250625/build/hud_pcap_huifang_server_x86"
     TMPX="$(mktemp -d)"
     unzip -o -q "$ZIP" -d "$TMPX" 'to_longjie_demo_20250625/libs/lib_x86/*' 2>/dev/null || unzip -o -q "$ZIP" -d "$TMPX" '*/lib_x86/*' 2>/dev/null
     LIBS_SRC="$(find "$TMPX" -type d -name lib_x86 | head -1)"
     [ -n "$LIBS_SRC" ] || { echo "zip 中未找到 x86 库"; exit 1; }
 fi
 [ -x "$CLIENT_BIN" ] || { echo "缺少客户端二进制: $CLIENT_BIN"; exit 1; }
-echo "镜像架构: $ARCH  客户端: $(basename "$CLIENT_BIN")"
+[ -x "$RM_HOST_BIN" ] || { echo "缺少 RM 宿主二进制: $RM_HOST_BIN"; exit 1; }
+echo "镜像架构: $ARCH  客户端: $(basename "$CLIENT_BIN")  RM宿主: $(basename "$RM_HOST_BIN")"
 
 docker network create --driver bridge "$NET" >/dev/null
 
@@ -72,7 +75,7 @@ echo "--- A mk.log 尾部（诊断） ---"
 docker exec "$A" bash -c 'tail -6 /tmp/build/mk.log' 2>/dev/null || true
 
 echo "--- B: RM 宿主（模拟板子中间件）+ 原版客户端 ---"
-docker exec "$B" bash -c "mkdir -p /lj/rm && cp /cb/hud_pcap_huifang_server /lj/rm/ && chmod +x /lj/rm/hud_pcap_huifang_server"
+docker exec "$B" bash -c "mkdir -p /lj/rm && cp /cb/$(basename "$RM_HOST_BIN") /lj/rm/hud_pcap_huifang_server && chmod +x /lj/rm/hud_pcap_huifang_server"
 docker exec "$B" bash -c "python3 - <<PYEOF
 import json
 cfg = json.load(open('/ljcfg/someip_arhud01_rm_host.json'))
