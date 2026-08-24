@@ -26,7 +26,7 @@ Python (业务层)                    C++ 库 (通信内核)                    
 ## 文件说明
 
 ```
-hud_cpp_lib/
+arhud_python_server/
 ├── arhud_server.h / .cpp   # C 接口 + vsomeip 内核（offer/notify/回放/订阅回调）
 ├── arhud_pcap.h / .cpp     # pcap 解析 + SOME/IP-TP 分片重组（字节偏移）
 ├── arhud_types.h / .cpp    # 9 种数据结构 + 大端序列化 + CRC32
@@ -42,7 +42,7 @@ docker/integration_test_cpplib.sh  # 自动化测试（PASS）
 
 ```bash
 # 依赖：SP 分支库（libsomeip.so 等，zip 内 libs/lib_bst_t517 或 lib_x86）+ zlib
-cd hud_cpp_lib
+cd arhud_python_server
 make libarhud_server.so SP_LIBS=../to_longjie_demo_20250625/libs/lib_bst_t517   # aarch64
 make libarhud_server.so SP_LIBS=../to_longjie_demo_20250625/libs/lib_x86       # x86_64
 # 运行（Python demo 需要 LD_LIBRARY_PATH 指向 SP 库，SP 栈按插件加载 cfg/sd 模块）

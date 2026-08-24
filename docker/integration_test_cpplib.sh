@@ -47,7 +47,7 @@ echo "镜像架构: $ARCH  客户端: $(basename "$CLIENT_BIN")  RM宿主: $(bas
 docker network create --driver bridge "$NET" >/dev/null
 
 docker run --rm -d --name "$A" --network "$NET" \
-    -v "$ROOT/hud_cpp_lib:/ljlib:ro" -v "$ROOT/to_longjie_demo_20250625/build:/cb:ro" \
+    -v "$ROOT/arhud_python_server:/ljlib:ro" -v "$ROOT/to_longjie_demo_20250625/build:/cb:ro" \
     -v "$LIBS_SRC:/splibs:ro" \
     "$IMAGE" sleep 900 >/dev/null
 docker run --rm -d --name "$B" --network "$NET" \
@@ -61,14 +61,14 @@ BIP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}
 echo "A(C++库服务端)=$AIP  B(板子)=$BIP"
 
 echo "--- A: 编译 C++ 服务端库（SP 分支协议栈，与板端 C++ 服务端一致） ---"
-if ! docker exec "$A" bash -c "rm -rf /tmp/build && mkdir -p /tmp/build && cp -r /ljlib/* /tmp/build/ && cd /tmp/build && make libarhud_server.so SP_LIBS=/splibs > mk.log 2>&1"; then
+if ! docker exec "$A" bash -c "rm -rf /tmp/build && mkdir -p /tmp/build && cp -r /ljlib/* /tmp/build/ && cd /tmp/build/src && make libarhud_server.so SP_LIBS=/splibs > mk.log 2>&1 && cp /tmp/build/src/libarhud_server.so /tmp/build/python/"; then
     echo "FAIL: make 命令失败"
     docker exec "$A" bash -c 'tail -30 /tmp/build/mk.log' 2>/dev/null || true
     exit 1
 fi
-if ! docker exec "$A" bash -c "test -f /tmp/build/libarhud_server.so"; then
+if ! docker exec "$A" bash -c "test -f /tmp/build/python/libarhud_server.so"; then
     echo "FAIL: libarhud_server.so 未生成"
-    docker exec "$A" bash -c 'tail -30 /tmp/build/mk.log' 2>/dev/null || true
+    docker exec "$A" bash -c 'tail -30 /tmp/build/src/mk.log' 2>/dev/null || true
     exit 1
 fi
 echo "C++ 库编译 OK（SP 版）"
@@ -98,13 +98,13 @@ echo "等待客户端订阅稳定（25 秒，51KB TP 大消息需要订阅就绪
 sleep 25
 
 echo "--- A: ①结构化赋值发送（demo_struct.py，10 秒） ---"
-docker exec -d "$A" bash -c "cd /tmp/build && LD_LIBRARY_PATH=/splibs timeout 10 python3 -u demo_struct.py $AIP > struct.log 2>&1"
+docker exec -d "$A" bash -c "cd /tmp/build/python && LD_LIBRARY_PATH=/splibs timeout 10 python3 -u demo_struct.py $AIP > ../struct.log 2>&1"
 sleep 15
 echo "--- A struct.log 尾部（诊断） ---"
 docker exec "$A" bash -c 'tail -5 /tmp/build/struct.log' 2>/dev/null || true
 
 echo "--- A: ②指定 pcap 回放（demo_replay.py，$DURATION 秒） ---"
-docker exec -d "$A" bash -c "cd /tmp/build && LD_LIBRARY_PATH=/splibs python3 -u demo_replay.py /cb/out.pcap $AIP > replay.log 2>&1"
+docker exec -d "$A" bash -c "cd /tmp/build/python && LD_LIBRARY_PATH=/splibs python3 -u demo_replay.py /cb/out.pcap $AIP > ../replay.log 2>&1"
 sleep 12
 echo "--- A replay.log 头部（诊断） ---"
 docker exec "$A" bash -c 'head -8 /tmp/build/replay.log' 2>/dev/null || true

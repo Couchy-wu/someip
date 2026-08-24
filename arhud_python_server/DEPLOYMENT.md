@@ -51,7 +51,7 @@
 
 ```bash
 # 1) 编译服务端库（用与客户端一致的架构和 SP 库）
-cd hud_cpp_lib
+cd arhud_python_server
 # aarch64 板端配套：
 make libarhud_server.so SP_LIBS=../to_longjie_demo_20250625/libs/lib_bst_t517
 # x86_64 PC：
@@ -60,7 +60,7 @@ make libarhud_server.so SP_LIBS=../to_longjie_demo_20250625/libs/lib_x86
 
 # 2) 组装部署包
 mkdir -p /opt/arhud-server/{libs,data}
-cp hud_cpp_lib/libarhud_server.so hud_cpp_lib/arhud_py.py  /opt/arhud-server/
+cp arhud_python_server/libarhud_server.so arhud_python_server/arhud_py.py  /opt/arhud-server/
 cp to_longjie_demo_20250625/libs/lib_<架构>/*.so           /opt/arhud-server/libs/
 cp <你的pcap>                                              /opt/arhud-server/data/out.pcap
 ```
@@ -159,7 +159,7 @@ cd <仓库> && bash docker/integration_test_cpplib.sh     # 双容器全链路
 # 3) 结果判断
 #    ✅ 正常 → 完成（无需重新编译）
 #    ❌ 报 "undefined symbol" / 接口不匹配 → 需要更新 someip_com.h 并重新编译：
-#        cd hud_cpp_lib
+#        cd arhud_python_server
 #        cp <新版头文件> include/vsomeip/someip_com.h
 #        make clean && make libarhud_server.so SP_LIBS=<新SP库目录>
 #    ❌ 配置解析异常（如 SP 栈日志报配置错误）→ 检查/调整配置文件生成（gen_sp_config），重新编译

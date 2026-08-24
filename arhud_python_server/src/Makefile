@@ -9,9 +9,9 @@ CXXFLAGS ?= -std=c++14 -O2 -Wall -fPIC -I. -I/usr/local/include
 ARCH     ?= aarch64
 
 ifeq ($(ARCH),x86_64)
-SP_LIBS  ?= ../to_longjie_demo_20250625/libs/lib_x86
+SP_LIBS  ?= $(CURDIR)/libs/x86_64
 else
-SP_LIBS  ?= ../to_longjie_demo_20250625/libs/lib_bst_t517
+SP_LIBS  ?= $(CURDIR)/libs/arm64
 endif
 
 # SP 版：链接 SP 分支库（libsomeip.so 等；SP 分支已静态链接 boost，仅需基础系统库 + zlib）

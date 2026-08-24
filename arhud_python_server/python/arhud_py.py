@@ -24,7 +24,8 @@ import ctypes
 import os
 import socket
 
-LIB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "libarhud_server.so")
+LIB_PATH = os.environ.get("ARHUD_LIB_PATH") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "libarhud_server.so")
 _lib = ctypes.CDLL(LIB_PATH)
 
 # ---------------- ctypes 结构体（与 arhud_types.h 对齐，#pragma pack(1)） ----------------
