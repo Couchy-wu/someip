@@ -14,10 +14,9 @@ else
 SP_LIBS  ?= ../to_longjie_demo_20250625/libs/lib_bst_t517
 endif
 
-# SP 版：链接 SP 分支库（libsomeip.so 等）
+# SP 版：链接 SP 分支库（libsomeip.so 等；SP 分支已静态链接 boost，仅需基础系统库 + zlib）
 SP_OBJS = arhud_server_sp.o arhud_pcap.o arhud_types.o
-SP_LIBS_LINK = -L$(SP_LIBS) -lsomeip -lsomeip-cfg -lsomeip-sd -lsomeip-e2e \
-               -lboost_system -lboost_thread -lboost_log -lboost_filesystem -lboost_program_options -lz
+SP_LIBS_LINK = -L$(SP_LIBS) -lsomeip -lsomeip-cfg -lsomeip-sd -lsomeip-e2e -lz
 
 libarhud_server.so: $(SP_OBJS)
 	$(CXX) $(CXXFLAGS) -shared -o $@ $(SP_OBJS) $(SP_LIBS_LINK) -Wl,-rpath,$(SP_LIBS)

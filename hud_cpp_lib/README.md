@@ -1,5 +1,8 @@
 # C++ 服务端库（libarhud_server.so，SP 分支协议栈）+ Python 调用
 
+> **📄 部署与版本变更指南见 [`DEPLOYMENT.md`](DEPLOYMENT.md)**
+> （部署包结构、systemd、客户端 SP 库版本变更处理流程）
+
 用 **C++ 编写 SOME/IP 服务端库**，**Python 通过 ctypes 调用**：
 Python 负责业务编排（指定 pcap 回放、对数据结构赋值组包），C++ 库负责通信内核。
 
