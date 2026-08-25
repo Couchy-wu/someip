@@ -50,6 +50,15 @@ ArHud 车道线数据 SOME/IP 通信的完整示例：**PCAP 解码 → 序列�
 │   ├── DEVELOPMENT_AND_TROUBLESHOOTING.md  # ★ 开发流程 + 排查方法论 + 现象速查表
 │   └── README.md               #   部署指南 + 实测踩坑记录
 ├── to_longjie_demo_20250625/   # ★ 板子拉取的原始工程（客户端二进制/SP库/pcap/源码）
+├── arhud_python_server/        # ★ C++ 通信库 + Python 调用（SP 分支协议栈，自包含部署）
+│   ├── src/                    #   C++ 服务端库源码（SP/标准双版 + pcap/序列化）
+│   ├── python/                 #   ctypes 封装 + 结构化赋值/回放 demo
+│   ├── libs/                   #   SP 分支库依赖（arm64 内置 / x86 脚本提取）
+│   ├── build_package.sh        #   一键组装自包含部署包
+│   ├── CODE_GUIDE.md           #   ★ 代码详解（架构/模块/数据流/二次开发）
+│   ├── DEPLOYMENT.md           #   部署 + 客户端 SP 库版本变更
+│   ├── WINDOWS.md              #   Windows 方案（含 SP DLL 兼容）
+│   └── README.md               #   编译/使用/实测结果
 └── docker/                     # Docker 完整测试（目标: Ubuntu 22.04 + Python 3.10）
     ├── Dockerfile              #   编译 vsomeip 3.4.10 + vsomeip_py
     ├── run_tests.sh            #   一键: 构建 + 6 项测试
