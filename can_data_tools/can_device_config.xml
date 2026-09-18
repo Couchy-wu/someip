@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 
+    CAN设备配置文件
+    用于初始化周立功CANFD设备,以及提供相应设置项
+-->
+<canfd_config>
+    <!-- 设备类型 -->
+    <device_type>ZCAN_USBCANFD_200U</device_type>
+
+    <!-- 是否启用合并接收：0 = 否，1 = 是 --> 
+    <merge_receive>0</merge_receive>
+
+    <!-- 发送类型：
+         0 - 正常发送（总线发送，不等待确认）
+         1 - 单次发送（总线发送，失败不再重试）
+         2 - 自发自收（仅本地接收，不输出到总线）
+         3 - 单次自发自收 -->
+    <transmit_type>2</transmit_type>
+
+    <!-- 通道号：0 或 1 -->
+    <chn>0</chn>
+
+</canfd_config>

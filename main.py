@@ -20,17 +20,17 @@ import tkinter as tk
 from tkinter import font as tkfont  # noqa: F401  (兼容旧引用)
 from tkinter import ttk
 
-import GuiFunction.image_player  # noqa: F401
-import GuiFunction.matrix_to_csv  # noqa: F401
-import GuiFunction.binhex_gui  # noqa: F401
-from GuiFunction.file_updater import FileUpdater
-from GuiFunction.file_handler import handle_file_upload
-from GuiFunction.delete_handler import delete_test_case
-from GuiFunction.view_case_handler import ViewCaseHandler
-from GuiFunction.view_case_processor import LogViewer
-from GuiFunction.image_handler import ImageHandler
-from GuiFunction.video_processor import VideoProcessor
-from OtherGui.test_can_gui import CANFDGUI
+import gui_handlers.image_sequence_player  # noqa: F401
+import gui_handlers.signal_matrix_to_csv  # noqa: F401
+import gui_handlers.can_data_generator  # noqa: F401
+from gui_handlers.testcase_menu import FileUpdater
+from gui_handlers.testcase_upload import handle_file_upload
+from gui_handlers.testcase_delete import delete_test_case
+from gui_handlers.testcase_open_table import ViewCaseHandler
+from gui_handlers.testcase_view_log import LogViewer
+from gui_handlers.image_open import ImageHandler
+from gui_handlers.video_extract_frames import VideoProcessor
+from can_gui.can_send_receive_gui import CANFDGUI
 
 from hudcore.platform import describe_platform, paths
 from hudcore.platform.executables import get_ffmpeg, get_office_app, get_text_editor
@@ -70,11 +70,11 @@ class MainWindow:
     def _init_handlers(self) -> None:
         """初始化各功能处理器（原全局实例）"""
         self.selected_file = tk.StringVar()
-        self.file_updater = FileUpdater()
-        self.view_case_handler = ViewCaseHandler(self.selected_file)
+        self.testcase_menu = FileUpdater()
+        self.testcase_open_table = ViewCaseHandler(self.selected_file)
         self.log_viewer = LogViewer(self.selected_file)
-        self.image_handler = ImageHandler(self.root)
-        self.video_processor = VideoProcessor(self.root)  # 传入主窗口
+        self.image_open = ImageHandler(self.root)
+        self.video_extract_frames = VideoProcessor(self.root)  # 传入主窗口
 
     # ------------------------------------------------------------ 日志面板
     def _build_log_panel(self) -> None:
@@ -142,16 +142,16 @@ class MainWindow:
 
         self.file_menu = ttk.OptionMenu(root, self.selected_file, *[])
         self.file_menu.grid(row=0, column=2, padx=20, pady=20)
-        self.file_updater.initialize_menu(self.selected_file, self.file_menu)
+        self.testcase_menu.initialize_menu(self.selected_file, self.file_menu)
 
         # 上传/删除按钮改为走 FileUpdater（保持原行为）
         self.upload_button.config(
-            command=lambda: self.file_updater.on_upload(self.selected_file, self.file_menu))
+            command=lambda: self.testcase_menu.on_upload(self.selected_file, self.file_menu))
         self.delete_button.config(
-            command=lambda: self.file_updater.on_delete(self.selected_file, self.file_menu))
+            command=lambda: self.testcase_menu.on_delete(self.selected_file, self.file_menu))
 
         self.view_button = tk.Button(root, text="查看用例",
-                                     command=self.view_case_handler.open_selected_file,
+                                     command=self.testcase_open_table.open_selected_file,
                                      **Theme.primary_button())
         self.view_button.grid(row=0, column=3, padx=20, pady=20)
 
@@ -167,7 +167,7 @@ class MainWindow:
         self.convert_matrix_button.grid(row=1, column=0, padx=20, pady=20)
 
         self.hex_button = tk.Button(root, text="can数据生成器",
-                                    command=lambda: GuiFunction.binhex_gui.open_binhex_converter(root),
+                                    command=lambda: gui_handlers.can_data_generator.open_binhex_converter(root),
                                     **Theme.success_button())
         self.hex_button.grid(row=1, column=1, padx=20, pady=20)
 
@@ -178,17 +178,17 @@ class MainWindow:
 
         # 第 2 行：图像/视频类
         self.image_button = tk.Button(root, text="打开图片",
-                                      command=self.image_handler.open_image,
+                                      command=self.image_open.open_image,
                                       **Theme.danger_button())
         self.image_button.grid(row=2, column=0, padx=20, pady=20)
 
         self.read_video_button = tk.Button(root, text="提取视频帧",
-                                           command=self.video_processor.process_video,
+                                           command=self.video_extract_frames.process_video,
                                            **Theme.danger_button())
         self.read_video_button.grid(row=2, column=1, padx=20, pady=20)
 
         self.image_video_button = tk.Button(root, text="播放图片视频",
-                                            command=GuiFunction.image_player.play_image_sequence,
+                                            command=gui_handlers.image_sequence_player.play_image_sequence,
                                             **Theme.danger_button())
         self.image_video_button.grid(row=2, column=2, padx=20, pady=20)
 
@@ -201,7 +201,7 @@ class MainWindow:
         win.transient(self.root)
         win.grab_set()
         win.focus_force()
-        GuiFunction.matrix_to_csv.XlsmToCsvConverter(win, skip_first_row=False)
+        gui_handlers.signal_matrix_to_csv.XlsmToCsvConverter(win, skip_first_row=False)
 
     def open_can_gui(self) -> None:
         """打开 CAN 信号自动收发子窗口"""

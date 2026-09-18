@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# =====================================================================
+# entrypoint.sh —— Windows 验证容器入口
+# =====================================================================
+# 容器内约定的路径：
+#   项目代码  : 宿主项目根目录挂载到 /work（Wine 中即 Z:\work）
+#   Python    : C:\Program Files\Python313\python.exe（Windows 版 CPython 3.13）
+#   驱动桩库  : /opt/stub/zlgcan.dll（MinGW 交叉编译，用于 CAN 加载链路验证）
+#
+# 子命令：
+#   verify            运行完整功能验证套件（默认）
+#   check             运行项目自检 tools/check_env.py
+#   selftest          运行 hudcore 回归自测 tools/selftest.py
+#   py <args...>      用 Windows Python 直接执行（如 py -m pip list）
+#   script <file>     用 Windows Python 执行指定脚本（项目内相对路径）
+#   shell             进入交互 bash
+# =====================================================================
+set -uo pipefail
+
+WINPY="C:\\Program Files\\Python313\\python.exe"
+WINPY_UNIX="${WINEPREFIX}/drive_c/Program Files/Python313/python.exe"
+PROJECT_DIR="${PROJECT_DIR:-/work}"
+STUB_SRC="/opt/stub/zlgcan.dll"
+STUB_DST="${PROJECT_DIR}/drivers/windows/zlgcan.dll"
+
+log() { printf '\n\033[1;36m=== %s ===\033[0m\n' "$*"; }
+
+# Windows Python 是否就绪
+have_winpy() { [ -f "${WINPY_UNIX}" ]; }
+
+# 统一用 xvfb-run 提供虚拟显示（Tk 需要；-a 自动挑选空闲 display）
+winrun() { xvfb-run -a --server-args="-screen 0 1280x800x24" wine "$@"; }
+
+prepare() {
+    if ! have_winpy; then
+        echo "[错误] 未找到 Windows 版 Python：${WINPY_UNIX}" >&2
+        echo "       镜像构建阶段安装失败？请重新构建镜像。" >&2
+        exit 2
+    fi
+    # 放置 CAN 驱动"桩库"（drivers/*/*.dll 已在 .gitignore，不会污染仓库）
+    #   · 首选镜像内 MinGW 交叉编译的 zlgcan.dll（有真实 ZCAN_* 导出）
+    #   · 镜像未编译（无 MinGW）时，用 Windows Python 自带的 python313.dll 充当：
+    #     同样走「探测 → WinDLL 加载 → 调用导出函数」全链路，只是导出名不同
+    mkdir -p "$(dirname "${STUB_DST}")"
+    if [ -f "${STUB_SRC}" ]; then
+        cp -f "${STUB_SRC}" "${STUB_DST}"
+        echo "[准备] CAN 桩库: MinGW 编译版 zlgcan.dll"
+    elif [ -f "${WINPY_UNIX%/python.exe}/python313.dll" ]; then
+        cp -f "${WINPY_UNIX%/python.exe}/python313.dll" "${STUB_DST}"
+        echo "[准备] CAN 桩库: 回退为 python313.dll（导出 Py_GetVersion，用于验证加载链路）"
+    else
+        echo "[准备] 未找到可充当桩库的 DLL，第 9 项将 SKIP"
+    fi
+}
+
+cmd_verify() {
+    prepare
+    log "Windows 运行时自检"
+    winrun "${WINPY}" -c "import sys, platform; print('python', sys.version); print('platform', platform.system(), platform.release()); print('machine', platform.machine()); print('executable', sys.executable)" || true
+    log "运行功能验证套件"
+    local out_dir="${PROJECT_DIR}/docker/windows-sim"
+    winrun "${WINPY}" "Z:\\work\\docker\\windows-sim\\verify_windows.py" \
+        --expect win \
+        --report "Z:\\work\\docker\\windows-sim\\verify_report.md" \
+        --json   "Z:\\work\\docker\\windows-sim\\verify_report.json" \
+        ${VERIFY_SKIP:+--skip "${VERIFY_SKIP}"}
+    local rc=$?
+    log "套件退出码: ${rc}"
+    return ${rc}
+}
+
+cmd_check() {
+    prepare
+    winrun "${WINPY}" "Z:\\work\\tools\\check_env.py" || true
+}
+
+cmd_selftest() {
+    prepare
+    winrun "${WINPY}" "Z:\\work\\tools\\selftest.py" || true
+}
+
+cmd_py() {
+    prepare
+    winrun "${WINPY}" "$@"
+}
+
+cmd_script() {
+    prepare
+    local rel="$1"; shift
+    winrun "${WINPY}" "Z:\\work\\${rel//\//\\}" "$@"
+}
+
+cmd_gui() {
+    prepare
+    log "启动 GUI（无显示器环境；用于验证窗口能否创建）"
+    timeout 25 winrun "${WINPY}" "Z:\\work\\main.py" && echo "main.py 自行退出(0)" || echo "main.py 被超时终止（GUI 常驻属正常现象）"
+}
+
+case "${1:-verify}" in
+    verify)   shift; cmd_verify "$@" ;;
+    check)    shift; cmd_check "$@" ;;
+    selftest) shift; cmd_selftest "$@" ;;
+    py)       shift; cmd_py "$@" ;;
+    script)   shift; cmd_script "$@" ;;
+    gui)      shift; cmd_gui "$@" ;;
+    shell)    exec bash ;;
+    *)        echo "未知子命令: $1"; echo "可用: verify|check|selftest|py|script|gui|shell"; exit 2 ;;
+esac

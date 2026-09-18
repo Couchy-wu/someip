@@ -44,8 +44,24 @@ def check_platform() -> None:
     except Exception as e:
         problems.append((f"hudcore 导入失败: {e}", "确认在项目根目录下运行，且 hudcore/ 目录存在"))
     print(f"{OK} Python {sys.version.split()[0]}  ({sys.executable})")
-    if sys.version_info < (3, 8):
-        problems.append(("Python 版本过低", "建议 Python 3.10（Ubuntu 22.04 默认）"))
+    try:
+        from hudcore.platform.system import python_status, PYTHON_MIN, PYTHON_MAX_TESTED
+        level, note = python_status()
+        if level == "error":
+            problems.append((note, "Windows: 安装 Python 3.13（python.org）；"
+                                   "Ubuntu: sudo apt install -y python3.13 python3.13-tk "
+                                   "（或使用 deadsnakes PPA）"))
+            print(f"{FAIL} {note}")
+        elif level == "warn":
+            print(f"{WARN} {note}")
+        else:
+            print(f"{OK} Python 版本受支持（{PYTHON_MIN[0]}.{PYTHON_MIN[1]} ~ "
+                  f"{PYTHON_MAX_TESTED[0]}.{PYTHON_MAX_TESTED[1]}）")
+            if note and "paddlepaddle" in note:
+                print(f"     注: {note}")
+    except Exception:
+        if sys.version_info < (3, 10):
+            problems.append(("Python 版本过低", "建议 Python 3.10（Ubuntu 22.04 默认）~ 3.13"))
 
 
 def check_paths() -> None:
@@ -171,6 +187,45 @@ def check_fonts() -> None:
         problems.append((f"字体检查异常: {e}", "确认已安装 tkinter"))
 
 
+def check_py313_compat() -> None:
+    """Python 3.13 专项：确认重依赖版本满足"有 cp313 wheel"的最低要求。
+
+    背景：paddlepaddle 直到 3.2.1 才提供 cp313 wheel；低于该版本在 3.13 上
+    只能源码编译（大概率失败），必须显式升级。
+    """
+    ver = sys.version_info[:2]
+    if ver < (3, 13):
+        return
+    section("Python 3.13 兼容性")
+
+    # (模块名, 展示名, 3.13 最低版本, 升级命令)
+    requirements = [
+        ("paddle", "paddlepaddle", (3, 2, 1),
+         "pip install -U 'paddlepaddle>=3.2.1'"),
+        ("torch", "torch", (2, 6, 0),
+         "pip install -U torch --index-url https://download.pytorch.org/whl/cpu"),
+        ("numpy", "numpy", (2, 1, 0), "pip install -U 'numpy>=2.1'"),
+        ("cv2", "opencv-python", (4, 10, 0), "pip install -U 'opencv-python>=4.10'"),
+        ("tokenizers", "tokenizers", (0, 21, 0), "pip install -U 'tokenizers>=0.21'"),
+    ]
+    for mod, label, min_ver, fix in requirements:
+        try:
+            m = importlib.import_module(mod)
+        except Exception:
+            continue                      # 未安装：上面的依赖检查已给出提示
+        raw = str(getattr(m, "__version__", "") or "")
+        cur = tuple(int(x) for x in raw.split(".")[:3] if x.isdigit())
+        if cur and cur < min_ver:
+            need = ".".join(map(str, min_ver))
+            print(f"{FAIL} {label} {raw} 低于 3.13 所需最低版本 {need}（无 cp313 wheel）")
+            problems.append((f"{label} {raw} 在 Python 3.13 上不受支持", fix))
+        else:
+            print(f"{OK} {label} {raw}（满足 3.13 要求 >= "
+                  f"{'.'.join(map(str, min_ver))}）")
+    print(f"{OK} 说明：Python 3.13 上首次安装请用 "
+          f"`pip install -r requirements-py313.txt`（已固定可用版本）")
+
+
 def check_testcase_dir() -> None:
     section("业务目录")
     try:
@@ -192,6 +247,7 @@ def main() -> int:
     check_platform()
     check_paths()
     check_python_deps()
+    check_py313_compat()
     check_fonts()
     check_can_driver()
     check_external_tools()

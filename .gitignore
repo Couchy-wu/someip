@@ -6,3 +6,7 @@ __pycache__/
 venv/
 drivers/*/[!R]*.so
 drivers/*/*.dll
+
+# macOS / 编辑器
+.DS_Store
+.vscode/

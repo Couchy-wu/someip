@@ -1,0 +1,52 @@
+# -*- coding: utf-8 -*-
+# HudAutoTest 依赖 —— Python 3.13 专用
+# ==================================================================
+# 用法（Windows / Ubuntu 通用）：
+#   python -m pip install -U pip
+#   pip install -r requirements-py313.txt
+#
+# 背景：
+#   本项目原本面向 Ubuntu 22.04 自带的 Python 3.10；Windows 现场常用
+#   Python 3.13。经核查，**基线 requirements.txt 中的固定版本在 3.13 上
+#   全部提供 cp313 / abi3 wheel**，因此 3.13 无需另建一套依赖树，本文件
+#   只做两件事：
+#     1) 继承基线固定版本（保证与 3.10 环境行为一致）；
+#     2) 追加"3.13 可用性下限"，防止解析器回退到无 cp313 wheel 的旧版本
+#        （典型：paddlepaddle < 3.2.1 在 3.13 上没有 wheel，会尝试源码编译
+#         并大概率失败）。
+#
+# 环境要求：CPython 3.13（64 位）。3.13 未提供 32 位 Windows wheel。
+# 详细兼容性矩阵与排障：docs/PYTHON_COMPATIBILITY.md
+# ==================================================================
+
+-r requirements.txt
+
+# ---- 3.13 可用性下限（关键项）----
+# paddlepaddle 3.2.1 是首个提供 cp313 wheel 的版本（win_amd64 /
+# manylinux1_x86_64 / manylinux2014_aarch64 / macosx_11_0_arm64）
+paddlepaddle>=3.2.1
+
+# torch 自 2.6 起提供 cp313 wheel；本项目固定 2.9.0 已满足
+torch>=2.6.0
+
+# numpy 2.1+ 提供 cp313 wheel（基线固定 2.2.6）
+numpy>=2.1.0
+
+# opencv-python 4.10+ 通过 abi3 wheel 覆盖 3.13（基线固定 4.12.0.88）
+opencv-python>=4.10.0
+
+# tokenizers / pydantic-core 走 abi3 wheel，0.21+ / 2.9+ 即可（基线均满足）
+tokenizers>=0.21.0
+
+# ---- PyTorch 单独安装（按需选一条）----
+# GPU（CUDA 12.6）:
+#   pip install torch==2.9.0 torchvision==0.24.0 torchaudio==2.9.0 \
+#       --index-url https://download.pytorch.org/whl/cu126
+# CPU:
+#   pip install torch==2.9.0 torchvision==0.24.0 torchaudio==2.9.0 \
+#       --index-url https://download.pytorch.org/whl/cpu
+
+# ---- 安装后自检 ----
+#   python tools/check_env.py        # 会输出 "Python 3.13 兼容性" 小节
+#   python tools/check_imports.py    # 项目内部导入静态校验
+#   python tools/selftest.py         # hudcore 回归自测
