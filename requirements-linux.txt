@@ -1,0 +1,23 @@
+# -*- coding: utf-8 -*-
+# Ubuntu 22.04 平台依赖（在 requirements.txt 基础上）
+# ------------------------------------------------------------------
+# 用法：
+#   1) 系统依赖（必须先装）：
+#      sudo apt update && sudo apt install -y \
+#        python3-pip python3-tk python3-dev build-essential \
+#        libgl1 libglib2.0-0 ffmpeg \
+#        fonts-noto-cjk libreoffice-calc \
+#        libusb-1.0-0 libusb-1.0-0-dev
+#   2) Python 依赖：
+#      pip install -r requirements-linux.txt
+#
+# GPU（CUDA 12.6）版 PyTorch：
+#   pip install torch==2.9.0 torchvision==0.24.0 torchaudio==2.9.0 \
+#       --index-url https://download.pytorch.org/whl/cu126
+# CPU 版（无独显/仅功能验证）：
+#   pip install torch==2.9.0 torchvision==0.24.0 torchaudio==2.9.0 \
+#       --index-url https://download.pytorch.org/whl/cpu
+#
+# ZLG CAN 驱动（Linux）：将 libzlgcan.so / libusbcanfd.so 放入 drivers/linux/，
+#   并配置 udev 规则（见 docs/UBUNTU_SETUP.md）
+-r requirements.txt

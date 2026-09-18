@@ -34,24 +34,13 @@ class LogViewer:
         thread.start()
 
     def _open_log_in_thread(self, log_path):
+        """跨平台打开日志文件（编辑器探测 → 系统默认程序回退）"""
         try:
-            system = platform.system()
-            if system == "Windows":
-                # 方法1：尝试用记事本打开
-                notepad_path = shutil.which("notepad")
-                if notepad_path:
-                    # 注意：使用 subprocess.Popen 而不是 run，避免等待
-                    subprocess.Popen([notepad_path, log_path], close_fds=True)
-                else:
-                    # 备用：使用系统默认程序打开（非阻塞）
-                    os.startfile(log_path)
-            elif system == "Linux":
-                subprocess.Popen(['xdg-open', log_path])
-            elif system == "Darwin":  # macOS
-                subprocess.Popen(['open', log_path])
-            else:
-                # 通过主线程显示错误（GUI操作必须在主线程）
-                self._show_error(f"不支持的系统: {system}")
+            # Windows: notepad++/notepad ；Ubuntu: gedit/kate/xdg-open ；macOS: 交给 open
+            from hudcore.platform.executables import open_in_text_editor
+            if not open_in_text_editor(log_path):
+                self._show_error(f"无法打开日志文件：{log_path}\n"
+                                 f"Ubuntu 可安装编辑器：sudo apt install -y gedit")
         except Exception as e:
             self._show_error(f"无法打开日志文件：\n{e}")
 

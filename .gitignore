@@ -1,0 +1,8 @@
+
+# 平台化改造新增
+__pycache__/
+*.pyc
+.venv/
+venv/
+drivers/*/[!R]*.so
+drivers/*/*.dll

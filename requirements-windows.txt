@@ -1,0 +1,15 @@
+# -*- coding: utf-8 -*-
+# Windows 平台依赖（在 requirements.txt 基础上）
+# ------------------------------------------------------------------
+# 用法：
+#   pip install -r requirements-windows.txt
+#
+# GPU（CUDA 12.6）版 PyTorch：
+#   pip install torch==2.9.0 torchvision==0.24.0 torchaudio==2.9.0 ^
+#       --index-url https://download.pytorch.org/whl/cu126
+# CPU 版：
+#   pip install torch==2.9.0 torchvision==0.24.0 torchaudio==2.9.0 ^
+#       --index-url https://download.pytorch.org/whl/cpu
+#
+# ZLG CAN 驱动：将 zlgcan.dll 放入 drivers/windows/（或设置 HUD_ZLG_LIB）
+-r requirements.txt

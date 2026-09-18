@@ -115,19 +115,11 @@ class VideoProcessor:
         # ---- 4）是否使用 GPU（CUDA） ----
         use_gpu = messagebox.askyesno("GPU 加速", "是否使用 GPU（CUDA）加速？")
 
-        # ---- 5）ffmpeg.exe 的完整路径（若已在 PATH 可留空） ----
-        ffmpeg_path = os.path.abspath(
-            os.path.join(ROOT, "ffmpeg", "bin", "ffmpeg.exe"))
-        if not os.path.isfile(ffmpeg_path):
-            # 让用户手动挑选
-            ffmpeg_path = filedialog.askopenfilename(
-                title="请选择 ffmpeg.exe（若已在系统 PATH 可直接点“取消”）",
-                filetypes=[("ffmpeg 可执行文件", "ffmpeg.exe")]
-            )
-            if not ffmpeg_path:               # 用户点了“取消”
-                ffmpeg_path = None            # 使用系统 PATH
-            else:
-                ffmpeg_path = os.path.abspath(ffmpeg_path)
+        # ---- 5）ffmpeg 可执行文件：跨平台探测（项目 bin/<平台> → PATH → 常见路径） ----
+        #           Windows: bin/windows/ffmpeg.exe ；Ubuntu: bin/linux/ffmpeg 或 PATH 中的 ffmpeg
+        ffmpeg_path = self._resolve_ffmpeg()
+
+        # ---- 6）启动子线程进行抽帧 ----
 
         # ---- 6）启动子线程进行抽帧 ----
         threading.Thread(
@@ -135,6 +127,35 @@ class VideoProcessor:
             args=(video_path, out_dir, fps, use_gpu, ffmpeg_path),
             daemon=True
         ).start()
+
+    # -------------------------------------------------
+    # ①b 跨平台解析 ffmpeg 可执行文件
+    # -------------------------------------------------
+    def _resolve_ffmpeg(self):
+        """
+        解析 ffmpeg 路径（跨平台）：
+          1. hudcore 探测：环境变量 HUD_FFMPEG → 项目 bin/<平台>/ → PATH → 常见安装路径
+          2. 仍未找到则弹窗手选（按平台过滤可执行文件后缀）
+          3. 用户取消 → None（交给 ffmpeg-python 用系统 PATH）
+        """
+        try:
+            from hudcore.platform.executables import get_ffmpeg
+            path = get_ffmpeg()
+            if path:
+                logging.debug("ffmpeg 探测命中: %s", path)
+                return str(path)
+        except Exception as e:
+            logging.debug("hudcore 探测 ffmpeg 失败，回退手选: %s", e)
+
+        from hudcore.platform.system import exe_suffix
+        logging.debug("未自动找到 ffmpeg，请手动选择")
+        chosen = filedialog.askopenfilename(
+            title=f"请选择 ffmpeg{exe_suffix}（若已在系统 PATH 可直接点“取消”）",
+            filetypes=[("ffmpeg 可执行文件", f"ffmpeg{exe_suffix}"),
+                       ("所有文件", "*.*")])
+        if not chosen:
+            return None                     # 使用系统 PATH
+        return os.path.abspath(chosen)
 
     # -------------------------------------------------
     # ② 子线程：真正的 ffmpeg 调用与进度解析

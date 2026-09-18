@@ -620,7 +620,12 @@ class CANFDGUI:
         draw = ImageDraw.Draw(img)
         # 3️⃣ 选取字体（系统自带的 Arial，若不存在则回退到默认字体）
         try:
-            font = ImageFont.truetype("arial.ttf", 32)   # 颜色、字号可以自行调
+            # 跨平台字体（Windows: 微软雅黑/Arial；Ubuntu: Noto Sans CJK / DejaVu）
+            try:
+                from hudcore.platform.fonts import load_pil_font
+                font = load_pil_font(32)
+            except Exception:
+                font = ImageFont.load_default()
         except Exception:
             font = ImageFont.load_default()
         # 4️⃣ 把传进来的文本按行拆分

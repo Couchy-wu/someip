@@ -1,7 +1,28 @@
+# -*- coding: utf-8 -*-
+"""
+HudAutoTest 主程序入口
+======================
+GUI 主窗口：测试用例管理 / CAN 测试 / 图像视频处理 / 工具入口。
+
+重构说明（v2）：
+  · 原全局脚本改为 MainWindow 类，UI 构建拆分为独立方法，便于维护与测试；
+  · 平台相关（字体、日志重定向）走 hudcore，Windows / Ubuntu 22.04 通用；
+  · 启动时打印平台自检信息（字体、驱动库状态），便于现场排障。
+
+运行：
+    python main.py
+"""
+from __future__ import annotations
+
+import queue  # noqa: F401  (保持向后兼容：原 main.py 曾导出 queue)
+import sys
 import tkinter as tk
-import os
+from tkinter import font as tkfont  # noqa: F401  (兼容旧引用)
 from tkinter import ttk
-from tkinter import font as tkfont
+
+import GuiFunction.image_player  # noqa: F401
+import GuiFunction.matrix_to_csv  # noqa: F401
+import GuiFunction.binhex_gui  # noqa: F401
 from GuiFunction.file_updater import FileUpdater
 from GuiFunction.file_handler import handle_file_upload
 from GuiFunction.delete_handler import delete_test_case
@@ -9,379 +30,258 @@ from GuiFunction.view_case_handler import ViewCaseHandler
 from GuiFunction.view_case_processor import LogViewer
 from GuiFunction.image_handler import ImageHandler
 from GuiFunction.video_processor import VideoProcessor
-import GuiFunction.image_player  # 导入 image_player 模块
-import GuiFunction.matrix_to_csv
-import GuiFunction.binhex_gui
 from OtherGui.test_can_gui import CANFDGUI
-import queue
 
-class TextRedirector:
-    """
-    将任何线程的 print 输出安全地转发到 Tkinter Text 小部件。
-    通过内部 queue + root.after 实现在主线程中写入，避免跨线程直接操作 UI。
-    """
-    def __init__(self, widget, root, poll_interval: int = 50):
-        self.widget = widget          # tk.Text 实例
-        self.root   = root            # 主窗口 (tk.Tk)
-        self._queue = queue.Queue()   # 线程安全的 FIFO
-        self._poll_interval = poll_interval
-        self._after_id = None         # 用于保存 after ID，以便取消
-        self._start_poll()            # 启动轮询任务
+from hudcore.platform import describe_platform, paths
+from hudcore.platform.executables import get_ffmpeg, get_office_app, get_text_editor
+from hudcore.ui import TextRedirector, Theme
 
-    def write(self, string: str):
-        """所有线程都会调用此方法，只负责把字符串放入队列。"""
-        if string:                     # 过滤空字符串
-            self._queue.put(string)
-    def flush(self):
-        """保持文件对象接口兼容，实际不需要实现。"""
-        pass
-    # 私有：在主线程周期性取出队列内容并写入 Text
-    def _start_poll(self):
-        """使用 root.after 循环轮询队列并写入 Text。"""
-        self._flush_queue()
-        self._after_id = self.root.after(self._poll_interval, self._start_poll)  # 保存 after ID
+# 兼容别名：原 main.py 在此定义了 TextRedirector，保留导入路径
+__all__ = ["MainWindow", "TextRedirector", "main"]
 
-    def _flush_queue(self):
-        """一次性写出队列中所有待打印的字符串。"""
+
+class MainWindow:
+    """HudAutoTest 主窗口"""
+
+    WINDOW_TITLE = "主窗口"
+    WINDOW_GEOMETRY = "1300x600"
+    GRID_ROWS = 5  # 参与拉伸的行数（与原实现一致）
+
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title(self.WINDOW_TITLE)
+        self.root.geometry(self.WINDOW_GEOMETRY)
+
+        self._log_redirector = None
+        self._can_window = None
+        self._time_after_id = None
+
+        self._init_handlers()
+        self._build_log_panel()
+        self._redirect_stdout()
+        self._start_clock()
+        self._build_buttons()
+        self._configure_grid()
+        self._bind_close()
+
+        self._print_platform_info()
+
+    # ------------------------------------------------------------------ 状态
+    def _init_handlers(self) -> None:
+        """初始化各功能处理器（原全局实例）"""
+        self.selected_file = tk.StringVar()
+        self.file_updater = FileUpdater()
+        self.view_case_handler = ViewCaseHandler(self.selected_file)
+        self.log_viewer = LogViewer(self.selected_file)
+        self.image_handler = ImageHandler(self.root)
+        self.video_processor = VideoProcessor(self.root)  # 传入主窗口
+
+    # ------------------------------------------------------------ 日志面板
+    def _build_log_panel(self) -> None:
+        """右侧日志面板：时间标签 + 文本框 + 滚动条"""
+        root = self.root
+        self.log_main_frame = tk.Frame(root)
+        self.log_main_frame.grid(row=0, column=5, rowspan=self.GRID_ROWS,
+                                 padx=10, pady=10, sticky="nsew")
+        self.log_main_frame.grid_rowconfigure(1, weight=1)
+        self.log_main_frame.grid_columnconfigure(0, weight=1)
+
+        self.time_label = tk.Label(
+            self.log_main_frame, text="", anchor="w", height=1,
+            **{k: v for k, v in Theme.label_style(bold=True).items() if k != "anchor"})
+        self.time_label.grid(row=0, column=0, sticky="ew", padx=0, pady=(0, 5))
+
+        log_frame = tk.Frame(self.log_main_frame)
+        log_frame.grid(row=1, column=0, sticky="nsew")
+        log_frame.grid_rowconfigure(0, weight=1)
+        log_frame.grid_columnconfigure(0, weight=1)
+
+        self.log_text = tk.Text(log_frame, **Theme.log_text_style())
+        self.log_text.grid(row=0, column=0, sticky="nsew")
+
+        scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_text.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        self.log_text.config(yscrollcommand=scrollbar.set)
+
+    def _redirect_stdout(self) -> None:
+        """把 stdout 重定向到日志文本框（线程安全）"""
+        self._log_redirector = TextRedirector(self.log_text, self.root)
+        sys.stdout = self._log_redirector
+
+    # ---------------------------------------------------------------- 时钟
+    def _start_clock(self) -> None:
+        from datetime import datetime
+
+        def tick():
+            self.time_label.config(text=f"当前时间: {datetime.now().strftime('%H:%M:%S')}")
+            self._time_after_id = self.root.after(1000, tick)
+
+        tick()
+
+    # ---------------------------------------------------------------- 布局
+    def _configure_grid(self) -> None:
+        for i in range(self.GRID_ROWS):
+            self.root.grid_rowconfigure(i, weight=1)
+        self.root.grid_columnconfigure(self.GRID_ROWS, weight=1)
+
+    # ---------------------------------------------------------------- 按钮
+    def _build_buttons(self) -> None:
+        """构建主界面按钮（行/列坐标与原实现保持一致）"""
+        root = self.root
+
+        # 第 0 行：测试用例管理
+        self.upload_button = tk.Button(root, text="上传测试用例",
+                                       command=handle_file_upload,
+                                       **Theme.primary_button())
+        self.upload_button.grid(row=0, column=0, padx=20, pady=20)
+
+        self.delete_button = tk.Button(root, text="删除测试用例",
+                                       command=delete_test_case,
+                                       **Theme.primary_button())
+        self.delete_button.grid(row=0, column=1, padx=20, pady=20)
+
+        self.file_menu = ttk.OptionMenu(root, self.selected_file, *[])
+        self.file_menu.grid(row=0, column=2, padx=20, pady=20)
+        self.file_updater.initialize_menu(self.selected_file, self.file_menu)
+
+        # 上传/删除按钮改为走 FileUpdater（保持原行为）
+        self.upload_button.config(
+            command=lambda: self.file_updater.on_upload(self.selected_file, self.file_menu))
+        self.delete_button.config(
+            command=lambda: self.file_updater.on_delete(self.selected_file, self.file_menu))
+
+        self.view_button = tk.Button(root, text="查看用例",
+                                     command=self.view_case_handler.open_selected_file,
+                                     **Theme.primary_button())
+        self.view_button.grid(row=0, column=3, padx=20, pady=20)
+
+        self.inspect_button = tk.Button(root, text="查看解析",
+                                        command=self.log_viewer.view_log,
+                                        **Theme.primary_button())
+        self.inspect_button.grid(row=0, column=4, padx=20, pady=20)
+
+        # 第 1 行：工具类
+        self.convert_matrix_button = tk.Button(root, text="转换信号矩阵",
+                                               command=self.open_matrix_converter,
+                                               **Theme.success_button())
+        self.convert_matrix_button.grid(row=1, column=0, padx=20, pady=20)
+
+        self.hex_button = tk.Button(root, text="can数据生成器",
+                                    command=lambda: GuiFunction.binhex_gui.open_binhex_converter(root),
+                                    **Theme.success_button())
+        self.hex_button.grid(row=1, column=1, padx=20, pady=20)
+
+        self.can_control_button = tk.Button(root, text="can测试",
+                                            command=self.open_can_gui,
+                                            **Theme.success_button())
+        self.can_control_button.grid(row=1, column=2, padx=20, pady=20)
+
+        # 第 2 行：图像/视频类
+        self.image_button = tk.Button(root, text="打开图片",
+                                      command=self.image_handler.open_image,
+                                      **Theme.danger_button())
+        self.image_button.grid(row=2, column=0, padx=20, pady=20)
+
+        self.read_video_button = tk.Button(root, text="提取视频帧",
+                                           command=self.video_processor.process_video,
+                                           **Theme.danger_button())
+        self.read_video_button.grid(row=2, column=1, padx=20, pady=20)
+
+        self.image_video_button = tk.Button(root, text="播放图片视频",
+                                            command=GuiFunction.image_player.play_image_sequence,
+                                            **Theme.danger_button())
+        self.image_video_button.grid(row=2, column=2, padx=20, pady=20)
+
+    # ------------------------------------------------------------ 子窗口
+    def open_matrix_converter(self) -> None:
+        """打开"信号矩阵 转 CSV 工具"窗口"""
+        win = tk.Toplevel(self.root)
+        win.title("信号矩阵 转 CSV 工具")
+        win.geometry("500x200")
+        win.transient(self.root)
+        win.grab_set()
+        win.focus_force()
+        GuiFunction.matrix_to_csv.XlsmToCsvConverter(win, skip_first_row=False)
+
+    def open_can_gui(self) -> None:
+        """打开 CAN 信号自动收发子窗口"""
+        if self._can_window is not None:
+            try:
+                if self._can_window.winfo_exists():
+                    self._can_window.focus()
+                    return
+            except tk.TclError:
+                self._can_window = None
+
+        self.can_control_button.config(state=tk.DISABLED)
+
+        win = tk.Toplevel(self.root)
+        win.title("CAN信号自动收发程序")
+        win.geometry("800x600")
+        win.can_gui = CANFDGUI(win, selected_file=self.selected_file)
+        win.protocol("WM_DELETE_WINDOW", self._on_can_window_close)
+        self._can_window = win
+
+    def _on_can_window_close(self) -> None:
+        """CAN 子窗口关闭回调：交给 GUI 自身清理逻辑"""
+        win = self._can_window
+        if not win:
+            return
+        gui = getattr(win, "can_gui", None)
+        if gui and hasattr(gui, "on_closing"):
+            gui.on_closing()
+            if not win.winfo_exists():
+                self._can_window = None
+                self.can_control_button.config(state=tk.NORMAL)
+        else:
+            win.destroy()
+            self._can_window = None
+            self.can_control_button.config(state=tk.NORMAL)
+
+    # ------------------------------------------------------------ 生命周期
+    def _bind_close(self) -> None:
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+    def on_closing(self) -> None:
+        """窗口关闭清理"""
+        if self._log_redirector is not None:
+            self._log_redirector.stop_polling()
+            if sys.stdout is self._log_redirector:
+                sys.stdout = sys.__stdout__
+        if self._time_after_id is not None:
+            try:
+                self.root.after_cancel(self._time_after_id)
+            except tk.TclError:
+                pass
         try:
-            while True:                       # 直至队列为空抛异常
-                line = self._queue.get_nowait()
-                self.widget.insert(tk.END, line)
-                self.widget.see(tk.END)      # 自动滚动到底部
-        except queue.Empty:
+            self.root.destroy()
+        except tk.TclError:
             pass
 
-    # 停止轮询的方法，用于窗口关闭时调用
-    def stop_polling(self):
-        if self._after_id is not None:
-            self.root.after_cancel(self._after_id)
-            self._after_id = None
+    def run(self) -> None:
+        self.root.mainloop()
 
-
-# 创建主窗口
-root = tk.Tk()
-root.title("主窗口")
-root.geometry("1300x600") 
-
-# 初始化文件更新器
-file_updater = FileUpdater()
-selected_file = tk.StringVar()
-
-# 初始化查看用例处理器
-view_case_handler = ViewCaseHandler(selected_file)
-
-# 初始化测试用例解析出来的日志的查看器
-log_viewer = LogViewer(selected_file)
-
-# 初始化 ImageHandler
-image_handler = ImageHandler(root)
-
-# 初始化 VideoProcessor
-video_processor = VideoProcessor(root)  # 传入主窗口
-
-# 自定义字体
-bold_font = tkfont.Font(family="微软雅黑", size=10, weight="normal")
-
-# 创建右侧主容器（包含时间标签 + 日志框）
-log_main_frame = tk.Frame(root)
-log_main_frame.grid(row=0, column=5, rowspan=5, padx=10, pady=10, sticky="nsew")
-
-# 使内部组件可随窗口拉伸
-log_main_frame.grid_rowconfigure(1, weight=1)  # 第1行（日志框）占主要空间
-log_main_frame.grid_columnconfigure(0, weight=1)
-
-# 1. 创建时间显示标签
-time_label = tk.Label(
-    log_main_frame,
-    text="",
-    font=tkfont.Font(family="微软雅黑", size=10, weight="bold"),
-    bg="#F0F0F0",        # 浅灰色背景，美观清晰
-    fg="#000000",        # 黑色文字
-    anchor="w",          # 文字左对齐
-    relief="flat",       # 边框风格（可选）
-    height=1
-)
-time_label.grid(row=0, column=0, sticky="ew", padx=0, pady=(0, 5))
-# sticky="ew" → 水平拉伸；pady=(0,5) → 下方留空，与日志框分离
-
-# 2. 创建日志文本框的容器（frame）
-log_frame = tk.Frame(log_main_frame)
-log_frame.grid(row=1, column=0, sticky="nsew")
-log_frame.grid_rowconfigure(0, weight=1)
-log_frame.grid_columnconfigure(0, weight=1)
-
-# 创建文本框
-log_text = tk.Text(
-    log_frame,
-    wrap=tk.WORD,
-    bg="#FFFFFF",          # 背景
-    fg="#000000",          # 文字
-    insertbackground="black",  # 光标颜色
-    font=tkfont.Font(family="微软雅黑", size=10, weight="normal"),      # 字体
-    height=20,
-    width=35
-)
-log_text.grid(row=0, column=0, sticky="nsew")
-
-# 创建垂直滚动条
-scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=log_text.yview)
-scrollbar.grid(row=0, column=1, sticky="ns")
-
-# 关联文本框与滚动条
-log_text.config(yscrollcommand=scrollbar.set)
-
-# 重定向 stdout 到文本框
-import sys
-sys.stdout = TextRedirector(log_text, root)
-# 如需同时捕获 stderr 也可以这样做（可选）：
-# sys.stderr = TextRedirector(log_text, root)
-
-# ====== 实时更新时间函数 ======
-def update_time():
-    from datetime import datetime
-    current_time = datetime.now().strftime("%H:%M:%S")
-    time_label.config(text=f"当前时间: {current_time}")
-    update_time.after_id = root.after(1000, update_time)  # 每隔1000毫秒（1秒）调用一次自己
-
-# 启动时间刷新
-update_time()
-
-# 配置行列权重（确保文本框和滚动条随窗口缩放）
-grid_rowconfigure_number = 5
-for i in range(grid_rowconfigure_number):
-    root.grid_rowconfigure(i, weight=1)
-root.grid_columnconfigure(grid_rowconfigure_number, weight=1)
-
-# 创建“上传测试用例”按钮
-upload_button = tk.Button(
-    root,
-    text="上传测试用例",
-    bg="#4A90E2",    # 蓝色背景
-    font=bold_font,
-    fg="white",      # 白色文字
-    activebackground="#357ABD",  # 按下时背景色
-    command=handle_file_upload,
-    width=15,
-    height=2
-)
-upload_button.grid(row=0, column=0, padx=20, pady=20) 
-
-# 创建“删除测试用例”按钮
-delete_button = tk.Button(
-    root,
-    text="删除测试用例",
-    bg="#4A90E2",    # 蓝色背景
-    font=bold_font,
-    fg="white",      # 白色文字
-    activebackground="#357ABD",  # 按下时背景色
-    command=delete_test_case,
-    width=15,
-    height=2
-)
-delete_button.grid(row=0, column=1, padx=20, pady=20)
-
-# 创建下拉菜单
-file_menu = ttk.OptionMenu(root, selected_file, *[])
-file_menu.grid(row=0, column=2, padx=20, pady=20)
-
-# 初始化下拉菜单
-file_updater.initialize_menu(selected_file, file_menu)
-
-# 更新按钮命令
-upload_button.config(command=lambda: file_updater.on_upload(selected_file, file_menu))
-delete_button.config(command=lambda: file_updater.on_delete(selected_file, file_menu))
-
-# 创建“查看用例”按钮
-view_button = tk.Button(
-    root,
-    text="查看用例",
-    bg="#4A90E2",    # 蓝色背景
-    font=bold_font,
-    fg="white",      # 白色文字
-    activebackground="#357ABD",  # 按下时背景色
-    command=view_case_handler.open_selected_file,
-    width=15,
-    height=2
-)
-view_button.grid(row=0, column=3, padx=20, pady=20)
-
-# 创建“查看解析”按钮
-inspect_button = tk.Button(
-    root,
-    text="查看解析",
-    bg="#4A90E2",
-    font=bold_font,
-    fg="white",
-    activebackground="#357ABD",
-    command=log_viewer.view_log,
-    width=15,
-    height=2
-)
-inspect_button.grid(row=0, column=4, padx=20, pady=20)
-
-# 添加“打开图片”按钮
-image_button = tk.Button(
-    root,
-    text="打开图片",
-    font=bold_font,
-    bg="#D9534F",
-    fg="white",
-    activebackground="#C9302C",
-    command=image_handler.open_image,
-    width=15,
-    height=2
-)
-image_button.grid(row=2, column=0, padx=20, pady=20)
-
-# 添加“提取视频帧”按钮
-read_video_button = tk.Button(
-    root,
-    text="提取视频帧",
-    font=bold_font,
-    bg="#D9534F",
-    fg="white",
-    activebackground="#C9302C",
-    command=video_processor.process_video,
-    width=15,
-    height=2
-)
-read_video_button.grid(row=2, column=1, padx=20, pady=20)
-
-# 添加“播放图片视频”按钮
-image_video_button = tk.Button(
-    root,
-    text="播放图片视频",
-    font=bold_font,
-    bg="#D9534F",
-    fg="white",
-    activebackground="#C9302C",
-    command=GuiFunction.image_player.play_image_sequence,
-    width=15,
-    height=2
-)
-image_video_button.grid(row=2, column=2, padx=20, pady=20)
-
-# 添加“转换信号矩阵”按钮
-convert_matrix_button = tk.Button(
-    root,
-    text="转换信号矩阵",
-    font=bold_font,
-    bg="#5CB85C",
-    fg="white",
-    activebackground="#4CAE4C",
-    command=lambda: open_matrix_converter(),
-    width=15,
-    height=2
-)
-convert_matrix_button.grid(row=1, column=0, padx=20, pady=20)
-
-def open_matrix_converter():
-    converter_window = tk.Toplevel(root)
-    converter_window.title("信号矩阵 转 CSV 工具")
-    converter_window.geometry("500x200")
-    converter_window.transient(root)  # 设置为临时窗口
-    converter_window.grab_set()       # 模态锁定
-    converter_window.focus_force()
-    GuiFunction.matrix_to_csv.XlsmToCsvConverter(converter_window, skip_first_row=False)  #  True → 跳过第一行
-
-# 添加“can数据生成器”按钮
-hex_button = tk.Button(
-    root,
-    text="can数据生成器",
-    bg="#5CB85C",
-    fg="white",
-    font=bold_font,
-    activebackground="#4CAE4C",
-    command=lambda: GuiFunction.binhex_gui.open_binhex_converter(root),
-    width=15,
-    height=2
-)
-hex_button.grid(row=1, column=1, padx=20, pady=20)  
-
-# 添加“can测试”按钮，点击后调用test_can_gui.py
-can_window_instance = None      # 全局变量：用于存储子窗口实例
-def on_can_window_close():
-    """子窗口关闭时的回调"""
-    global can_window_instance
-    if not can_window_instance:
-        return
-
-    # 取得保存在 Toplevel 上的 CANFDGUI 实例
-    gui = getattr(can_window_instance, "can_gui", None)
-
-    if gui and hasattr(gui, "on_closing"):
-        # 交给 GUI 自己的关闭逻辑处理
-        gui.on_closing()
-
-        # 如果 GUI 已经自行销毁了窗口（即 on_closing 调用了 destroy），
-        # winfo_exists() 会返回 False，此时需要清理全局变量并恢复按钮状态
-        if not can_window_instance.winfo_exists():
-            can_window_instance = None
-            can_control_button.config(state=tk.NORMAL)
-    else:
-        # 防御性写法：没有 GUI 实例时直接销毁窗口
-        can_window_instance.destroy()
-        can_window_instance = None
-        can_control_button.config(state=tk.NORMAL)
-
-def open_can_gui():
-    """点击主界面 “can测试” 按钮时打开 CANFD 控制子窗口。"""
-    global can_window_instance
-
-    # 已有窗口存在则聚焦并直接返回
-    if can_window_instance is not None:
+    # ------------------------------------------------------------ 自检信息
+    def _print_platform_info(self) -> None:
+        """打印平台自检（字体、外部程序、驱动库）——现场排障很有用"""
+        print(f"[环境] {describe_platform()}")
+        print(f"[环境] 项目根目录: {paths.project_root}")
+        print(f"[环境] 界面字体: {Theme.font_name()}")
+        for label, path in (("ffmpeg", get_ffmpeg()),
+                            ("表格应用", get_office_app()),
+                            ("文本编辑器", get_text_editor())):
+            print(f"[环境] {label}: {path if path else '未找到（相关功能会回退/提示）'}")
         try:
-            if can_window_instance.winfo_exists():
-                can_window_instance.focus()
-                return
-        except tk.TclError:
-            can_window_instance = None   # 窗口可能已异常销毁
-
-    # 禁用打开按钮，防止重复打开
-    can_control_button.config(state=tk.DISABLED)
-
-    # 创建子窗口（Toplevel）
-    new_window = tk.Toplevel(root)
-    new_window.title("CAN信号自动收发程序")
-    new_window.geometry("800x600")
-
-    # 实例化 CANFD GUI，并把对象挂到 Toplevel 上，供关闭回调使用
-    can_gui = CANFDGUI(new_window, selected_file=selected_file)
-    new_window.can_gui = can_gui   # <-- 关键：保存实例
-
-    # 保存全局引用，以便关闭时能找到窗口
-    can_window_instance = new_window
-
-    # 把关闭协议指向统一的回调
-    new_window.protocol("WM_DELETE_WINDOW", on_can_window_close)
-
-can_control_button = tk.Button(
-    root,
-    text="can测试",
-    bg="#5CB85C",
-    fg="white",
-    font=bold_font,
-    activebackground="#4CAE4C",
-    command=open_can_gui,
-    width=15,
-    height=2
-)
-can_control_button.grid(row=1, column=2, padx=20, pady=20)
+            from hudcore.can import describe_library_status
+            print("[环境] CAN 驱动库探测：")
+            print(describe_library_status())
+        except Exception as e:  # pragma: no cover
+            print(f"[环境] CAN 驱动库探测失败: {e}")
 
 
-# 定义主窗口关闭时的清理函数
-def on_closing():
-    # 停止日志重定向器的轮询
-    if isinstance(sys.stdout, TextRedirector):
-        sys.stdout.stop_polling()  # 取消 _start_poll 的 after 任务
-    # 取消时间更新任务
-    root.after_cancel(update_time.after_id)
-    # 销毁主窗口
-    root.destroy()
-
-# 绑定窗口关闭事件，安全退出
-root.protocol("WM_DELETE_WINDOW", on_closing)
+def main() -> None:
+    MainWindow().run()
 
 
-# 运行主循环
-root.mainloop()
+if __name__ == "__main__":
+    main()

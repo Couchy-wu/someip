@@ -420,12 +420,32 @@ def ZCAN_DYNAMIC_CONFIG_CAN_BUSRATIO_ENABLE(can_id):
     return f"DYNAMIC_CONFIG_CAN{can_id}_SNDCFG_INTERVAL"
 
 class ZCAN(object):
-    def __init__(self):
-        if platform.system() == "Windows":
-            self.__dll = windll.LoadLibrary("./zlgcan.dll")
-        else:
-            print("No support now!")
-        if self.__dll == None:
+    """
+    ZLG CAN 驱动库封装（跨平台）
+    ---------------------------
+    驱动库加载交给 hudcore.can 统一处理：
+      Windows : zlgcan.dll（stdcall / WinDLL）
+      Linux   : libzlgcan.so / libusbcanfd.so（cdecl / CDLL）
+    搜索顺序：环境变量 HUD_ZLG_LIB → drivers/<平台>/ → 项目根 → 系统库路径
+    可显式传 library_path 覆盖；hudcore 不可用时回退为原 Windows 行为。
+    """
+
+    def __init__(self, library_path=None):
+        self.__dll = None
+        try:
+            from hudcore.can import load_zlg_library
+            self.__dll = load_zlg_library(library_path)
+        except ImportError:
+            # 兼容：hudcore 不在（如单独拷贝 zlgcan.py 使用）
+            if platform.system() == "Windows":
+                self.__dll = windll.LoadLibrary("./zlgcan.dll")
+            else:
+                print("No support now! (请使用项目内的 hudcore.can 加载 Linux 驱动库)")
+        except FileNotFoundError as e:
+            print(f"[ZCAN] 未能找到 CAN 驱动库：\n{e}")
+        except OSError as e:
+            print(f"[ZCAN] CAN 驱动库加载失败：\n{e}")
+        if self.__dll is None:
             print("DLL couldn't be loaded!")
 
     def OpenDevice(self, device_type, device_index, reserved):

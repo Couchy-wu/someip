@@ -834,12 +834,10 @@ class AnnotatorUI:
                 # 创建统一的背景
                 bg = Image.new('RGBA', (BG_SIZE, BG_SIZE), (200, 200, 200, 255))
                 draw = ImageDraw.Draw(bg)
-                # 加载微软雅黑字体（中文），若不可用则回退
+                # 加载中文字体（跨平台：Windows 微软雅黑 / Ubuntu Noto Sans CJK / macOS PingFang）
                 try:
-                    font_path = r"C:\Windows\Fonts\msyh.ttc"
-                    if not Path(font_path).is_file():
-                        font_path = r"C:\Windows\Fonts\msyh.ttf"
-                    font = ImageFont.truetype(font_path, size=12)
+                    from hudcore.platform.fonts import load_pil_font
+                    font = load_pil_font(12)
                 except Exception:
                     font = ImageFont.load_default()
                 # 兼容 Pillow 版本获取文字尺寸
