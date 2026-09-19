@@ -15,3 +15,7 @@ drivers/*/*.dll
 debug.log
 *.log
 !logs/.gitkeep
+
+# 应用数据目录（随仓库分发，勿忽略）
+!data/
+!data/**

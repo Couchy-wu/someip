@@ -136,7 +136,14 @@ class PerspectiveCalibrator:
         # ---------- 配置文件 ----------
         # 当 image_path 为 None 时，使用空路径（后续依赖 image_path 的地方已做保护）
         self.image_path = Path(image_path) if image_path is not None else Path("memory_buffer")
-        self._config_dir = Path(__file__).resolve().parent
+        # 标定结果是运行期数据：放数据目录（data/），兼容旧位置（模块目录）
+        try:
+            from hudcore.platform.paths import paths
+            data_dir = paths.data_dir
+        except Exception:
+            data_dir = Path(__file__).resolve().parent
+        legacy = Path(__file__).resolve().parent / "fixed_corners.json"
+        self._config_dir = legacy.parent if (legacy.is_file() and not (data_dir / "fixed_corners.json").is_file()) else data_dir
         self.config_path = self._config_dir / "fixed_corners.json"
 
         # ---------- 缓存 ----------

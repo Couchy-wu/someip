@@ -55,7 +55,23 @@ class Paths:
 
     @property
     def resources_dir(self) -> Path:
+        """界面资源（图标/图片素材等，随仓库分发、只读）"""
         return self.project_root / "Resources"
+
+    @property
+    def data_dir(self) -> Path:
+        """应用数据目录（业务数据与运行期状态，与代码分离）
+
+        内容示例：
+            outputMatrix.csv          信号矩阵（业务输入数据）
+            can_device_config.xml     设备配置
+            platform_resolution.json  平台分辨率映射
+            fixed_corners.json        透视标定结果（运行期生成）
+            UI_Config/                界面工具生成的配置文件
+        设计目的：避免"业务数据/运行期状态散落在代码包里"，
+        也避免相对当前工作目录的路径导致换目录即失效。
+        """
+        return self._ensure(self.project_root / "data")
 
     @property
     def models_dir(self) -> Path:

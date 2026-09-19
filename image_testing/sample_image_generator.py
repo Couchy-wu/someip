@@ -15,6 +15,17 @@ from image_testing.image_gen_preview import ImagePreviewMixin     # noqa: E402
 from image_testing.tooltip import Tooltip                         # noqa: E402
 
 
+def _ui_config_dir() -> str:
+    """界面工具配置目录：data/UI_Config 优先，兼容旧的 image_testing/UI_Config。"""
+    try:
+        import hudcore.platform.paths as _p
+        d = _p.paths.data_dir / "UI_Config"
+        legacy = _p.paths.project_root / "image_testing" / "UI_Config"
+        return str(legacy if (legacy.is_dir() and not d.is_dir()) else d)
+    except Exception:
+        return "data/UI_Config"
+
+
 class ImageGeneratorApp(ImagePreviewMixin, ImageGenDataMixin):
     """测试图生成器主类。
 
@@ -39,7 +50,7 @@ class ImageGeneratorApp(ImagePreviewMixin, ImageGenDataMixin):
         # 图标资源目录：Resources/ImageUI/{platform}/
         self.resources_dir = os.path.join(self.project_root, "Resources", "ImageUI")
         # UI 配置文件目录：image_testing/UI_Config/
-        self.config_dir = os.path.join(self.project_root, "image_testing", "UI_Config")
+        self.config_dir = _ui_config_dir()
         # 测试用例目录：image_testing/TestcaseCollection/
         self.testcase_dir = os.path.join(self.project_root, "TestcaseCollection")
         

@@ -419,7 +419,7 @@ def t_can_signal():
     from can_data_tools.find_can_id_from_csv import (
         get_signal_info_by_id_and_name, create_can_data_by_signal)
 
-    csv_path = PROJECT_ROOT / "can_data_tools" / "outputMatrix.csv"
+    csv_path = PROJECT_ROOT / "data" / "outputMatrix.csv"
     assert csv_path.is_file(), f"缺少 {csv_path}"
 
     df = pd.read_csv(csv_path, dtype=str, encoding="utf-8-sig").fillna("")

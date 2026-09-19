@@ -27,6 +27,7 @@ SKIP_DIRS = {
     ".git", ".idea", ".vscode", "Resources", "models", "bin", "logs",
     "output", "output_ocr", "TestcaseCollection", "drivers", "tests",
     "docker",          # 验证工程（自身需要 sys.path 注入以便挂载运行）
+    "data",            # 应用数据目录（非代码）
 }
 
 # 允许保留 sys.path 注入的脚本：独立工具（需在任意目录运行）/ 依赖第三方源码目录

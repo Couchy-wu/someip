@@ -180,11 +180,16 @@ class DelayedFileHandler(logging.Handler):
 
 
 def get_logger(logger_name):
-    """
-    获取已创建的 logger
+    """获取 logger；未初始化时**自动按默认配置创建**。
+
+    设计取舍：早期实现在未初始化时直接抛 ValueError，结果是"日志问题导致业务崩溃"
+    ——例如 can_core.bit_utils 在数据长度不足时要记一条警告并返回 -1，
+    却因为 "bit_parse" logger 未初始化而抛出异常，掩盖了原本的错误处理。
+    日志属于横切关注点，不应让业务逻辑失败；因此这里改为容错创建（一次性提示）。
     """
     if logger_name not in loggers:
-        raise ValueError(f"Logger '{logger_name}' 未初始化，请先调用 setup_logger。")
+        print(f"[日志] logger '{logger_name}' 未显式初始化，已按默认配置自动创建")
+        setup_logger(logger_name)
     return loggers[logger_name]
 
 

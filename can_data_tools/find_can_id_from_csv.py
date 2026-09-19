@@ -15,12 +15,20 @@ _CSV_CACHE_PATH: Optional[str] = None
 
 # 根据CAN ID 和 信号名称 从csv中找到更多信号信息
 def _default_matrix_csv() -> str:
-    """默认信号矩阵 CSV：基于项目根定位（不再依赖当前工作目录）。"""
+    """默认信号矩阵 CSV：数据目录优先（data/），兼容旧位置（can_data_tools/）。
+
+    路径基于项目根定位，不依赖当前工作目录。
+    """
     try:
         from hudcore.platform.paths import paths
-        return str(paths.project_root / "can_data_tools" / "outputMatrix.csv")
+        candidates = [paths.data_dir / "outputMatrix.csv",                 # 现行位置
+                      paths.project_root / "can_data_tools" / "outputMatrix.csv"]  # 旧位置
+        for c in candidates:
+            if c.is_file():
+                return str(c)
+        return str(candidates[0])
     except Exception:
-        return "can_data_tools/outputMatrix.csv"
+        return "data/outputMatrix.csv"
 
 
 def _load_matrix(csv_file: Optional[str] = None):

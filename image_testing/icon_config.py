@@ -24,6 +24,17 @@ except ImportError:                       # 脚本模式回退
     from image_similarity import get_image_hash
 
 
+def _ui_config_dir() -> str:
+    """界面工具配置目录：data/UI_Config 优先，兼容旧的 image_testing/UI_Config。"""
+    try:
+        import hudcore.platform.paths as _p
+        d = _p.paths.data_dir / "UI_Config"
+        legacy = _p.paths.project_root / "image_testing" / "UI_Config"
+        return str(legacy if (legacy.is_dir() and not d.is_dir()) else d)
+    except Exception:
+        return "data/UI_Config"
+
+
 class IconConfigMixin:
     """图标配置读写与哈希计算（由 IconManagerApp 组合使用）。"""
 
@@ -45,7 +56,7 @@ class IconConfigMixin:
         """根据子文件夹生成对应的配置文件路径"""
         config_name = f"ui_config_{subfolder}.json"
         # 修改：将所有配置文件集中放在UI_Config文件夹中
-        return os.path.join(self.project_root, "image_testing", "UI_Config", config_name)
+        return os.path.join(_ui_config_dir(), config_name)
     
     def ensure_background_image(self):
         """确保 background.png 存在，不存在则创建 100x100 黑色图片"""

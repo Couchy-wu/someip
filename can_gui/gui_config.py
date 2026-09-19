@@ -33,6 +33,23 @@ IS_STANDALONE = __name__ == "__main__"
 
 
 
+def _device_config_path() -> str:
+    """设备配置文件路径：data/ 优先，兼容旧的 can_data_tools/ 位置。
+
+    原实现直接写 "can_data_tools/can_device_config.xml"（相对当前工作目录），
+    换目录运行即失效；现改为基于项目根定位。
+    """
+    try:
+        from hudcore.platform.paths import paths
+        for c in (paths.data_dir / "can_device_config.xml",
+                  paths.project_root / "can_data_tools" / "can_device_config.xml"):
+            if c.is_file():
+                return str(c)
+        return str(paths.data_dir / "can_device_config.xml")
+    except Exception:
+        return "data/can_device_config.xml"
+
+
 class ConfigMixin:
     """can_gui.gui_config —— 配置读写与子窗口管理（Mixin）（由 CANFDGUI 组合使用）。"""
 
@@ -57,7 +74,7 @@ class ConfigMixin:
         self.sub_window.protocol("WM_DELETE_WINDOW", self._on_subwindow_close)
 
         # 加载配置
-        config_file = "can_data_tools/can_device_config.xml"
+        config_file = _device_config_path()
         config = self._local_load_config(config_file)  # 使用本地函数读取 XML
 
         # 设置默认值（若未读取到）
@@ -190,7 +207,7 @@ class ConfigMixin:
     # 将用户选择保存到 XML 配置文件
     def save_config_to_xml(self, device_type, merge_receive, transmit_type_str, chn_str):
         """保存配置到 XML，保留格式和注释（安全 + 无正则反向引用问题）"""
-        config_file = "can_data_tools/can_device_config.xml"
+        config_file = _device_config_path()
         os.makedirs(os.path.dirname(config_file), exist_ok=True)
 
         # 发送类型映射

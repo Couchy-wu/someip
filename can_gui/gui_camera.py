@@ -411,7 +411,21 @@ class CameraMixin:
 
     def _load_platform_resolutions(self):
         """读取平台分辨率的辅助函数: 从 platform_resolution.json 加载平台→分辨率映射。"""
-        json_path = os.path.join(os.path.dirname(__file__), "platform_resolution.json")
+        # 数据目录优先，兼容旧位置（与模块同目录）
+        json_path = None
+        try:
+            from hudcore.platform.paths import paths
+            cand = paths.data_dir / "platform_resolution.json"
+            if cand.is_file():
+                json_path = str(cand)
+        except Exception:
+            json_path = None
+        if json_path is None:
+            legacy = os.path.join(os.path.dirname(__file__), "platform_resolution.json")
+            json_path = legacy if os.path.isfile(legacy) else None
+        if json_path is None:
+            print("[平台分辨率] 未找到 platform_resolution.json（跳过）")
+            return {}
         try:
             with open(json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
