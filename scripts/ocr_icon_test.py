@@ -10,8 +10,17 @@ import sys
 import cv2
 import numpy as np
 import pandas as pd
-CURRENT_DIR = os.path.abspath(os.path.dirname(__file__))
-YOLO_DIR = os.path.abspath(os.path.join(CURRENT_DIR, "yolo_framework","ultralytics-8.3.217"))
+def _project_root() -> str:
+    """项目根目录：优先用 hudcore 统一路径，保证脚本被移动到 scripts/ 后依然可用。"""
+    try:
+        import hudcore.platform.paths as _p
+        return str(_p.paths.project_root)
+    except Exception:                        # 独立拷贝时的回退（脚本上一级目录）
+        return os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+
+
+CURRENT_DIR = _project_root()
+YOLO_DIR = os.path.abspath(os.path.join(CURRENT_DIR, "yolo_framework", "ultralytics-8.3.217"))
 OCR_DIR = os.path.abspath(os.path.join(CURRENT_DIR, "PaddleOCR-main"))
 os.environ["PADDLE_DISABLE_AUTO_DOWNLOAD"] = "1"
 os.environ["PADDLE_MODEL_HOME"] = OCR_DIR

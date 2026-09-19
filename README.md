@@ -62,8 +62,9 @@ HudAutoTest/
 ├── can_core/                     # ★ CAN 设备基础设施（驱动绑定 + 设备/通道收发）
 │   ├── driver.py                 #   ZLG 驱动 Python 绑定（原 zlgcan_driver.py）
 │   └── device.py                 #   设备打开/关闭、周期发送、接收线程、信号级收发
-├── yolo_train.py                 # YOLO 微调/验证脚本（原 train_freeze.py）
-├── ocr_icon_test.py              # OCR + YOLO 图标识别测试（原 image_test.py）
+├── scripts/                      # 面向使用者的独立脚本（非库代码）
+│   ├── yolo_train.py             #   YOLO 微调/验证（原 train_freeze.py）
+│   └── ocr_icon_test.py          #   OCR + YOLO 图标识别测试（原 image_test.py）
 ├── gui_handlers/                 # 各功能 GUI 处理器（用例管理/图像/视频/矩阵转换…）
 ├── can_gui/                      # CAN 信号自动收发 GUI
 ├── can_data_tools/               # CAN 数据与用例解析（信号矩阵 CSV 等）
@@ -74,6 +75,7 @@ HudAutoTest/
 ├── drivers/{windows,linux}/      # CAN 驱动库（按平台）
 ├── bin/{windows,linux}/          # 外部可执行（ffmpeg 等，按平台）
 ├── vendor/ffmpeg/                # 随项目分发的 ffmpeg 构建
+├── data/                         # 应用数据与运行期状态（与代码分离）
 ├── tests/                        # ★ 单元测试（pytest；含架构规则守卫）
 ├── tools/                        # check_env / selftest / check_imports / check_static / rename_modules
 ├── docker/windows-sim/           # ★ 容器内 Windows 环境验证
@@ -92,6 +94,7 @@ HudAutoTest/
 
 | 文档 | 内容 |
 |------|------|
+| [`docs/STRUCTURE.md`](docs/STRUCTURE.md) | **项目结构说明**：分层与依赖方向、设计约定、改造前后量化对比、持续改进点 |
 | [`docs/PLATFORM_GUIDE.md`](docs/PLATFORM_GUIDE.md) | **平台化改造说明**：hudcore 层、改造点清单、扩展指南、验证方式 |
 | [`docs/UBUNTU_SETUP.md`](docs/UBUNTU_SETUP.md) | **Ubuntu 22.04 部署**：系统依赖、ZLG Linux 驱动、字体、常见问题 |
 | [`docs/PYTHON_COMPATIBILITY.md`](docs/PYTHON_COMPATIBILITY.md) | **Python 版本兼容性**：3.10 ~ 3.13 依赖矩阵、wheel 可用性、升级步骤 |

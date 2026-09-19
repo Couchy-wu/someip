@@ -2,7 +2,7 @@
 
 > 目的：在**没有 Windows 机器**的情况下，验证 HudAutoTest 在 Windows（Python 3.13）下各项功能是否正常。
 > 方法：在 Docker 容器内用 **Wine + Windows 版 CPython 3.13** 构造真实 Windows 运行时，逐项功能验证。
-> 结论：**17 项验证全部通过（17 PASS / 0 FAIL / 0 SKIP）**，并在此过程中发现并修复了 **5 类真实缺陷**。
+> 结论：**18 项验证全部通过（18 PASS / 0 FAIL / 0 SKIP）**，并在此过程中发现并修复了多类真实缺陷。
 
 ---
 
@@ -56,7 +56,8 @@ cd docker/windows-sim
 | 14 | OpenCV 链路 | ✅ PASS | cv2 5.0.0 中文路径读写正常；`ImageEnhancer` 可导入 |
 | 15 | CAN 信号 → 数据字节 | ✅ PASS | 59497 行信号矩阵中取值：枚举 0→`[0x00,…]`、枚举 1→`[0x01,…]`，值随枚举变化 |
 | 16 | 信号矩阵 XLSX → CSV | ✅ PASS | openpyxl 读写链路正常，`XlsmToCsvConverter` 可导入 |
-| 17 | 项目自带自检脚本 | ✅ PASS | `tools/check_imports.py` rc=0；`tools/selftest.py` rc=0 |
+| 17 | 项目自带自检脚本 | ✅ PASS | `tools/check_imports.py` rc=0；`tools/check_static.py` rc=0；`tools/selftest.py` rc=0 |
+| 18 | 单元测试（pytest） | ✅ PASS | `tests/` 全部用例通过（含架构规则守卫） |
 
 产物（已随仓库提交）：
 

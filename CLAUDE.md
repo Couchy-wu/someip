@@ -18,6 +18,7 @@ python main.py
 - **OCR**: PaddleOCR, EasyOCR
 - **Computer Vision**: OpenCV, Ultralytics (YOLO)
 - **CAN Communication**: ZLG CAN driver (`can_core/driver.py` + `can_core/device.py`, `zlgcan.dll`)
+- **数据目录**: `data/`（信号矩阵、设备配置、平台分辨率、标定结果；见 `hudcore.platform.paths.data_dir`）
 - **Data Processing**: Pandas, NumPy, openpyxl
 
 ## Architecture
@@ -91,7 +92,8 @@ The project uses ZLG CAN devices (USBCANFD series). See `can_core/device.py` for
 3. **不要**硬编码字体名/字体文件 —— 用 `Theme` / `get_ui_font_name()` / `load_pil_font()`；
 4. **不要**写死 `./zlgcan.dll` —— 用 `hudcore.can.load_zlg_library()`（自动按平台探测）；
 5. 新增平台相关能力 → 加到 `hudcore/` 并保持"探测 + 回退 + 明确报错提示"的风格；
-6. **根目录只放入口**（`main.py` 与独立脚本）—— 共享库模块必须进包，避免"根目录杂货间"；
+6. **根目录只放 `main.py`**；共享库模块必须进包，面向使用者的独立脚本放 `scripts/`，
+   业务数据与运行期状态放 `data/`（`paths.data_dir`）；
 7. 每个包都有 `__init__.py` 声明职责与依赖约束；新模块放入对应包，不要新增根级模块；
 8. **不要**用 `sys.path.append`/`import *` 绕过包结构 —— 用标准包导入（子模块用 `python -m 包.模块` 运行）；
 9. 不要让 import 产生副作用（不要在模块级建 GUI、解析命令行、写日志文件、读大文件）；
@@ -135,7 +137,8 @@ python -m pytest tests -q        # 单元测试 + 架构规则守卫（需 pip i
 | `can_control.py` | `can_core/device.py` | CAN 设备与通道操作 |
 | `image_preprocessing.py` | `auto_labeling/preprocessing.py` | 图像预处理（就近下沉） |
 | 根目录 `log_setup.py` | `hudcore/logging_setup.py` | 横切基础设施归入 hudcore |
-| `train_freeze.py` / `image_test.py` | `yolo_train.py` / `ocr_icon_test.py` | 训练 / OCR 测试 |
+| `train_freeze.py` / `image_test.py` | `scripts/yolo_train.py` / `scripts/ocr_icon_test.py` | 训练 / OCR 测试 |
+| 根目录数据文件（信号矩阵/设备配置/分辨率…） | `data/`（`paths.data_dir`） | 业务数据与代码分离 |
 
 > 日志按"模块级函数"使用（如 `logging_setup.info(...)`、`logging_setup.setup_logger(...)`，
 > 模块为 `hudcore/logging_setup.py`），改名时必须同步更新全部调用点。
@@ -156,11 +159,12 @@ python -m pytest tests -q        # 单元测试 + 架构规则守卫（需 pip i
 cd docker/windows-sim && ./build.sh && ./run_verify.sh
 ```
 
-产物：`verify_report.md` / `verify_report.json`（17 项功能验证）。
+产物：`verify_report.md` / `verify_report.json`（18 项功能验证，含单元测试）。
 容器内**不能**验证真实 CAN 硬件、外部程序界面与 GPU 路径（见该目录 README §6）。
 
 ### 文档
 
+- `docs/STRUCTURE.md` — 项目结构说明（分层、依赖方向、设计约定、量化对比）
 - `docs/PLATFORM_GUIDE.md` — 平台化改造说明与扩展指南
 - `docs/UBUNTU_SETUP.md` — Ubuntu 22.04 部署（含 ZLG Linux 驱动安装）
 - `docs/PYTHON_COMPATIBILITY.md` — Python 3.10 ~ 3.13 兼容性矩阵与升级步骤

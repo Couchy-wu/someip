@@ -118,6 +118,6 @@ def test_root_keeps_only_entry_points(name):
     root_py = {p.name for p in ROOT.glob("*.py")}
     assert name in root_py
     # 允许保留在根目录的：入口与独立脚本
-    allowed = {"main.py", "ocr_icon_test.py", "yolo_train.py"}
+    allowed = {"main.py"}          # 独立脚本已归入 scripts/
     extra = sorted(root_py - allowed)
     assert not extra, f"根目录出现非入口模块（应下沉到包内）：{extra}"

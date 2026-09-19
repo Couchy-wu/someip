@@ -155,7 +155,11 @@ def main():
     args = get_args()
 
     # ------------------- 项目根目录 -------------------
-    ROOT = pathlib.Path(__file__).parent.resolve()
+    try:                                     # 项目根（脚本位于 scripts/ 下，需向上定位）
+        import hudcore.platform.paths as _p
+        ROOT = pathlib.Path(_p.paths.project_root)
+    except Exception:
+        ROOT = pathlib.Path(__file__).resolve().parents[1]
     print("项目根目录 :", ROOT)
 
     # ------------------- 检查路径 -------------------
