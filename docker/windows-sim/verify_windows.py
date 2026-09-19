@@ -251,6 +251,7 @@ def t_import_all():
         "auto_labeling.draw_boxes_v2", "auto_labeling.draw_labels",
         "hudcore", "hudcore.can", "hudcore.ui", "hudcore.platform",
         "hudcore.logging_setup", "can_core", "can_core.driver", "can_core.device",
+        "can_core.can_state", "can_core.bit_utils", "can_core.receive", "can_core.transmit",
         "auto_labeling.preprocessing", "auto_labeling.template_matching",
     ]
     import importlib
