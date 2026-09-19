@@ -14,6 +14,7 @@ can_data_tools.can_step_runner —— 日志中 CAN 步骤的执行（Mixin）
 依赖约束：可依赖 can_core（设备操作）与 hudcore（日志）；不依赖界面层。
 """
 import logging
+import re   # 解析日志步骤中的正则匹配（拆分时遗漏）
 import time
 
 from can_core import device

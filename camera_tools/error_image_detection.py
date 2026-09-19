@@ -23,7 +23,6 @@ def is_pure_white_image(image):
         raise ValueError("Unsupported image shape")
 
 
-import numpy as np
 
 def is_error_image(image, white_ratio_thr=0.80):
     """

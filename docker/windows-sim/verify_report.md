@@ -25,4 +25,4 @@
 | 14 | 14. 图像增强 / 透视标定模块可用（cv2 链路） | PASS | cv2 5.0.0 中文路径读写 OK；ImageEnhancer 方法数=1 |
 | 15 | 15. CAN 信号 → 数据字节（outputMatrix.csv） | PASS | 信号 0x095/Eng_Start_Result_Fdbk_Info_S（位=1.0-1.1, 长度=8）: 枚举0→[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] 枚举1→[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] 值随枚举变化=True |
 | 16 | 16. 信号矩阵 XLSX → CSV 转换 | PASS | openpyxl 读写 OK，模块入口=XlsmToCsvConverter |
-| 17 | 17. 项目自带自检脚本在 Windows 下可运行 | PASS | check_imports.py rc=0 (项目内部导入全部可解析 ✓); selftest.py rc=0 (============================================================) |
+| 17 | 17. 项目自带自检脚本在 Windows 下可运行 | PASS | check_imports.py rc=0 (项目内部导入全部可解析 ✓); check_static.py rc=0 (       （该检查用于拦截 undefined name 等机械重构残留问题，建议安装）); selftest.py rc=0 (============================================================) |

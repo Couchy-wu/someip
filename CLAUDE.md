@@ -94,7 +94,9 @@ The project uses ZLG CAN devices (USBCANFD series). See `can_core/device.py` for
 6. **根目录只放入口**（`main.py` 与独立脚本）—— 共享库模块必须进包，避免"根目录杂货间"；
 7. 每个包都有 `__init__.py` 声明职责与依赖约束；新模块放入对应包，不要新增根级模块；
 8. **不要**用 `sys.path.append`/`import *` 绕过包结构 —— 用标准包导入（子模块用 `python -m 包.模块` 运行）；
-9. 不要让 import 产生副作用（不要在模块级建 GUI、解析命令行、写日志文件、读大文件）。
+9. 不要让 import 产生副作用（不要在模块级建 GUI、解析命令行、写日志文件、读大文件）；
+10. 移动/拆分模块后**必须**跑 `python tools/check_static.py` —— 容器验证覆盖不到
+    硬件与界面路径，`undefined name` 这类问题只能靠静态检查拦住。
 
 ### 自检与自测
 
@@ -102,6 +104,7 @@ The project uses ZLG CAN devices (USBCANFD series). See `can_core/device.py` for
 python tools/check_env.py       # 环境自检（依赖/版本/字体/驱动/外部程序）
 python tools/selftest.py        # hudcore 回归自测（跨平台可跑）
 python tools/check_imports.py   # 项目内部导入静态校验（重构改名后兜底）
+python tools/check_static.py     # 静态检查（pyflakes：undefined name 等，需 pip install pyflakes）
 ./run.sh --check                # Linux 一键自检
 ```
 

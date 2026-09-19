@@ -39,6 +39,7 @@ def gif_creator(image_folder, output_gif, duration=100, loop=0):
 
 # GUI操作函数
 def select_folder():
+    global root                     # root 由 main() 创建（模块导入时不建界面）
     folder_path = filedialog.askdirectory()
     if folder_path:
         # 弹出名称输入框

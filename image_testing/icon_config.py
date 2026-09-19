@@ -13,6 +13,8 @@
 import hashlib
 import json
 import os
+from PIL import Image   # 背景图尺寸读取
+from tkinter import messagebox   # 默认图标/校验提示需要 messagebox
 
 try:                                     # 包导入优先
     from .icon_data import IconData

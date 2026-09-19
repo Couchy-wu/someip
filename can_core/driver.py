@@ -1,7 +1,10 @@
+import ctypes
 from ctypes import (
     CFUNCTYPE, POINTER, Structure, Union, byref, c_char, c_char_p, c_int,
     c_ubyte, c_uint, c_uint64, c_ulonglong, c_ushort, c_void_p,
 )
+# 注意：`ctypes.windll` 只在 Windows 上存在，不能在模块级导入（Linux 会 ImportError）。
+# 需要时在 Windows 分支内通过 ctypes.windll 取用。
 import platform
 import threading
 import time
@@ -406,10 +409,6 @@ def ZCAN_DYNAMIC_CONFIG_CAN_DATABAUD(can_id):
 def ZCAN_DYNAMIC_CONFIG_CAN_USERES(can_id):
     return f"DYNAMIC_CONFIG_CAN{can_id}_USERES"
 
-# 终端电阻开关；0：关闭；1：打开
-def ZCAN_DYNAMIC_CONFIG_CAN_USERES(can_id):
-    return f"DYNAMIC_CONFIG_CAN{can_id}_USERES"
-
 # 报文发送间隔，0~255ms
 def ZCAN_DYNAMIC_CONFIG_CAN_SNDCFG_INTERVAL(can_id):
     return f"DYNAMIC_CONFIG_CAN{can_id}_SNDCFG_INTERVAL"
@@ -418,9 +417,9 @@ def ZCAN_DYNAMIC_CONFIG_CAN_SNDCFG_INTERVAL(can_id):
 def ZCAN_DYNAMIC_CONFIG_CAN_BUSRATIO_ENABLE(can_id):
     return f"DYNAMIC_CONFIG_CAN{can_id}_SNDCFG_INTERVAL"
 
-# 总线利用率采集周期，取值200~2000ms
-def ZCAN_DYNAMIC_CONFIG_CAN_BUSRATIO_ENABLE(can_id):
-    return f"DYNAMIC_CONFIG_CAN{can_id}_SNDCFG_INTERVAL"
+# TODO(遗留): 原文件此处是上一条的重复定义，注释写的是"总线利用率采集周期"，
+#             推测原本应有 ZCAN_DYNAMIC_CONFIG_CAN_BUSRATIO_PERIOD 之类的函数。
+#             因无法确定 SDK 对应的键名，暂不臆造，仅保留注释提醒。
 
 class ZCAN(object):
     """
@@ -441,7 +440,7 @@ class ZCAN(object):
         except ImportError:
             # 兼容：hudcore 不在（如单独拷贝 can_core/driver.py 使用）
             if platform.system() == "Windows":
-                self.__dll = windll.LoadLibrary("./zlgcan.dll")
+                self.__dll = ctypes.windll.LoadLibrary("./zlgcan.dll")
             else:
                 print("No support now! (请使用项目内的 hudcore.can 加载 Linux 驱动库)")
         except FileNotFoundError as e:

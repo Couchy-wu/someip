@@ -466,7 +466,7 @@ def t_matrix_csv():
 @test("17. 项目自带自检脚本在 Windows 下可运行")
 def t_project_scripts():
     outputs = []
-    for script in ("tools/check_imports.py", "tools/selftest.py"):
+    for script in ("tools/check_imports.py", "tools/check_static.py", "tools/selftest.py"):
         p = PROJECT_ROOT / script
         r = subprocess.run([exe_python(), str(p)], capture_output=True, text=True,
                            cwd=str(PROJECT_ROOT), timeout=300)

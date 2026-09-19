@@ -9,7 +9,10 @@
 设计：以 Mixin 提供能力，由 IconManagerApp 组合；依赖 Tkinter 与 Pillow。
 """
 import random
+from PIL import Image, ImageTk   # 缩略图渲染
+import os   # 缩略图路径处理
 import tkinter as tk
+from tkinter import messagebox   # 缩略图异常提示
 
 try:                                     # 包导入优先
     from .icon_data import IconData
@@ -110,7 +113,7 @@ class IconThumbnailMixin:
         - 饱和度保持在 0.6‑1.0，使颜色不至于过于灰暗；
         - 明度（亮度）限制在 0.3‑0.6 之间，确保颜色足够“深”，在灰色 GUI 背景上更明显。
         """
-        import colorsys, random
+        import colorsys          # random 已在模块顶层导入
 
         while True:
             # 随机生成色相

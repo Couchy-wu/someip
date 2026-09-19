@@ -9,6 +9,7 @@
 设计：以 Mixin 提供能力，由 IconManagerApp 组合，行为与拆分前一致。
 """
 import tkinter as tk
+import os   # 路径处理
 from tkinter import messagebox
 
 

@@ -86,7 +86,7 @@
     {
       "name": "17. 项目自带自检脚本在 Windows 下可运行",
       "status": "PASS",
-      "detail": "check_imports.py rc=0 (项目内部导入全部可解析 ✓); selftest.py rc=0 (============================================================)"
+      "detail": "check_imports.py rc=0 (项目内部导入全部可解析 ✓); check_static.py rc=0 (       （该检查用于拦截 undefined name 等机械重构残留问题，建议安装）); selftest.py rc=0 (============================================================)"
     }
   ]
 }

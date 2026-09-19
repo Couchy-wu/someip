@@ -28,6 +28,7 @@ run.bat                  # 或 python main.py
 python tools/check_env.py        # 依赖 / Python 版本 / 字体 / CAN 驱动 / 外部程序
 python tools/selftest.py         # 平台抽象层回归自测
 python tools/check_imports.py    # 项目内部导入静态校验（改名/重构后兜底）
+python tools/check_static.py     # 静态检查（pyflakes，拦截 undefined name 等）
 ```
 
 ### Windows 环境免真机验证（Docker）

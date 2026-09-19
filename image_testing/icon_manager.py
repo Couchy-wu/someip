@@ -317,7 +317,9 @@ class IconManagerApp(IconConfigMixin, IconThumbnailMixin, IconFormMixin):
         
         ttk.Label(form_frame, text="UI 类名:").grid(row=2, column=0, sticky="w", pady=2)
         self.class_name_var = tk.StringVar()
-        self.validate_cmd = root.register(self.validate_class_name)
+        # 注意：这里的命令校验注册在 Tk 根窗口上（此前误写成裸 `root`，
+        # 一旦打开图标管理器就会 NameError）
+        self.validate_cmd = self.root.register(self.validate_class_name)
         self.class_name_entry = ttk.Entry(
             form_frame, 
             textvariable=self.class_name_var, 

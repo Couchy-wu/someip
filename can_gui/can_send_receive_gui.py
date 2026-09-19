@@ -750,7 +750,6 @@ class CANFDGUI:
 
     def _load_platform_resolutions(self):
         """读取平台分辨率的辅助函数: 从 platform_resolution.json 加载平台→分辨率映射。"""
-        import json, os
         json_path = os.path.join(os.path.dirname(__file__), "platform_resolution.json")
         try:
             with open(json_path, "r", encoding="utf-8") as f:

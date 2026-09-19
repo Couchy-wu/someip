@@ -2,6 +2,8 @@
     支持的设备有 USBCANFD-100U mini   USBCANFD-100U/200U/400U/800U
 '''
 
+from ctypes import addressof, byref, c_char_p, memset, sizeof
+
 from .driver import (
     INVALID_DEVICE_HANDLE, ZCAN, ZCANFD_AUTO_TRANSMIT_OBJ, ZCAN_AUTO_TRANSMIT_OBJ,
     ZCAN_CHANNEL_INIT_CONFIG, ZCAN_DT_ZCAN_CAN_CANFD_DATA, ZCAN_STATUS_OK,
