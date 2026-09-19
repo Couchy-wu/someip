@@ -17,7 +17,8 @@ python main.py
 - **GUI**: Tkinter (built-in)
 - **OCR**: PaddleOCR, EasyOCR
 - **Computer Vision**: OpenCV, Ultralytics (YOLO)
-- **CAN Communication**: ZLG CAN driver (`can_core/driver.py` + `can_core/device.py`, `zlgcan.dll`)
+- **CAN Communication**: ZLG CAN driver（Windows `zlgcan.dll` 走 ZCAN 直连；Linux `libusbcanfd.so`
+  是 VCI 形态，由 `can_core/vci_adapter.py` 适配，见下文"驱动接口形态与 VCI 适配层"）
 - **数据目录**: `data/`（信号矩阵、设备配置、平台分辨率、标定结果；见 `hudcore.platform.paths.data_dir`）
 - **第三方内容**: `thirdparty/<名称>/`（ultralytics / paddleocr / zlg / ffmpeg / models）；
   **运行时库**按 `thirdparty/<组件>/<平台>-<架构>/` 放置（arhud_someip、zlg_can），
@@ -33,7 +34,9 @@ python main.py
 
 ### Core Modules
 - `can_core/device.py` - ZLG CAN 设备与通道操作（原 `can_control.py`）
-- `can_core/driver.py` - ZLG CAN 驱动 Python 绑定（原 `zlgcan_driver.py`）
+- `can_core/driver.py` - ZLG CAN 驱动 **ZCAN 接口** Python 绑定（原 `zlgcan_driver.py`）
+- `can_core/driver_factory.py` - 按驱动库**实际导出的符号**选择后端（ZCAN 直连 / VCI 适配）
+- `can_core/vci_driver.py` / `can_core/vci_adapter.py` - Linux VCI 接口绑定与适配层（详见下文）
 - `hudcore/logging_setup.py` - 统一日志初始化（原根目录 `log_setup.py`）
 
 ### gui_handlers/
@@ -67,6 +70,28 @@ The project uses ZLG CAN devices (USBCANFD series). See `can_core/device.py` for
 - Send/receive threads
 - Message filtering
 - Support for both standard and extended CAN frames
+
+### 驱动接口形态与 VCI 适配层（Linux 必读）
+
+ZLG 在不同平台给出**两套形态**的库，业务层只按 Windows 的 **ZCAN** 形态编写：
+
+| 平台 | 库 | 形态 | 后端 |
+|------|----|------|------|
+| Windows | `zlgcan.dll` | ZCAN（有句柄，属性用 `ZCAN_SetValue(handle,"0/xxx",...)`） | `driver.ZCAN` 直连 |
+| Linux | `libusbcanfd.so` | VCI（**无句柄**，用"设备类型/序号/通道号"三元组；配置走 `ZCAN_INIT` + `VCI_SetReference`） | `vci_adapter.VciCanDriver` |
+
+- 选路由 `can_core/driver_factory.open_can_driver()` 完成，`can_state.zcanlib` 已改为调用它，
+  因此**业务代码/界面/用例执行器不需要任何平台分支**；
+- VCI 适配层负责：句柄 ↔ 三元组、波特率 → `ZCAN_INIT` 时序（`calc_canfd_timing`）、
+  属性键 → `VCI_SetReference`、报文标志位（扩展帧/远程帧/BRS/回显/队列发送）双向翻译；
+- **Python 3.13 注意**：`int(ctypes.c_uint(41))` 会抛 `ValueError`（3.10~3.12 正常），
+  取 ctypes 常量一律用 `can_core.vci_driver.as_int()`；
+- 同目录依赖按 SONAME 互相引用而文件名常与 SONAME 不一致（`libusb-1.0.so` vs
+  `libusb-1.0.so.0`），`hudcore.can.backend.preload_sibling_libraries()` 会在 dlopen 前预加载，
+  因此不需要手工软链或 `LD_LIBRARY_PATH`；
+- 无硬件验证：`./docker/can-sim/run_check.sh`（VCI 桩库 + 适配层单测 + 业务层收发回环）；
+- 现场可能需要微调：`HUD_VCI_CLK`（默认 40 MHz）、`HUD_VCI_SAMPLE_POINT`（默认 80%）/
+  `HUD_VCI_SAMPLE_POINT_DATA`（默认 75%）。
 
 ## Key Patterns
 
@@ -172,8 +197,17 @@ python -m pytest tests -q        # 单元测试 + 架构规则守卫（需 pip i
 cd docker/windows-sim && ./build.sh && ./run_verify.sh
 ```
 
-产物：`verify_report.md` / `verify_report.json`（18 项功能验证，含单元测试）。
+产物：`verify_report.md` / `verify_report.json`（19 项功能验证，含单元测试）。
 容器内**不能**验证真实 CAN 硬件、外部程序界面与 GPU 路径（见该目录 README §6）。
+
+### CAN VCI 适配层验证（Linux，无需硬件）
+
+```bash
+./docker/can-sim/run_check.sh     # 编译 VCI 桩库 + 适配层单测 + 业务层收发回环
+```
+
+桩库 `docker/can-sim/vci_stub.c` 按真实 ABI 实现全部 VCI 接口（发送即回环），
+覆盖"探测 → 形态判定 → 适配 → 打开/初始化/收发/关闭"；验证不到的项见该目录 README §4。
 
 ### 文档
 

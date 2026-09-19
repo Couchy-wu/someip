@@ -450,6 +450,15 @@ class ZCAN(object):
         if self.__dll is None:
             print("DLL couldn't be loaded!")
 
+    @property
+    def loaded_library(self):
+        """已加载的底层库对象（None 表示加载失败）。
+
+        供 `can_core.driver_factory` 判断接口形态（ZCAN / VCI）使用，
+        避免外部去访问名字被改写的私有属性。
+        """
+        return self.__dll
+
     def OpenDevice(self, device_type, device_index, reserved):
         try:
             return self.__dll.ZCAN_OpenDevice(device_type, device_index, reserved)

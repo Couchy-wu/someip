@@ -66,13 +66,16 @@ def library_api_kind(lib_path: Path | str) -> str:
     """返回库的接口类型："zcan" / "vci" / "unknown" / "error"。
 
     实现：dlopen 后按导出符号判断（Linux CDLL 把符号暴露为属性，Windows 同理）。
-    "error" 表示库本身能定位但**加载失败**（多为缺少依赖，如 libusb-1.0.so），
-    具体原因见 `library_load_error()`。
+    Linux 上 dlopen 前会先预加载同目录依赖（见 `preload_sibling_libraries`），
+    否则 `libusbcanfd.so` 这类"依赖名与文件名不一致"的库会被误判为加载失败。
+    "error" 表示库本身能定位但**加载失败**（多为缺少依赖），原因见 `library_load_error()`。
     """
     global _LAST_LOAD_ERROR
     _LAST_LOAD_ERROR = ""
     path = str(lib_path)
     loader = ctypes.WinDLL if IS_WINDOWS else ctypes.CDLL
+    if not IS_WINDOWS:
+        preload_sibling_libraries(Path(path))
     try:
         handle = loader(path)
     except OSError as exc:
@@ -87,13 +90,12 @@ def library_api_kind(lib_path: Path | str) -> str:
 
 def _vci_only_hint(lib_path: Path | str) -> str:
     return (
-        f"检测到 {lib_path} 是 **VCI 接口**（VCI_OpenDevice 等），"
-        f"而本项目驱动需要 **ZCAN 接口**（{_ZCAN_ENTRY} 等，与 Windows 版 zlgcan.dll 一致）。\n"
-        "  可选处理：\n"
-        "   1) 使用 ZLG 官方 Linux SDK 中的 libzlgcan.so（ZCAN 统一接口）放到\n"
-        "      thirdparty/zlg_can/<平台>-<架构>/ 下；\n"
-        "   2) 或为本项目补充 VCI 适配层（把 VCI_* 映射到项目驱动所需的接口）；\n"
-        "   3) 纯 VCI 场景也可直接用 python-can 的 zlg 后端（pip install zlgcan python-can）。"
+        f"检测到 {lib_path} 是 **VCI 接口**（VCI_OpenDevice 等）。\n"
+        "  项目已内置 **VCI 适配层**（can_core/vci_adapter.py）：调用面保持不变，\n"
+        "  VCI 调用由适配层翻译（波特率 → ZCAN_INIT 时序、句柄 → 设备/通道三元组），\n"
+        "  因此该库**可以直接使用**。\n"
+        "  若仍想使用 ZCAN 直连形态：把 ZLG 官方 SDK 的 libzlgcan.so（ZCAN 接口）放到\n"
+        "  thirdparty/zlg_can/<平台>-<架构>/ 下即可（探测优先级更高）。"
     )
 
 
@@ -198,12 +200,54 @@ def find_zlg_library() -> Optional[Path]:
     return None
 
 
+def preload_sibling_libraries(target: Path) -> list[Path]:
+    """预加载库所在目录的同名依赖（`libusb*.so*` 等），返回成功预加载的文件。
+
+    为什么需要：ZLG Linux 驱动的 `.so` 之间按 **SONAME** 互相依赖，而随 SDK 分发的
+    文件名常常**不是 SONAME**（典型：目录里是 `libusb-1.0.so`，而 `libusbcanfd.so`
+    的 NEEDED 写的是 `libusb-1.0.so.0`），于是"文件就在旁边"却依然报
+    `libusb-1.0.so.0: cannot open shared object file`，探测链只好回退到**不支持 CANFD**
+    的 `libusbcan.so`（表现为"能打开设备但收发 CANFD 失败"）。
+
+    这里用**绝对路径 + RTLD_GLOBAL** 先把同目录的依赖加载进来：其 SONAME 进入加载器
+    内存后，目标库的 NEEDED 便可按 SONAME 命中，因此**不需要用户手工造软链或设置
+    LD_LIBRARY_PATH**。多轮加载以容纳依赖之间的先后关系。
+
+    预加载失败不抛异常（缺依赖/架构不符时交给主库加载去报错）。
+    """
+    if IS_WINDOWS:
+        return []
+    try:
+        target = Path(target).resolve()
+        directory = target.parent
+    except OSError:                                  # pragma: no cover - 极端路径异常
+        return []
+
+    pending = [p for p in sorted(directory.glob("lib*.so*")) if p.resolve() != target]
+    done: list[Path] = []
+    while pending:
+        progressed = False
+        for lib in list(pending):
+            try:
+                ctypes.CDLL(str(lib), mode=ctypes.RTLD_GLOBAL)
+            except OSError:
+                continue                             # 依赖尚未就绪 → 下一轮重试
+            pending.remove(lib)
+            done.append(lib)
+            progressed = True
+        if not progressed:
+            break
+    return done
+
+
 def load_zlg_library(path: Optional[Path | str] = None):
     """
     加载 ZLG CAN 驱动库并返回 ctypes 库对象。
 
     - Windows：使用 **WinDLL**（stdcall，与原 `windll.LoadLibrary` 行为一致）
     - Linux  ：使用 **CDLL**（cdecl，ZLG Linux 驱动约定）
+      加载前会先预加载同目录依赖（见 `preload_sibling_libraries`），
+      以解决"文件名与 SONAME 不一致"导致的加载失败
     - 传入 path 时按该路径加载；否则自动探测
 
     :raises FileNotFoundError: 未找到驱动库（附带平台安装提示）
@@ -214,6 +258,8 @@ def load_zlg_library(path: Optional[Path | str] = None):
         raise FileNotFoundError(_not_found_hint())
 
     loader = ctypes.WinDLL if IS_WINDOWS else ctypes.CDLL
+    if not IS_WINDOWS:
+        preload_sibling_libraries(lib_path)
     try:
         return loader(str(lib_path))
     except OSError as e:

@@ -141,12 +141,12 @@ def test_library_api_kind_reports_load_error(tmp_path):
     assert "libzlgcan.so" in str(fake)
 
 
-def test_vci_hint_mentions_zcan_requirement():
-    """VCI 库的提示必须说清"项目驱动需要 ZCAN 接口"以及可选处理路径。"""
+def test_vci_hint_says_vci_is_supported_by_adapter():
+    """VCI 库的提示必须说清"已内置适配层、可以直接用"，并给出 ZCAN 直连的替代路径。"""
     from hudcore.can.backend import _vci_only_hint
     text = _vci_only_hint("/x/libusbcanfd.so")
-    assert "VCI" in text and "ZCAN" in text
-    assert "libzlgcan.so" in text or "适配" in text
+    assert "VCI" in text and "适配层" in text and "可以直接使用" in text
+    assert "libzlgcan.so" in text, "应说明想走 ZCAN 直连时放哪个库"
 
 
 # --------------------------------------------------------------------------- 获取脚本

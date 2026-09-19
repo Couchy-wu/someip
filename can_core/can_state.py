@@ -23,7 +23,7 @@ from collections import deque
 
 from hudcore import logging_setup
 
-from .driver import ZCAN
+from .driver_factory import open_can_driver
 
 # ------------------------------------------------------------------ 日志
 # 与原实现保持一致：CAN 层使用名为 "candata" 的 logger，日志落在 <项目根>/logs/can
@@ -63,10 +63,19 @@ class CanState:
         self._zcanlib = None
 
     @property
-    def zcanlib(self) -> ZCAN:
-        """ZCAN 驱动实例：首次访问时才创建（避免导入期加载驱动库）。"""
+    def zcanlib(self):
+        """CAN 驱动实例：首次访问时才创建（避免导入期加载驱动库）。
+
+        返回的对象由 `can_core.driver_factory.open_can_driver()` 按驱动库**实际导出的
+        接口形态**决定：
+
+            Windows `zlgcan.dll` / ZCAN 版 Linux 库 → `driver.ZCAN`（ZCAN 直连）
+            Linux 公开 VCI 版库（libusbcanfd.so） → `vci_adapter.VciCanDriver`（VCI 适配）
+
+        两者方法面一致，因此业务代码（receive.py / transmit.py）无需区分平台。
+        """
         if self._zcanlib is None:
-            self._zcanlib = ZCAN()
+            self._zcanlib = open_can_driver()
         return self._zcanlib
 
     def reset_for_tests(self) -> None:

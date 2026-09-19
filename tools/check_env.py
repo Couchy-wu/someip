@@ -113,13 +113,21 @@ def check_python_deps() -> None:
 
 
 def check_can_driver() -> None:
-    section("CAN 驱动库")
+    section("CAN 驱动库（含接口形态/后端选择）")
     try:
         from hudcore.can import describe_library_status, is_library_available, find_zlg_library
         print(describe_library_status())
         if is_library_available():
             lib = find_zlg_library()
             print(f"{OK} 驱动库就绪: {lib}")
+            # 接口形态（zcan / vci / unknown）与最终使用的后端：Linux 公开驱动是 VCI 形态，
+            # 由 can_core.vci_adapter 适配，这里一并显示，避免现场误判为"库不匹配"
+            try:
+                from can_core import describe_driver_status, driver_kind
+                print(f"   接口形态: {driver_kind(__import__('hudcore.can', fromlist=['x']).load_zlg_library())}")
+                print("   " + describe_driver_status().replace("\n", "\n   "))
+            except Exception as exc:                     # noqa: BLE001 - 自检不应因显示失败而中断
+                print(f"{WARN} 后端形态检测跳过: {exc}")
             _check_so_deps(lib)
         else:
             fix = ("将 zlgcan.dll 放入 drivers/windows/，或设置 HUD_ZLG_LIB=<完整路径>"

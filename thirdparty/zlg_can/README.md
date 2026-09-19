@@ -34,8 +34,8 @@ thirdparty/zlg_can/
 
 探测时还会**识别接口类型**并在自检里显示（`hudcore.can.library_api_kind`）：
 
-- `zcan`：导出 `ZCAN_OpenDevice` 等 → **本项目驱动可用**
-- `vci`：导出 `VCI_OpenDevice` 等 → 与本项目驱动不匹配（见 §3）
+- `zcan`：导出 `ZCAN_OpenDevice` 等 → 走 ZCAN 直连后端
+- `vci`：导出 `VCI_OpenDevice` 等 → 走 **VCI 适配层**（见 §3），功能同样可用
 - `error`：库定位到了但**加载失败**（多为缺依赖，如 `libusb-1.0.so.0`）→ 设 `LD_LIBRARY_PATH` 指向该目录
 - `unknown`：既无 ZCAN 也无 VCI 导出
 
@@ -83,33 +83,60 @@ sudo apt install -y libusb-1.0-0 libusb-1.0-0-dev
 
 ---
 
-## 3. 重要：Linux 库是 **VCI 接口**，与本项目驱动不匹配
+## 3. Linux 库是 **VCI 接口**：已由内置适配层支持
 
-实测（`nm -D --defined-only`）：
+实测（`readelf --dyn-syms`）：
 
 | 平台 | 库 | 导出 ZCAN_* | 导出 VCI_* |
 |------|----|-------------|-----------|
 | linux aarch64 | `libusbcanfd.so` | 0 | 30 |
 | linux x86_64 | `libusbcanfd.so` | 0 | 31 |
+| linux x86_64 | `libusbcanfd800u.so` | 18（**无 `ZCAN_SetValue`**） | 36 |
+| linux x86_64 | `libusbcan-4e.so` / `-8e.so` | 12（**无 `ZCAN_SetValue`**） | 0 |
 | windows x86_64 | `zlgcan.dll` | ✅（项目驱动按此编写） | — |
 
-也就是说：
+结论与应对：
 
-- **Windows**：驱动走 `ZCAN_*`（`hudcore.can` + `can_core/driver.py`）✅ 现状可用；
-- **Linux**：公开可下载的是 `VCI_*` 接口，`can_core/driver.py` 直接调用 `ZCAN_*` 会失败
-  （表现为 `Exception on OpenDevice!` 之类），因此本目录的 Linux 库目前**只完成"获取与放置"**，
-  还缺一层适配。
+- **Windows**：`ZCAN_*` 直连，行为不变；
+- **Linux**：公开驱动是 `VCI_*` 形态（没有句柄、用"设备类型/序号/通道号"三元组定位），
+  项目已内置 **VCI 适配层**，业务代码（`can_core/receive.py`、`transmit.py`、界面、用例执行器）
+  **无需改动**：
 
-让 Linux CAN 真正可用的三条路（按推荐度）：
+  | 模块 | 职责 |
+  |------|------|
+  | `can_core/vci_driver.py` | VCI 结构体与函数原型（布局对齐 `include/usbcanfd/zcan.h`）+ `as_int()` 等工具 |
+  | `can_core/vci_adapter.py` | `VciCanDriver`：把 ZCAN 调用面翻译成 VCI 调用；波特率→`ZCAN_INIT` 时序；属性键映射 |
+  | `can_core/driver_factory.py` | 按库**实际导出的符号**选择后端（ZCAN 直连 / VCI 适配） |
 
-1. **补充 VCI 适配层**（推荐）：新增 `can_core/vci_*.py`，把项目用到的最小操作
-   （打开设备 / 初始化通道 / 启动 / 发送 CAN 与 CANFD / 接收 / 关闭）映射到 `VCI_*`；
-   硬件自动发送、合并接收等在 VCI 侧不可用，用软件定时器与软件合并替代。
-   工作量约 300~500 行，且有设备后即可验证。
-2. **取得 ZCAN 接口的 Linux 库**：向 ZLG 索取提供 `libzlgcan.so`（ZCAN 统一接口）的 Linux SDK，
-   放到本目录即可直接被现有驱动使用（`hudcore.can` 首选名即 `libzlgcan.so`）。
-3. **纯 VCI 场景走 python-can**：`pip install zlgcan python-can` 后使用 python-can 的 zlg 后端
-   （Rust 实现，自带 Linux 支持），但这与本项目现有 CAN 界面/用例执行器是两套通道。
+  注意 `libusbcanfd800u.so` 虽然导出 `ZCAN_*`，但**没有业务层配波特率用的 `ZCAN_SetValue`**，
+  因此仍走 VCI 适配层（否则会"能打开设备、波特率配不上"）。
+
+- 同目录依赖按 **SONAME** 互相引用，而 SDK 里的文件名常常不是 SONAME
+  （目录里是 `libusb-1.0.so`，而 `libusbcanfd.so` 的 NEEDED 写的是 `libusb-1.0.so.0`）。
+  `hudcore.can.backend.preload_sibling_libraries()` 会在 dlopen 前用绝对路径 +
+  `RTLD_GLOBAL` 预加载同目录依赖，因此**不需要手工造软链或设 `LD_LIBRARY_PATH`**；
+  否则探测会静默回退到不支持 CANFD 的 `libusbcan.so`（表现为"能连上却发不出 CANFD"）。
+
+### 3.1 没有硬件时怎么验证
+
+```bash
+./docker/can-sim/run_check.sh          # 编译 VCI 桩库 + 单测 + 业务层收发回环
+```
+
+桩库 `docker/can-sim/vci_stub.c` 按真实 ABI 实现全部 VCI 接口（发送即回环），
+可验证"驱动探测 → 接口形态判定 → 适配 → 打开/初始化/收发/关闭"整条链路；
+**不能**验证真实波特率与时序是否被硬件接受（需现场设备，见 §3.2）。
+
+### 3.2 需要现场确认的两点
+
+1. **CAN 控制器时钟**：适配层按 `baud = clk / (brp * (1 + tseg1 + tseg2))` 换算时序，
+   默认 `clk = 40 MHz`（由官方样例 `include/usbcanfd-800u/test.cpp` 的两组时序值反推，
+   单测会断言能重现样例）。若现场波特率对不上，用 `HUD_VCI_CLK=<Hz>` 覆盖；
+2. **采样点**：默认仲裁段 80%、数据段 75%（同官方样例），可用
+   `HUD_VCI_SAMPLE_POINT` / `HUD_VCI_SAMPLE_POINT_DATA`（可写 `80` 或 `0.8`）覆盖。
+
+排障：`python -c "from can_core import describe_driver_status as d; print(d())"`
+会打印命中库、接口形态与所用后端。
 
 ---
 

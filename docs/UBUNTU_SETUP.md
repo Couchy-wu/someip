@@ -195,20 +195,31 @@ python tools/fetch_thirdparty_libs.py zlg            # 默认本机架构
 python tools/fetch_thirdparty_libs.py zlg --arch x86_64
 ```
 
-库会被放到 `thirdparty/zlg_can/<平台>-<架构>/`（如 `linux-x86_64/`），运行前把它加入库搜索路径：
+库会被放到 `thirdparty/zlg_can/<平台>-<架构>/`（如 `linux-x86_64/`）。安装运行期依赖即可，
+**不需要**设置 `LD_LIBRARY_PATH`（同目录依赖会被自动预加载，见下）：
 
 ```bash
 sudo apt install -y libusb-1.0-0 libusb-1.0-0-dev
-export LD_LIBRARY_PATH=$PWD/thirdparty/zlg_can/linux-x86_64:$LD_LIBRARY_PATH
 ```
 
-自检（会显示库路径与**接口类型**）：
+自检（显示命中库、**接口形态**与所用后端）：
 
 ```bash
-python -c "from hudcore.can import describe_library_status as d; print(d())"
+python -c "from can_core import describe_driver_status as d; print(d())"
+# 例：CAN 驱动：.../thirdparty/zlg_can/linux-x86_64/libusbcanfd.so
+#       接口形态：vci
+#       后端：VCI 适配层（业务代码无需改动；波特率由适配层换算成 ZCAN_INIT 时序）
 ```
 
-> ⚠️ **接口差异**：公开可下载的 Linux 库是 **VCI 接口**（`VCI_OpenDevice` 等），
-> 而本项目驱动按 Windows 版 `zlgcan.dll` 的 **ZCAN 接口**（`ZCAN_OpenDevice` 等）编写，
-> 二者不匹配。三条可选路线（补 VCI 适配层 / 向 ZLG 索取 ZCAN 接口的 `libzlgcan.so` /
-> 改用 python-can 的 zlg 后端）详见 [`../thirdparty/zlg_can/README.md`](../thirdparty/zlg_can/README.md)。
+> ✅ **接口差异已内置适配**：公开可下载的 Linux 库是 **VCI 接口**（`VCI_OpenDevice` 等，
+> 没有句柄、用"设备类型/序号/通道号"三元组定位），而业务层按 Windows 版 `zlgcan.dll` 的
+> **ZCAN 接口**编写。`can_core/driver_factory.py` 会按库实际导出的符号选择后端：
+> ZCAN 直连（Windows / ZCAN 版 Linux 库）或 **VCI 适配层**
+> （`can_core/vci_adapter.py`，波特率 → `ZCAN_INIT` 时序、句柄 → 三元组、属性键 → `VCI_SetReference`）。
+> 业务代码、界面与用例执行器**无需区分平台**。
+>
+> 两个可能需要现场微调的量（见 [`../thirdparty/zlg_can/README.md`](../thirdparty/zlg_can/README.md) §3.2）：
+> `HUD_VCI_CLK`（控制器时钟，默认 40 MHz）、`HUD_VCI_SAMPLE_POINT` /
+> `HUD_VCI_SAMPLE_POINT_DATA`（采样点，默认 80% / 75%）。
+>
+> 无硬件时先自测：`./docker/can-sim/run_check.sh`（VCI 桩库 + 业务层收发回环）。
