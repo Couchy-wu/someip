@@ -160,7 +160,7 @@ def show_someip() -> int:
     print("     make libarhud_server.so ARCH=aarch64 SP_LIBS=<SP库目录>   # 或 ARCH=x86_64")
     print("   放置（与 libsomeip*.so 同目录）：")
     print(f"     {ROOT}/thirdparty/arhud_someip/linux-<架构>/")
-    print("   运行：LD_LIBRARY_PATH=thirdparty/arhud_someip/linux-<架构> python main.py")
+    print("   运行：python main.py（同目录 libsomeip*.so 自动预加载，无需 LD_LIBRARY_PATH）")
     print("   说明：Windows 版需要 MSVC 编译 libarhud_server.dll（当前暂无产物，界面会给出提示）")
     return 0
 

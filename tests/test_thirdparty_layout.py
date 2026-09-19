@@ -11,6 +11,8 @@
 from __future__ import annotations
 
 import ctypes
+import glob
+import os
 import pathlib
 import platform
 
@@ -160,3 +162,64 @@ def test_fetch_script_lists_targets(capsys):
     assert mod.main.__doc__ is None or True
     # someip 目标只打印指引（离线可用）
     assert mod.show_someip() == 0
+
+
+# --------------------------------------------------------- 同目录依赖预加载（免 LD_LIBRARY_PATH）
+
+def test_preload_sibling_libraries_ignores_dir_without_deps(tmp_path):
+    """目录里没有 libsomeip*.so 时应返回空列表，且不抛异常。"""
+    from hudcore.someip.backend import preload_sibling_libraries
+    target = tmp_path / "libarhud_server.so"
+    target.write_bytes(b"x")
+    assert preload_sibling_libraries(target) == []
+
+
+def test_preload_sibling_libraries_skips_broken_files(tmp_path):
+    """损坏的候选（非 ELF）应被跳过而不是抛异常。"""
+    from hudcore.someip.backend import preload_sibling_libraries
+    (tmp_path / "libarhud_server.so").write_bytes(b"x")
+    (tmp_path / "libsomeip-broken.so").write_bytes(b"not an ELF file")
+    assert preload_sibling_libraries(tmp_path / "libarhud_server.so") == []
+
+
+def test_preload_sibling_libraries_loads_real_shared_object(tmp_path):
+    """真实 .so 应被加载并返回（证明"绝对路径 + RTLD_GLOBAL"这条链路可用）。"""
+    if platform.system() == "Windows":
+        pytest.skip("Windows 不需要（也不支持）插件式预加载")
+    from hudcore.someip.backend import preload_sibling_libraries
+    source = _system_shared_object()
+    if source is None:
+        pytest.skip("本机找不到可用于测试的系统 .so")
+    (tmp_path / "libarhud_server.so").write_bytes(b"x")
+    copied = tmp_path / "libsomeip-probe.so"
+    copied.write_bytes(pathlib.Path(source).read_bytes())
+    loaded = preload_sibling_libraries(tmp_path / "libarhud_server.so")
+    assert [p.name for p in loaded] == ["libsomeip-probe.so"], f"应预加载同目录依赖，实际 {loaded}"
+
+
+def test_real_library_preload_enables_plugin_style_dlopen():
+    """可选（HUD_TEST_REAL_SOMEIP_LIB=1）：真实库目录预加载后，按**文件名** dlopen 应成功。
+
+    这正是 vsomeip "Configuration module could not be loaded!" 的根因场景：
+    libsomeip 在运行期按文件名加载 libsomeip-cfg.so，预加载后即可命中。
+    """
+    if os.environ.get("HUD_TEST_REAL_SOMEIP_LIB") != "1":
+        pytest.skip("需 HUD_TEST_REAL_SOMEIP_LIB=1（会加载真实 SOME/IP 库）")
+    from hudcore.someip.backend import find_someip_library, preload_sibling_libraries
+    lib = find_someip_library()
+    if lib is None:
+        pytest.skip("本机未放置 SOME/IP 运行库")
+    loaded = [p.name for p in preload_sibling_libraries(lib)]
+    assert loaded, "应至少预加载一个 libsomeip*.so"
+    for name in loaded:
+        ctypes.CDLL(name, mode=ctypes.RTLD_GLOBAL)      # 按文件名加载应命中已加载对象
+
+
+def _system_shared_object():
+    """找一个真实存在的系统 .so 路径（用于预加载链路测试）。"""
+    for pattern in ("/lib/*/libm.so.6", "/usr/lib/*/libm.so.6",
+                    "/lib/*/libc.so.6", "/usr/lib/*/libc.so.6"):
+        hits = sorted(glob.glob(pattern))
+        if hits:
+            return hits[0]
+    return None

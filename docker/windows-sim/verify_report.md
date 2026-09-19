@@ -26,5 +26,5 @@
 | 15 | 15. CAN 信号 → 数据字节（outputMatrix.csv） | PASS | 信号 0x095/Eng_Start_Result_Fdbk_Info_S（位=1.0-1.1, 长度=8）: 枚举0→[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] 枚举1→[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] 值随枚举变化=True |
 | 16 | 16. 信号矩阵 XLSX → CSV 转换 | PASS | openpyxl 读写 OK，模块入口=XlsmToCsvConverter |
 | 17 | 17. 项目自带自检脚本在 Windows 下可运行 | PASS | check_imports.py rc=0 (项目内部导入全部可解析 ✓); check_static.py rc=0 (静态检查通过 ✓); selftest.py rc=0 (============================================================) |
-| 18 | 18. 单元测试（pytest） | PASS | ............................................                             [100%] |
+| 18 | 18. 单元测试（pytest） | PASS | ..............................................ss                         [100%] |
 | 19 | 19. SOME/IP 回放窗口（布局与降级） | PASS | 23 个事件，字段数 {'RTK': 27, 'PilotStatus': 7, 'VehiclePosition': 34, 'HudNavmap': 3}；状态=SOME/IP 库不可用（动作已置灰）；库不可用(已降级) |

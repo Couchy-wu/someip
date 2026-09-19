@@ -88,9 +88,18 @@ make libarhud_server.so ARCH=aarch64 SP_LIBS=<SP库目录>      # x86_64 用 ARC
 mkdir -p data_test/HudAutoTest/thirdparty/arhud_someip/linux-x86_64     # 或 linux-aarch64
 cp libarhud_server.so libsomeip*.so data_test/HudAutoTest/thirdparty/arhud_someip/linux-x86_64/
 
-# 3) 运行（SP 版 libsomeip 由插件方式加载，需 LD_LIBRARY_PATH 指向该目录）
-LD_LIBRARY_PATH=$PWD/data_test/HudAutoTest/thirdparty/arhud_someip/linux-x86_64 python main.py
+# 3) 运行（无需设置 LD_LIBRARY_PATH）
+python main.py
 ```
+
+**同目录依赖会自动预加载**：SP 版 libsomeip 在运行期按**文件名**插件式 dlopen
+`libsomeip-cfg.so` / `libsomeip-sd.so` 等，仅靠 `libarhud_server.so` 的 NEEDED 记录
+找不到同目录插件（典型症状：`Configuration module could not be loaded!`，
+随后 `create()` 长时间阻塞）。`hudcore.someip.backend.preload_sibling_libraries()`
+会在加载主库前，用**绝对路径 + RTLD_GLOBAL** 多轮预加载同目录的 `libsomeip*.so`
+（多轮是必需的：cfg/sd/e2e 依赖 `libsomeip.so`，需等它先进入内存），
+之后 vsomeip 按文件名的 dlopen 即可命中，因此**不必再导出 LD_LIBRARY_PATH**。
+若仍报该错误，可临时 `export LD_LIBRARY_PATH=<库目录>` 兜底。
 
 依赖：`zlib1g-dev`（编译期）、`libusb` 等（运行期按 SP 库要求）。
 
@@ -114,8 +123,9 @@ LD_LIBRARY_PATH=$PWD/data_test/HudAutoTest/thirdparty/arhud_someip/linux-x86_64 
 | 步骤 | 结果 |
 |------|------|
 | 编译 | `make libarhud_server.so` → 83 KB，导出 11 个 `arhud_server_*` 符号 |
-| 库探测 | `HUD_SOMEIP_LIB=...` → 「SOME/IP 库就绪」 |
-| 创建/注册 | `open()` 成功；`register(selected_services=["0x000B"])` → **1 服务 / 2 事件** |
+| 库探测 | 库放 `thirdparty/arhud_someip/linux-aarch64/`，**不设任何环境变量** → 自动命中并显示「SOME/IP 库就绪」 |
+| 同目录依赖预加载 | 自动预加载 `libsomeip*.so` 4 个（多轮：`libsomeip.so` → cfg/sd/e2e）；按文件名 `dlopen("libsomeip-cfg.so")` 命中成功，**无需 `LD_LIBRARY_PATH`** |
+| 创建/注册 | `open()` 成功；默认 `register()` → **11 服务 / 23 事件**（仅选 RTK 时 → 1 服务 / 2 事件） |
 | 启动 | `start()` 成功，vsomeip 应用 `arhud01` 启动并 offer（SD 报文可见） |
 | 结构化发送 | `send_struct("RTK", …)` → 0x000B:0x8001，**194 字节**（CRC32 由库补齐） |
 | 原始发送 | `send_raw(0x000B, 0x8002, …)` 成功 |
@@ -132,7 +142,8 @@ LD_LIBRARY_PATH=$PWD/data_test/HudAutoTest/thirdparty/arhud_someip/linux-x86_64 
 | 现象 | 原因 | 处理 |
 |------|------|------|
 | 状态栏「库不可用（动作已置灰）」 | 未找到 `libarhud_server.so/.dll` | 按 §3 放到 `thirdparty/arhud_someip/<平台>/`；点 **[重新检测库]** 重试 |
-| `库加载失败` 且提示缺 `libsomeip*.so` | SP 库未同目录 或 未设 `LD_LIBRARY_PATH` | 把 `libsomeip*.so` 与 `libarhud_server.so` 放同一目录并设置 `LD_LIBRARY_PATH` |
+| `库加载失败` 且提示缺 `libsomeip*.so` | SP 库未与 `libarhud_server.so` 同目录 | 把 `libsomeip*.so` 与其放同一目录（重跑 `tools/fetch_thirdparty_libs.py someip` 可看到放置路径） |
+| 卡在 `Configuration module could not be loaded!` 且 `create()` 长时间无返回 | 同目录 `libsomeip-cfg.so` 未加载进来 | 正常情况已由 `preload_sibling_libraries()` 自动处理；仍出现时 `export LD_LIBRARY_PATH=<库目录>` 后重试 |
 | 发送报 `rc=-1` | 事件未注册或服务未启动 | 先 **[打开服务]/[启动服务]**；确认该事件已在 ② 勾选 |
 | 回放 `rc=-1` | pcap 无法解析 | 点 **[解析摘要]** 看本地解析结果（无通知的 pcap 无法回放） |
 | 「已发送」停在 0 | 客户端未订阅（SD 未完成） | 确认板端/客户端在线、组播可达（224.0.2.4:30490）、端口未被占用 |

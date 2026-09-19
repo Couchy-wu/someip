@@ -9,7 +9,7 @@
     lib = load_someip_library()          # 跨平台统一（Windows DLL / Linux .so）
 
 库文件说明：
-    Linux   : libarhud_server.so（依赖同目录的 libsomeip*.so，运行时需 LD_LIBRARY_PATH）
+    Linux   : libarhud_server.so（同目录的 libsomeip*.so 会被自动预加载，无需 LD_LIBRARY_PATH）
     Windows : libarhud_server.dll（**暂无产物**，见 docs/SOMEIP_REPLAY.md：当前留占位，
               加载失败时给出明确提示而不是崩溃）
 """

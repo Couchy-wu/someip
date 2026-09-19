@@ -57,7 +57,9 @@ paths.models_dir                      # <项目根>/thirdparty/models
 判断规则：
 
 - **第三方提供的"代码/框架/模型/SDK 附带资源"** → 放 `thirdparty/<名称>/`
-- **第三方运行时库（按平台区分）** → 放 `thirdparty/<组件>/<平台>/`（如 `thirdparty/arhud_someip/linux/`）
+- **第三方运行时库（按平台-架构区分）** → 放 `thirdparty/<组件>/<平台>-<架构>/`
+  （如 `thirdparty/arhud_someip/linux-aarch64/`、`thirdparty/zlg_can/linux-x86_64/`；
+  同名库在 aarch64/x86_64 上 ABI 不兼容，混放会 `wrong ELF class`）
 - **历史部署目录** → `drivers/<平台>/`、`bin/<平台>/`（仍被探测链兼容）
 - **自己写的界面素材/业务数据** → `Resources/`、`data/`
 

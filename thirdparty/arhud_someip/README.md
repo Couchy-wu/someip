@@ -39,12 +39,12 @@ cd <someip>/arhud_python_server/src
 make libarhud_server.so ARCH=aarch64 SP_LIBS=<SP库目录>      # x86_64 用 ARCH=x86_64
 
 # 2) 放到首选位置（libsomeip*.so 必须与 libarhud_server.so 同目录）
-mkdir -p <HudAutoTest>/thirdparty/arhud_someip/linux
-cp libarhud_server.so libsomeip*.so <HudAutoTest>/thirdparty/arhud_someip/linux/
+mkdir -p <HudAutoTest>/thirdparty/arhud_someip/linux-aarch64     # 按架构选子目录
+cp libarhud_server.so libsomeip*.so <HudAutoTest>/thirdparty/arhud_someip/linux-aarch64/
 
-# 3) 运行：SP 版 libsomeip 由插件方式加载，需要 LD_LIBRARY_PATH 指向该目录
+# 3) 运行（同目录 libsomeip*.so 会被自动预加载，无需 LD_LIBRARY_PATH）
 cd <HudAutoTest>
-LD_LIBRARY_PATH=$PWD/thirdparty/arhud_someip/linux python main.py
+python main.py
 ```
 
 编译期依赖 `zlib1g-dev`；运行期按 SP 库要求（如 `libusb`）。
