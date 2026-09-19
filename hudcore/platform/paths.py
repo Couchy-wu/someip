@@ -16,7 +16,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from .system import IS_WINDOWS, IS_LINUX, IS_MACOS
+from .system import IS_WINDOWS, IS_LINUX, IS_MACOS, arch_name
 
 
 def _platform_dir_name() -> str:
@@ -34,6 +34,9 @@ class Paths:
         # hudcore/platform/paths.py -> 上溯两级 = 项目根
         self.project_root: Path = (root or Path(__file__).resolve().parents[2]).resolve()
         self.platform_dir_name: str = _platform_dir_name()
+        # 形如 linux-x86_64 / linux-aarch64：用于按"平台+架构"分目录存放第三方运行时库
+        # （同名库在 aarch64 与 x86_64 上 ABI 不兼容，混放会导致 dlopen 报 wrong ELF class）
+        self.platform_arch_dir_name: str = f"{self.platform_dir_name}-{arch_name()}"
 
     # ---- 项目内目录 ----
     @property

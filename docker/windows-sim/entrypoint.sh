@@ -84,6 +84,9 @@ prepare() {
     #   · 首选镜像内 MinGW 交叉编译的 zlgcan.dll（有真实 ZCAN_* 导出）
     #   · 镜像未编译（无 MinGW）时，用 Windows Python 自带的 python313.dll 充当：
     #     同样走「探测 → WinDLL 加载 → 调用导出函数」全链路，只是导出名不同
+    # 供验证套件第 9 项使用：以"桩库"验证 CAN 探测→加载→调用链路
+    # 注意：验证在 Windows Python（Wine）里执行，因此要用 Windows 盘符路径
+    export HUD_ZLG_STUB="Z:\\work\\drivers\\windows\\$(basename "${STUB_DST}")"
     mkdir -p "$(dirname "${STUB_DST}")"
     if [ -f "${STUB_DST}" ]; then
         echo "[准备] 复用已有 ${STUB_DST}（运行结束不会删除非本次创建的文件）"

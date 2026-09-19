@@ -79,6 +79,19 @@ def python_status() -> tuple[str, str]:
     return "ok", (note or f"Python {PYTHON_VERSION} 在支持区间内（{lo} ~ {hi}）")
 
 
+def arch_name() -> str:
+    """归一化 CPU 架构名（用于 thirdparty/<组件>/<平台>-<架构>/ 之类的目录）。
+
+    arm64/aarch64 → aarch64；AMD64/x86_64 → x86_64；其它原样返回。
+    """
+    m = (platform.machine() or "").lower()
+    if m in ("arm64", "aarch64"):
+        return "aarch64"
+    if m in ("x86_64", "amd64", "x64"):
+        return "x86_64"
+    return m or "unknown"
+
+
 # ---- 命名约定 ----
 exe_suffix: str = ".exe" if IS_WINDOWS else ""          # 可执行文件后缀
 lib_suffix: str = ".dll" if IS_WINDOWS else ".so"       # 动态库后缀

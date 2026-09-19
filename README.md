@@ -80,7 +80,8 @@ HudAutoTest/
 │   ├── zlg/                      #   ZLG CAN SDK 资源（原 kerneldlls）
 │   ├── ffmpeg/                   #   随项目分发的 ffmpeg 构建（原 vendor/ffmpeg）
 │   ├── models/                   #   第三方预训练权重（原 models）
-│   └── arhud_someip/<平台>/       #   SOME/IP 运行时库（放置于部署时，库文件不进仓库）
+│   ├── arhud_someip/<平台>-<架构>/ #   SOME/IP 运行时库（部署时放入，库文件不进仓库）
+│   └── zlg_can/<平台>-<架构>/      #   ZLG CAN 驱动库（Linux 用 tools/fetch_thirdparty_libs.py 获取）
 ├── data/                         # 应用数据与运行期状态（与代码分离）
 ├── tests/                        # ★ 单元测试（pytest；含架构规则守卫）
 ├── tools/                        # check_env / selftest / check_imports / check_static / rename_modules

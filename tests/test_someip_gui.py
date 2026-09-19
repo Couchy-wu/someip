@@ -107,10 +107,17 @@ def test_selection_interactions(window):
 
 
 def test_degraded_when_library_missing(window, monkeypatch):
-    """库不可用（Windows 现状）：动作置灰、提示一次、调用不崩、可关闭。"""
+    """库不可用（Windows 现状）：动作置灰、提示一次、调用不崩、可关闭。
+
+    注意：必须同时阻断 `api.open_library()` —— 否则在"已经放好真实库"的机器上，
+    本用例会真的去创建 vsomeip 应用（可能直接 abort 掉整个 pytest 进程），
+    这既不是本用例的目的，也会让测试结果不可信。
+    """
     import hudcore.someip as hs
+    import someip_core.api as api_mod
     win, warns = window
     app = win.someip_app
+    monkeypatch.setattr(api_mod, "open_library", lambda: None)
     monkeypatch.setattr(hs, "is_library_available", lambda: False)
     monkeypatch.setattr("someip_gui.replay_window.is_library_available", lambda: False)
     app._apply_library_state()

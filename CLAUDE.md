@@ -19,8 +19,11 @@ python main.py
 - **Computer Vision**: OpenCV, Ultralytics (YOLO)
 - **CAN Communication**: ZLG CAN driver (`can_core/driver.py` + `can_core/device.py`, `zlgcan.dll`)
 - **数据目录**: `data/`（信号矩阵、设备配置、平台分辨率、标定结果；见 `hudcore.platform.paths.data_dir`）
-- **第三方内容**: `thirdparty/<名称>/`（ultralytics / paddleocr / zlg / ffmpeg / models；
-  用 `paths.thirdparty("名称")` 定位，说明见 `thirdparty/README.md`）
+- **第三方内容**: `thirdparty/<名称>/`（ultralytics / paddleocr / zlg / ffmpeg / models）；
+  **运行时库**按 `thirdparty/<组件>/<平台>-<架构>/` 放置（arhud_someip、zlg_can），
+  库文件不入库；定位用 `paths.thirdparty("名称")`，说明见 `thirdparty/README.md`
+- **库获取**: `python tools/fetch_thirdparty_libs.py zlg`（ZLG Linux 驱动）；
+  SOME/IP 库需就地编译（脚本会打印步骤）
 - **Data Processing**: Pandas, NumPy, openpyxl
 
 ## Architecture

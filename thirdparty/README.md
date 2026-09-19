@@ -10,7 +10,8 @@ thirdparty/
 ├── zlg/             ZLG CAN SDK 资源（原 kerneldlls：DLL 与 XML 描述文件）
 ├── ffmpeg/          随项目分发的 ffmpeg 构建（原 vendor/ffmpeg）
 ├── models/          第三方预训练权重（原 models/，如 yolov8s.pt）
-└── arhud_someip/    SOME/IP 服务端**运行时库**（按平台放置 linux/ windows/，库文件不进仓库）
+├── arhud_someip/    SOME/IP 服务端**运行时库**（按"平台-架构"放置，库文件不进仓库）
+└── zlg_can/         ZLG CAN 驱动库（Windows 已有；Linux 用 tools/fetch_thirdparty_libs.py 联网获取）
 ```
 
 ---
@@ -24,7 +25,8 @@ thirdparty/
 | `zlg/` | ZLG CAN SDK 附属资源（`*.dll`、设备描述 `*.xml`） | 现场排查与驱动配套（`hudcore.can` 只探测驱动库本身） | 随 ZLG SDK 版本替换 |
 | `ffmpeg/` | ffmpeg 构建（含 `bin/`、`presets/`、`doc/`） | `hudcore.platform.executables.get_ffmpeg()` 探测链（`bin/<平台>` → `thirdparty/ffmpeg/bin` → PATH） | 替换 `bin/` 下的可执行文件即可 |
 | `models/` | 第三方预训练权重（`*.pt` 等） | `hudcore.platform.paths.models_dir`、YOLO 相关脚本 | 直接放入新权重文件 |
-| `arhud_someip/<平台>/` | SOME/IP 服务端运行时库（`libarhud_server.so` + `libsomeip*.so`；Windows 为 `.dll`，暂缺） | `hudcore/someip`（ctypes 加载）、`someip_core` | 见 [`arhud_someip/README.md`](arhud_someip/README.md) |
+| `arhud_someip/<平台>-<架构>/` | SOME/IP 服务端运行时库（`libarhud_server.so` + `libsomeip*.so`；Windows 为 `.dll`，暂缺） | `hudcore/someip`（ctypes 加载）、`someip_core` | 见 [`arhud_someip/README.md`](arhud_someip/README.md) |
+| `zlg_can/<平台>-<架构>/` | ZLG CAN 驱动库（Linux 为 `libusbcanfd.so` 等，**VCI 接口**；Windows 为仓库根的 `zlgcan.dll`，**ZCAN 接口**） | `hudcore.can`（ctypes 加载）、`can_core` | `python tools/fetch_thirdparty_libs.py zlg`；见 [`zlg_can/README.md`](zlg_can/README.md) |
 
 以上目录（除 `ultralytics/` 在本地为未跟踪内容外）都随仓库分发，路径已统一由
 `hudcore.platform.paths` 提供：
@@ -63,6 +65,7 @@ paths.models_dir                      # <项目根>/thirdparty/models
 
 ## 3. 新增第三方内容时的做法
 
+0. 运行时库优先用 `python tools/fetch_thirdparty_libs.py <名称>` 获取（可复现、可追溯来源）；
 1. 在 `thirdparty/` 下新建子目录，目录名用小写英文（如 `thirdparty/onnxruntime/`）；
 2. 在上表补一行说明"内容 / 被谁使用 / 更新方式"；
 3. 代码中**不要**写死路径，统一用 `paths.thirdparty("<名称>")`（必要时给出旧位置回退）；

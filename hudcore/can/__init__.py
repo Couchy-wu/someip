@@ -14,10 +14,13 @@ from .backend import (
     find_zlg_library,
     describe_library_status,
     is_library_available,
+    library_api_kind,
+    library_load_error,
     LIB_CANDIDATES,
 )
 
 __all__ = [
     "load_zlg_library", "find_zlg_library",
-    "describe_library_status", "is_library_available", "LIB_CANDIDATES",
+    "describe_library_status", "is_library_available", "library_api_kind",
+    "library_load_error", "LIB_CANDIDATES",
 ]

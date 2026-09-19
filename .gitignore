@@ -29,3 +29,7 @@ drivers/someip/**/*.dylib
 thirdparty/arhud_someip/**/*.so
 thirdparty/arhud_someip/**/*.dll
 thirdparty/arhud_someip/**/*.dylib
+
+# ZLG CAN Linux 驱动（由 tools/fetch_thirdparty_libs.py 联网获取，不进仓库）
+thirdparty/zlg_can/**
+!thirdparty/zlg_can/README.md

@@ -183,3 +183,32 @@ python3 tools/selftest.py       # 平台层自测应全部通过（跳过项为�
 - [ ] `drivers/linux/` 下有驱动库，`check_env` 显示"驱动库就绪"
 - [ ] ffmpeg / LibreOffice / 文本编辑器探测命中（或接受回退）
 - [ ] CAN 设备插上后能在「can测试」窗口正常收发
+
+---
+
+## 附：ZLG Linux 驱动库的获取（thirdparty/zlg_can）
+
+ZLG 官方没有公开的 Linux 驱动直链，本项目用脚本从公开镜像获取（含头文件）：
+
+```bash
+python tools/fetch_thirdparty_libs.py zlg            # 默认本机架构
+python tools/fetch_thirdparty_libs.py zlg --arch x86_64
+```
+
+库会被放到 `thirdparty/zlg_can/<平台>-<架构>/`（如 `linux-x86_64/`），运行前把它加入库搜索路径：
+
+```bash
+sudo apt install -y libusb-1.0-0 libusb-1.0-0-dev
+export LD_LIBRARY_PATH=$PWD/thirdparty/zlg_can/linux-x86_64:$LD_LIBRARY_PATH
+```
+
+自检（会显示库路径与**接口类型**）：
+
+```bash
+python -c "from hudcore.can import describe_library_status as d; print(d())"
+```
+
+> ⚠️ **接口差异**：公开可下载的 Linux 库是 **VCI 接口**（`VCI_OpenDevice` 等），
+> 而本项目驱动按 Windows 版 `zlgcan.dll` 的 **ZCAN 接口**（`ZCAN_OpenDevice` 等）编写，
+> 二者不匹配。三条可选路线（补 VCI 适配层 / 向 ZLG 索取 ZCAN 接口的 `libzlgcan.so` /
+> 改用 python-can 的 zlg 后端）详见 [`../thirdparty/zlg_can/README.md`](../thirdparty/zlg_can/README.md)。

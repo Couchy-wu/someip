@@ -47,6 +47,56 @@ EXTRA_SYSTEM_DIRS = [
 _last_probe_log: list[str] = []
 
 
+# 本项目驱动（can_core/driver.py）调用的是 **ZCAN 接口**（ZCAN_OpenDevice 等），
+# 与 Windows 版 zlgcan.dll 一致。Linux 上 ZLG 公开提供的 libusbcanfd.so 是 **VCI 接口**
+# （VCI_OpenDevice 等），二者不兼容 —— 因此这里按"是否导出 ZCAN_OpenDevice"排序，
+# 并在只找到 VCI 库时给出明确提示（见 describe_library_status / _vci_only_hint）。
+_ZCAN_ENTRY = "ZCAN_OpenDevice"
+
+
+_LAST_LOAD_ERROR: str = ""
+
+
+def library_load_error() -> str:
+    """最近一次接口探测时的 dlopen 错误（空字符串表示无错误）。"""
+    return _LAST_LOAD_ERROR
+
+
+def library_api_kind(lib_path: Path | str) -> str:
+    """返回库的接口类型："zcan" / "vci" / "unknown" / "error"。
+
+    实现：dlopen 后按导出符号判断（Linux CDLL 把符号暴露为属性，Windows 同理）。
+    "error" 表示库本身能定位但**加载失败**（多为缺少依赖，如 libusb-1.0.so），
+    具体原因见 `library_load_error()`。
+    """
+    global _LAST_LOAD_ERROR
+    _LAST_LOAD_ERROR = ""
+    path = str(lib_path)
+    loader = ctypes.WinDLL if IS_WINDOWS else ctypes.CDLL
+    try:
+        handle = loader(path)
+    except OSError as exc:
+        _LAST_LOAD_ERROR = str(exc)
+        return "error"
+    if hasattr(handle, _ZCAN_ENTRY):
+        return "zcan"
+    if hasattr(handle, "VCI_OpenDevice"):
+        return "vci"
+    return "unknown"
+
+
+def _vci_only_hint(lib_path: Path | str) -> str:
+    return (
+        f"检测到 {lib_path} 是 **VCI 接口**（VCI_OpenDevice 等），"
+        f"而本项目驱动需要 **ZCAN 接口**（{_ZCAN_ENTRY} 等，与 Windows 版 zlgcan.dll 一致）。\n"
+        "  可选处理：\n"
+        "   1) 使用 ZLG 官方 Linux SDK 中的 libzlgcan.so（ZCAN 统一接口）放到\n"
+        "      thirdparty/zlg_can/<平台>-<架构>/ 下；\n"
+        "   2) 或为本项目补充 VCI 适配层（把 VCI_* 映射到项目驱动所需的接口）；\n"
+        "   3) 纯 VCI 场景也可直接用 python-can 的 zlg 后端（pip install zlgcan python-can）。"
+    )
+
+
 def _candidates() -> list[str]:
     if IS_WINDOWS:
         return LIB_CANDIDATES["windows"]
@@ -62,7 +112,13 @@ def _search_dirs() -> list[Path]:
     if env_dir:
         dirs.append(Path(env_dir).expanduser())
 
-    dirs.append(paths.drivers_dir)        # drivers/<platform>/
+    # 第三方运行时库统一收纳位置（优先，含按架构区分）
+    zlg = paths.thirdparty_dir / "zlg_can"
+    dirs.append(zlg / paths.platform_arch_dir_name)   # thirdparty/zlg_can/<平台>-<架构>/
+    dirs.append(zlg / paths.platform_dir_name)        # thirdparty/zlg_can/<平台>/
+    dirs.append(zlg)                                  # thirdparty/zlg_can/
+
+    dirs.append(paths.drivers_dir)        # drivers/<platform>/（旧位置，兼容）
     dirs.append(paths.drivers_all_dir)    # drivers/
     dirs.append(paths.project_root)       # 兼容历史：项目根下的 zlgcan.dll
     dirs.append(Path(paths.project_root) / "libs")
@@ -104,14 +160,33 @@ def find_zlg_library() -> Optional[Path]:
         if p.is_file():
             return p
 
-    # 2) 目录 × 候选名
+    # 2) 目录 × 候选名：优先返回导出 ZCAN 接口的库；只找到 VCI 库时也返回，
+    #    但记录接口类型（调用方可据此给出"接口不匹配"的明确提示）。
+    fallback_vci: Optional[Path] = None
+    fallback_broken: Optional[Path] = None
     for d in _search_dirs():
         for name in _candidates():
             p = d / name
-            if p.is_file():
-                _last_probe_log.append(f"[dir] {d}/{name} -> 命中")
+            if not p.is_file():
+                continue
+            kind = library_api_kind(p)
+            _last_probe_log.append(f"[dir] {p} -> 命中（接口={kind}）")
+            if kind in ("zcan", "unknown"):
                 return p
+            if kind == "vci":
+                fallback_vci = fallback_vci or p
+            else:                       # error：文件在但加载不了（多为缺依赖）
+                fallback_broken = fallback_broken or p
+                _last_probe_log.append(
+                    f"[warn] {p.name} 加载失败：{library_load_error()}"
+                    f"（可设 LD_LIBRARY_PATH 指向该目录后重试）")
         _last_probe_log.append(f"[dir] {d} -> 未找到 {'/'.join(_candidates())}")
+    if fallback_vci is not None:
+        _last_probe_log.append(f"[warn] 只找到 VCI 接口库：{fallback_vci}")
+        return fallback_vci
+    if fallback_broken is not None:     # 最后兜底：让调用方拿到路径以便展示真实原因
+        _last_probe_log.append(f"[warn] 仅找到加载失败的库：{fallback_broken}")
+        return fallback_broken
 
     # 3) 交给系统加载器（ldconfig / PATH 可见的情况）
     for name in _candidates():
@@ -173,9 +248,21 @@ def _missing_dependency_hint() -> str:
 def describe_library_status() -> str:
     """返回驱动库探测状态文本（自检/日志用）"""
     found = find_zlg_library()
-    lines = [f"平台: {paths.platform_dir_name}  候选: {', '.join(_candidates())}"]
+    kind = library_api_kind(found) if found else "unknown"
+    lines = [f"平台: {paths.platform_dir_name}({paths.platform_arch_dir_name})"
+             f"  候选: {', '.join(_candidates())}"]
     lines += [f"  {l}" for l in _last_probe_log]
-    lines.append(f"结论: {'已找到 -> ' + str(found) if found else '未找到驱动库'}")
+    if not found:
+        lines.append("结论: 未找到驱动库")
+    elif kind == "error":
+        lines.append(f"结论: 已找到 {found}，但加载失败")
+        lines.append(f"  原因: {library_load_error()}")
+        lines.append(f"  排查: {_missing_dependency_hint()}")
+    elif kind == "vci":
+        lines.append(f"结论: 已找到 {found}（接口=VCI，与本项目驱动不匹配）")
+        lines.append("  " + _vci_only_hint(found).replace("\n", "\n  "))
+    else:
+        lines.append(f"结论: 已找到 {found}（接口={kind}）")
     return "\n".join(lines)
 
 

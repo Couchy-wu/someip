@@ -287,6 +287,7 @@ def test_library_probe_priority(tmp_path, monkeypatch):
         project_root = tmp_path
         thirdparty_dir = tmp_path / "thirdparty"
         platform_dir_name = "linux"
+        platform_arch_dir_name = "linux-x86_64"
 
         @property
         def drivers_dir(self):

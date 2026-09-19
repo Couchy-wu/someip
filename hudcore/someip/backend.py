@@ -4,11 +4,12 @@
 搜索顺序（先命中先用）：
     1. 环境变量 HUD_SOMEIP_LIB / ARHUD_LIB_PATH（完整文件路径，便于现场临时替换）
     2. 环境变量 HUD_SOMEIP_LIB_DIR（所在目录）
-    3. 项目内 thirdparty/arhud_someip/<平台>/   （**首选**：第三方运行时库统一收纳位置）
-    4. 项目内 thirdparty/arhud_someip/
-    5. 项目内 drivers/someip/<平台>/            （旧位置，兼容既有部署）
-    6. 项目根目录
-    7. 系统库路径（LD_LIBRARY_PATH / 系统目录，由动态加载器自行查找）
+    3. 项目内 thirdparty/arhud_someip/<平台>-<架构>/（**首选**，如 linux-x86_64、linux-aarch64）
+    4. 项目内 thirdparty/arhud_someip/<平台>/
+    5. 项目内 thirdparty/arhud_someip/
+    6. 项目内 drivers/someip/<平台>/            （旧位置，兼容既有部署）
+    7. 项目根目录
+    8. 系统库路径（LD_LIBRARY_PATH / 系统目录，由动态加载器自行查找）
 
 放置规则见 thirdparty/README.md：**第三方运行时库（按平台区分）** 统一放
 thirdparty/<组件>/<平台>/；drivers/<平台>/ 与 bin/<平台>/ 为历史部署目录，仍兼容。
@@ -55,6 +56,7 @@ def _search_dirs() -> list[Path]:
             dirs.append(Path(v))
     tp = paths.thirdparty_dir / "arhud_someip"          # 首选：第三方统一收纳目录
     dirs += [
+        tp / paths.platform_arch_dir_name,             # thirdparty/arhud_someip/<平台>-<架构>/（推荐）
         tp / paths.platform_dir_name,                  # thirdparty/arhud_someip/<平台>/
         tp,                                            # thirdparty/arhud_someip/
         paths.drivers_dir / "someip",                  # drivers/<平台>/someip/（旧位置，兼容）

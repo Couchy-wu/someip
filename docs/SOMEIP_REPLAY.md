@@ -70,10 +70,11 @@
 
 1. 环境变量 `HUD_SOMEIP_LIB` / `ARHUD_LIB_PATH`（完整文件路径）
 2. 环境变量 `HUD_SOMEIP_LIB_DIR` / `ARHUD_LIB_DIR`（目录）
-3. **`thirdparty/arhud_someip/<平台>/`（首选：第三方运行时库统一收纳位置）**
-4. `thirdparty/arhud_someip/`（不分平台时的扁平放置）
-5. `drivers/someip/<平台>/`（旧位置，兼容既有部署）
-6. 项目根目录、系统库路径
+3. **`thirdparty/arhud_someip/<平台>-<架构>/`（首选，如 `linux-x86_64`、`linux-aarch64`）**
+4. `thirdparty/arhud_someip/<平台>/`
+5. `thirdparty/arhud_someip/`（扁平放置）
+6. `drivers/someip/<平台>/`（旧位置，兼容既有部署）
+7. 项目根目录、系统库路径
 
 ### Linux（已验证）
 
@@ -83,11 +84,12 @@ cd arhud_python_server/src
 make libarhud_server.so ARCH=aarch64 SP_LIBS=<SP库目录>      # x86_64 用 ARCH=x86_64
 
 # 2) 部署：libarhud_server.so 与 libsomeip*.so 必须放在同一目录
-mkdir -p data_test/HudAutoTest/thirdparty/arhud_someip/linux
-cp libarhud_server.so libsomeip*.so data_test/HudAutoTest/thirdparty/arhud_someip/linux/
+#    目录按"平台-架构"区分（同名库在 aarch64/x86_64 上 ABI 不兼容，混放会 dlopen 报错）
+mkdir -p data_test/HudAutoTest/thirdparty/arhud_someip/linux-x86_64     # 或 linux-aarch64
+cp libarhud_server.so libsomeip*.so data_test/HudAutoTest/thirdparty/arhud_someip/linux-x86_64/
 
 # 3) 运行（SP 版 libsomeip 由插件方式加载，需 LD_LIBRARY_PATH 指向该目录）
-LD_LIBRARY_PATH=$PWD/data_test/HudAutoTest/thirdparty/arhud_someip/linux python main.py
+LD_LIBRARY_PATH=$PWD/data_test/HudAutoTest/thirdparty/arhud_someip/linux-x86_64 python main.py
 ```
 
 依赖：`zlib1g-dev`（编译期）、`libusb` 等（运行期按 SP 库要求）。
