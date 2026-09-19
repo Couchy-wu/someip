@@ -51,7 +51,8 @@ python main.py
 编译期依赖 `zlib1g-dev`；运行期按 SP 库要求（如 `libusb`）。
 
 服务表有两代（见 `docs/SOMEIP_REPLAY.md` §3.5 与 `someip_core.models`）：
-`old`（11 服务/23 事件，本库可注册）与 `bplus`（6 服务/38 事件，库侧暂不可注册）。
+`old`（11 服务/23 事件）与 `bplus`（6 服务/38 事件），**两代都由本库注册**，
+库侧开关是环境变量 `ARHUD_SERVICE_PROFILE`（上位机在打开服务端时会按当前服务表代自动同步）。
 
 实测（Ubuntu aarch64 容器）：库加载 → 创建 vsomeip 应用 → 注册 11 服务/23 事件 →
 `out.pcap` 回放发送 413 条（与本地解析一致）。详见 `docs/SOMEIP_REPLAY.md`。
@@ -64,7 +65,7 @@ python main.py
 |------|------|------|----------|
 | linux-aarch64 | `libsomeip*.so` | 参考实现 `lipeng20260228/libs.zip → libs/lib_bst_t517` | 2025-12-15 |
 | linux-x86_64 | `libsomeip*.so` | 参考实现 `lipeng20260228/libs.zip → libs/lib_x86` | 2025-12-23 |
-| 两平台 | `libarhud_server.so` | 本项目 `arhud_python_server/src`（就地编译） | 与本仓库同步 |
+| 两平台 | `libarhud_server.so` | 本项目 `arhud_python_server/src`（2026-02 重建：两代服务表 profile、配置对齐、回放计数修正、rpath `$ORIGIN`） | 与本仓库同步 |
 
 更新方式：解压参考实现的 `libs.zip`，把 `lib_bst_t517/*` 覆盖到 `linux-aarch64/`、
 `lib_x86/*` 覆盖到 `linux-x86_64/`（文件名与 SONAME 都是 `libsomeip*.so`，可直接替换），

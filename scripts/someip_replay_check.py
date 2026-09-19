@@ -94,22 +94,38 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[3/5] 服务表：{table}｜{info['services']} 服务/{info['events']} 事件｜"
           f"{'可注册' if registrable(table) else '⚠ 库侧暂不可注册'}")
     if not registrable(table):
-        failures.append(f"{table} 代服务暂不可由回放库注册（参考实现亦未调通）—— 回放发送只对 old 代有效")
+        failures.append(f"{table} 代服务暂不可由回放库注册")
 
     # 4) 建实例 → 注册 → 启动 → 单条发送
+    table_info = dict(info)
+    table_info["sample_event"] = (0x001A, 0x8001) if table == "bplus" else (0x000A, 0x8001)
+    info = table_info
     ctl = ReplayController(on_log=lambda m: logging_setup.info(LOGGER_NAME, m))
     rc = 2
     try:
         ctl.open(unicast=args.unicast, config_path=str(config) if config else None)
         n_svc, n_evt = ctl.register()
         ctl.start()
-        svc, evt, size = ctl.send_struct("RTK", Counter=7, longitude=116.4, latitude=39.9)
-        print(f"[4/5] 创建/注册/启动：{n_svc} 服务/{n_evt} 事件；"
-              f"RTK 单条 → 0x{svc:04X}:0x{evt:04X} {size} 字节")
-        if (n_svc, n_evt) == (11, 23) and size == 194:
-            print("      ✓ 与 old 代预期一致（11 服务/23 事件，RTK 194 字节）")
+        expect = (info["services"], info["events"])
+        print(f"[4/5] 创建/注册/启动：{n_svc} 服务/{n_evt} 事件（该代预期 {expect[0]}/{expect[1]}）")
+        if (n_svc, n_evt) == expect:
+            print(f"      ✓ 与 {table} 代服务表一致")
         else:
-            failures.append(f"注册/序列化与预期不符：{n_svc}/{n_evt}，RTK {size} 字节")
+            failures.append(f"注册规模与 {table} 代服务表不符：{n_svc}/{n_evt}，应为 {expect[0]}/{expect[1]}")
+
+        # 结构化发送：old 代发 RTK（已知结构体，长度 194）；bplus 代发其自身的服务/事件
+        if table == "old":
+            svc, evt, size = ctl.send_struct("RTK", Counter=7, longitude=116.4, latitude=39.9)
+            print(f"      RTK 单条 → 0x{svc:04X}:0x{evt:04X} {size} 字节")
+            if size != 194:
+                failures.append(f"RTK 序列化长度异常：{size}（应 194）")
+        else:
+            svc, evt = info["sample_event"]
+            # send_raw 返回载荷长度；发送失败会抛异常（被外层捕获记为失败）
+            size = ctl.send_raw(svc, evt, bytes(8))
+            print(f"      原始发送 → 0x{svc:04X}:0x{evt:04X} 8 字节，返回 {size}（载荷长度）")
+            if size != 8:
+                failures.append(f"bplus 代服务发送异常：返回 {size}")
 
         # 5) pcap 回放
         pcap = Path(args.pcap) if args.pcap else _default_pcap()

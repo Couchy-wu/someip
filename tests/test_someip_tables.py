@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -40,7 +41,9 @@ def test_two_generations_available_with_expected_sizes():
     assert (info[TABLE_OLD]["services"], info[TABLE_OLD]["events"]) == (11, 23)
     assert (info[TABLE_BPLUS]["services"], info[TABLE_BPLUS]["events"]) == (6, 38)
     assert info[TABLE_OLD]["registrable"] is True
-    assert info[TABLE_BPLUS]["registrable"] is False, "参考实现标注 B+ 还不能用，库侧也不可注册"
+    # 2026-02 起服务端库（arhud_python_server）两代都能注册：profile 由库侧
+    # ARHUD_SERVICE_PROFILE 选择，实测 B+ 可注册 6 服务/38 事件并完整回放其 pcap
+    assert info[TABLE_BPLUS]["registrable"] is True
 
 
 def test_table_switch_and_env(monkeypatch):
@@ -60,7 +63,7 @@ def test_normalize_and_registrable():
     assert normalize_table("B+") == TABLE_BPLUS
     assert normalize_table("old") == TABLE_OLD
     assert normalize_table(None) == TABLE_OLD
-    assert registrable(TABLE_OLD) is True and registrable(TABLE_BPLUS) is False
+    assert registrable(TABLE_OLD) is True and registrable(TABLE_BPLUS) is True
 
 
 def test_tables_can_be_queried_independently():
@@ -78,7 +81,7 @@ def test_describe_tables_mentions_both():
     text = describe_tables()
     assert "old" in text and "bplus" in text
     assert "11 服务/23 事件" in text and "6 服务/38 事件" in text
-    assert "暂不可注册" in text
+    assert "可注册" in text
 
 
 def test_service_table_files_exist_per_generation():
@@ -157,7 +160,7 @@ def test_someip_field_map_reports_generation():
     set_table(TABLE_BPLUS)
     target_bplus = M.resolve("hnmap_s.navigation_map")
     assert target_bplus.supported, "0x010A 两代都有，字段映射仍然成立"
-    assert target_bplus.table == TABLE_BPLUS and target_bplus.registrable is False
+    assert target_bplus.table == TABLE_BPLUS and target_bplus.registrable is True
 
     assert M.service_generation("0x010A") == (TABLE_OLD, TABLE_BPLUS)
     assert M.service_generation("0x000C") == (TABLE_OLD,)
@@ -194,6 +197,64 @@ def test_describe_inputs_mentions_table():
     case = next(c for c in parser.load_cases(case_dir) if c.someip_links)
     lines = describe_inputs(case, table=TABLE_OLD)
     assert lines and "old" in lines[0]
+
+
+def test_open_syncs_service_table_to_library(monkeypatch):
+    """`ReplayController.open()` 必须把当前服务表代同步给 C++ 库（ARHUD_SERVICE_PROFILE）。
+
+    不同步会出现"Python 注册了 38 个事件、库只注册 23 个"的不一致：Python 侧按自己的表逐条
+    调用 add_service/add_event，而库在 create() 时按环境变量决定内置表。
+    这里用假库替身验证，无需真实库。
+    """
+    from someip_core import ReplayController
+
+    class _FakeLib:
+        def __init__(self):
+            self.created = []
+
+        def create(self, unicast, config_path):
+            self.created.append((unicast, config_path))
+            return 0x1234
+
+    logs: list[str] = []
+    fake = _FakeLib()
+    monkeypatch.delenv("ARHUD_SERVICE_PROFILE", raising=False)
+    monkeypatch.setattr(ReplayController, "_require_lib", lambda self: fake)
+
+    ctl = ReplayController(on_log=logs.append)
+    set_table(TABLE_BPLUS)
+    ctl.open()
+    assert os.environ.get("ARHUD_SERVICE_PROFILE") == TABLE_BPLUS
+    assert fake.created, "open() 应真正调用库的 create()"
+    monkeypatch.delenv("ARHUD_SERVICE_PROFILE", raising=False)
+
+    set_table(TABLE_OLD)
+    ReplayController().open()
+    assert os.environ.get("ARHUD_SERVICE_PROFILE") == TABLE_OLD, "以 Python 侧服务表代为准"
+
+
+def test_env_var_of_library_is_recognised_as_table(monkeypatch):
+    """只设库侧开关（ARHUD_SERVICE_PROFILE）时，Python 侧也应认它为当前代。"""
+    monkeypatch.delenv("HUD_SOMEIP_TABLE", raising=False)
+    monkeypatch.setenv("ARHUD_SERVICE_PROFILE", "bplus")
+    assert active_table() == TABLE_BPLUS
+
+
+def test_open_warns_when_library_env_conflicts(monkeypatch):
+    """库侧环境变量与服务表代冲突时：以服务表代为准，并给出明确告警（不静默改）。"""
+    from someip_core import ReplayController
+
+    class _FakeLib:
+        def create(self, unicast, config_path):
+            return 0x1234
+
+    monkeypatch.setattr(ReplayController, "_require_lib", lambda self: _FakeLib())
+    monkeypatch.setenv("ARHUD_SERVICE_PROFILE", "bplus")
+    set_table(TABLE_OLD)
+    logs: list[str] = []
+    ReplayController(on_log=logs.append).open()
+    assert os.environ["ARHUD_SERVICE_PROFILE"] == TABLE_OLD, "以服务表代为准"
+    assert any("不一致" in m for m in logs), f"应记录冲突告警，实际日志：{logs}"
 
 
 # =========================================================================== 自带样例 pcap

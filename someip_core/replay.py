@@ -98,6 +98,18 @@ class ReplayController:
         if self._handle is not None:
             self._log("服务端已打开，忽略重复打开")
             return
+        # 让 C++ 库的服务表与 Python 侧一致：库在 create() 时读取 ARHUD_SERVICE_PROFILE，
+        # 不同步会出现"Python 注册了 38 个事件、库只注册 23 个"的不一致。
+        # 用户显式设置过则尊重用户设置（便于现场联调其它代）。
+        import os as _os
+        table = active_table()
+        previous = _os.environ.get("ARHUD_SERVICE_PROFILE", "").strip().lower()
+        if previous and previous != table:
+            self._log(f"注意：ARHUD_SERVICE_PROFILE={previous} 与服务表代 {table} 不一致，"
+                      f"以服务表代为准（如需固定用某一代，请改服务表开关 HUD_SOMEIP_TABLE）")
+        if previous != table:
+            _os.environ["ARHUD_SERVICE_PROFILE"] = table
+            self._log(f"已同步服务表代给服务端库：ARHUD_SERVICE_PROFILE={table}")
         # 未显式指定时，用"当前服务表代"随仓库分发的 vsomeip 配置（参考实现同款配置）
         from .config import shipped_config_path
         cfg = config_path or (str(shipped_config_path()) or None)

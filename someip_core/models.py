@@ -6,7 +6,7 @@
 | 代号 | 服务/事件 | 来源 | 回放服务端是否可注册 |
 |------|-----------|------|----------------------|
 | `old`（默认） | 11 服务 / 23 事件 | 参考实现 `old/someip_arhud01_pcap_server.json`（与 C++ 库 `arhud_server_sp.cpp` 内置注册表一致） | ✅ 可以（已实测） |
-| `bplus` | 6 服务 / 38 事件 | 参考实现 `BPlus/someip_arhud01_pcap_server_B+.json`（新一代接口：0x001A/0x001B/0x001C/0x001D/0x8000/0x010A） | ❌ 暂不可（参考实现亦标注"B+ 还不能用"，本项目库只注册 old 代） |
+| `bplus` | 6 服务 / 38 事件 | 参考实现 `BPlus/someip_arhud01_pcap_server_B+.json`（新一代接口：0x001A/0x001B/0x001C/0x001D/0x8000/0x010A） | ✅ 可（更新后的服务端库支持；需 `ARHUD_SERVICE_PROFILE=bplus`，见 `registrable()`） |
 
 表结构：(service, instance, event, name, event_group, port, kind)
     kind 为"数据类型"，决定能否用结构化赋值发送（见 api.STRUCT_TYPES）；
@@ -126,8 +126,10 @@ TABLE_INFO: dict[str, dict] = {
     TABLE_BPLUS: {
         "label": "bplus（新一代）",
         "config": "someip_arhud01_pcap_server_B+.json",
-        "registrable": False,
-        "note": "参考实现标注「B+ 还不能用」；本项目已收录服务表与配置，库侧待 HUD 提供可注册 B+ 表的版本",
+        "registrable": True,
+        "note": "服务端库（arhud_python_server，2026-02 起）按同一张表注册，profile 由环境变量 "
+                "ARHUD_SERVICE_PROFILE 选择；实测可注册 6 服务/38 事件并完整回放 B+ 的 pcap。"
+                "参考实现自带的 B+ 可执行程序未调通，与本库无关",
     },
 }
 
@@ -154,9 +156,12 @@ def normalize_table(name: str | None) -> str:
     if text in (TABLE_OLD, "legacy", "current"):
         return TABLE_OLD
     if not text:
-        env = os.environ.get(ENV_TABLE, "").strip()
-        if env:
-            return normalize_table(env)
+        # 两个环境变量都认：HUD_SOMEIP_TABLE（本项目）优先，
+        # 其次 ARHUD_SERVICE_PROFILE（服务端库自己的开关，便于与库单独对齐/现场联调）
+        for var in (ENV_TABLE, "ARHUD_SERVICE_PROFILE"):
+            env = os.environ.get(var, "").strip()
+            if env:
+                return normalize_table(env)
     return TABLE_OLD
 
 
@@ -184,7 +189,12 @@ def table_meta(table: str | None = None) -> dict:
 
 
 def registrable(table: str | None = None) -> bool:
-    """该代的服务是否可由当前回放服务端（C++ 库）注册。"""
+    """该代的服务是否可由当前回放服务端（C++ 库）注册。
+
+    两代都由 `arhud_python_server` 的服务表支持，**但库必须与 Python 侧选同一代**：
+    库读环境变量 `ARHUD_SERVICE_PROFILE`（`someip_core.replay.open()` 会按当前代自动设置），
+    否则会出现"Python 认为注册了 38 个事件、库只注册了 23 个"的不一致。
+    """
     return bool(table_meta(table).get("registrable"))
 
 

@@ -165,8 +165,11 @@ python -m pytest tests -q        # 单元测试 + 架构规则守卫（需 pip i
 ### SOME/IP 回放（someip_core / someip_gui）
 
 - **两代服务表**（`someip_core.models`，开关 `HUD_SOMEIP_TABLE` / `set_table()` / 界面下拉）：
-  `old`（11 服务/23 事件，回放库可注册，**默认**）与 `bplus`（6 服务/38 事件，参考实现标注
-  "还不能用"，库侧暂不可注册 —— 界面会明确提示，不要当成跑通）；
+  `old`（11 服务/23 事件，**默认**）与 `bplus`（6 服务/38 事件）；
+  **两代都由服务端库注册**：`ReplayController.open()` 会把当前代写入 `ARHUD_SERVICE_PROFILE`
+  （库在 create() 时读它），两边不一致时以服务表代为准并告警 —— 不要手工只改一侧；
+- 回放计数语义：`replay_sent` 只统计**真正成功**，`arhud_server_replay_attempted()` 统计尝试次数，
+  差值 = 未注册事件数（profile 选错的第一指标）；
 - **随仓库分发的 vsomeip 配置**：`data/someip/config/*.json`（来自参考实现 lipeng20260228），
   `ReplayConfig.config_path` 留空时用当前代的配置（`someip_core.config.shipped_config_path()`）；
 - 库版本已对齐参考实现 `libs.zip`（aarch64 2025-12-15 / x86_64 2025-12-23）；

@@ -150,14 +150,21 @@ data/someip/config/someip_arhud01_pcap_server_B+.json               # B+ 代（�
 | 代 | 服务/事件 | 来源 | 回放库能否注册 |
 |----|-----------|------|----------------|
 | `old`（默认） | 11 / 23 | `someip_arhud01_pcap_server.json` | ✅ 已实测（11 服务/23 事件、RTK 194 字节、样例 pcap 90/90） |
-| `bplus` | 6 / 38 | `someip_arhud01_pcap_server_B+.json` | ❌ 暂不可（参考实现亦标注"B+ 还不能用"，本项目库只注册 old 代） |
+| `bplus` | 6 / 38 | `someip_arhud01_pcap_server_B+.json` | ✅ 可（服务端库支持；需 profile 与 Python 侧一致，见下） |
 
 - 开关：环境变量 `HUD_SOMEIP_TABLE=old|bplus`、`someip_core.set_table()`、或界面
   **SOME/IP 回放 → ① 网络与 SD 配置 → 服务表** 下拉框（切换即刷新事件树，并明确提示该代能否注册）；
 - 单测 `tests/test_someip_tables.py` 会**逐条比对**两代配置与我们代码里的服务表，防止三者漂移；
-- 实测（容器内，B+ 服务表 + B+ 配置 + B+ pcap）：创建/启动正常，但通知只能发出 pcap 中属于
-  old 代服务的部分（14667 条里发出 6594 条）—— 这正是"B+ 服务端未就绪"的表现，故界面对该代标注
-  "暂不可注册"，不会让人误以为已经跑通。
+- **profile 联动（重要）**：服务端库在 `create()` 时读 `ARHUD_SERVICE_PROFILE` 决定内置表，
+  Python 侧按自己的服务表逐条 `add_service/add_event`。`ReplayController.open()` 会把当前
+  服务表代写入该环境变量，保证两侧同代；两边不一致时以服务表代为准并记录告警。
+- 实测（容器内，更新后的服务端库）：
+  · old：注册 **11 服务/23 事件**，样例 pcap **413/413** 成功投递；
+  · bplus：注册 **6 服务/38 事件**，B+ 的 pcap **14667/14667** 成功投递；
+- **更正一处此前的误读**：早前记录"B+ pcap 14667 条只发出 6594 条"其实是两点造成的假象 ——
+  ① 观察窗口 45s 小于 14667×5ms 的回放时长；② 当时库的 `replay_sent` 把**尝试次数**也算成功，
+  而未注册的事件其实发送失败。服务端库已修正为 `sent`（真正成功）/`attempted`（尝试）两个计数，
+  因此现在可以据此判断 profile 是否选对：**差值 = 未注册事件数**。
 
 ### ④ 一键自检
 

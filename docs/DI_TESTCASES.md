@@ -120,7 +120,7 @@ python -m scripts.run_di_cases --execute --camera --camera-index 0
 |------|------|-------------|
 | `can`（有位域） | ✅ 完整 | 按 `bit_range`+`value` 合成整帧（同报文多信号合并），经 `can_core.device` 下发（CAN/CANFD 可选） |
 | `can`（**无位域**，415 条） | ⚠️ 需补配置 | 只写"门控有效"无法定位到具体位 → 记为**不可编码**；若已从 CAN 矩阵确认，写进 `data/DI_Config/gate_frame.json`（按报文给默认位）即可套用 |
-| `someip` 链路型 | ✅ 完整（old 代） | `0x010A`/`0x000C` 都在 old 代服务表内：`online=1` 注册该服务、`online=0` 不注册（`ReplayController.register(selected_services=…)`）。**已按服务表代校验**：切到 `bplus` 代时，`0x000C` 会被明确报成"不在当前服务表中"，`0x010A` 会报"该代暂不可注册"（见 `someip_field_map.service_generation()`） |
+| `someip` 链路型 | ✅ 完整 | `0x010A`/`0x000C` 都在 old 代服务表内：`online=1` 注册该服务、`online=0` 不注册（`ReplayController.register(selected_services=…)`）。**已按服务表代校验**：两代都可由更新后的服务端库注册（`ARHUD_SERVICE_PROFILE` 与服务表代自动同步）；切到 `bplus` 代时，`0x000C` 会被明确报成"不在当前服务表中"（该服务只有 old 代有），`0x010A` 两代都有（见 `someip_field_map.service_generation()`） |
 | `someip` 字段型 | ⚠️ 部分（两代通用） | `hnmap_s.*` → `HudNavmap`（可结构化发送，如 `navigation_map` → `Navigation_map`，`0x010A:0x8003` 两代都有）；`hrinfo_s.*` 与 `PlanningLinePointCount` 属 **Opaque 原始载荷**，库未提供结构体布局 → 不可下发（原因写在 `FieldTarget.reason` 里，并带 `table`/`registrable` 两个字段说明依据哪一代、该代能否注册） |
 | `mem` | ❌ 需台架 | HUD 内部状态量，外部接口没有对应通道；执行器如实记为"需台架注入" |
 | `expected_output` 标贴 | ⚠️ 受参考图限制 | 见下节 |
