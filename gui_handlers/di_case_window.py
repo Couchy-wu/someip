@@ -150,8 +150,14 @@ class DiCaseWindow:
             cases = parser.load_cases(target)
             self._cases = cases
             stats = parser.summarize(cases)
+            from someip_core import active_table, available_tables, registrable
+            table = active_table()
+            table_info = available_tables()[table]
             self._post("summary",
                        f"用例 {stats['cases']} 个｜支持度 {stats['support']}｜"
+                       f"SOME/IP 服务表 {table}"
+                       f"（{'可注册' if registrable(table) else '库侧暂不可注册'}，"
+                       f"{table_info['services']} 服务/{table_info['events']} 事件）｜"
                        f"CAN {stats['can_entries']} 条 / SOME/IP 字段 {stats['someip_field_entries']} / "
                        f"链路 {stats['someip_link_entries']} / mem {stats['mem_entries']}｜"
                        f"期望显示 {stats['expect_visible']} 条、期望隐藏 {stats['expect_hidden']} 条")
