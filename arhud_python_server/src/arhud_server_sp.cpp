@@ -14,6 +14,7 @@
 #include "arhud_server.h"
 #include "arhud_types.h"
 #include "arhud_pcap.h"
+#include "arhud_services.h"
 #include "vsomeip/someip_com.h"
 #include <zlib.h>
 
@@ -48,40 +49,12 @@ static void cfg_path(char* buf, size_t n, const char* name) {
 
 namespace {
 
-struct EventDef { uint16_t event; uint16_t group; const char* name; };
-struct ServiceDef {
-    uint16_t service, instance, port, major, minor;
-    std::vector<EventDef> events;
-    std::string tp_events;
-};
+/* 服务/事件表来自 arhud_services.h（与参考实现逐条对齐，两代用 ARHUD_SERVICE_PROFILE 选择） */
+typedef arhud::EventRow EventDef;
+typedef arhud::ServiceRow ServiceDef;
 
-/* 内置服务注册表（事件名与板端配置一致） */
 const std::vector<ServiceDef>& default_services() {
-    static const std::vector<ServiceDef> svcs = {
-        {0x000A, 0x000A, 51400, 1, 0, {{0x8001, 0x1101, "VehiclePositionInfoNotify"}}, ""},
-        {0x000B, 0x000B, 51401, 1, 0, {{0x8001, 0x1101, "RTKInfoNotify"}, {0x8002, 0x1101, "IMUInfoNotify"}}, ""},
-        {0x000C, 0x000C, 51402, 1, 0, {{0x8001, 0x1101, "ObstacleInfoNotify"},
-                                       {0x8002, 0x1101, "LaneLineDataNotify"},
-                                       {0x8003, 0x1101, "NewLaneLineDataNotify"}}, "0x8002,0x8003"},
-        {0x000D, 0x000D, 51403, 1, 0, {{0x8001, 0x1101, "ChangeLaneDataNotify"},
-                                       {0x8002, 0x1101, "PilotStatusNofity"},
-                                       {0x8003, 0x1101, "PilotAlarmAndNoticeInfoNotify"},
-                                       {0x8004, 0x1101, "BroadcastInfoNotify"},
-                                       {0x8005, 0x1101, "NewBroadcastInfoNotify"}}, ""},
-        {0x000E, 0x000E, 51404, 1, 0, {{0x8001, 0x1101, "PlanningLineInfoNotify"},
-                                       {0x8002, 0x1102, "newPlanningLineInfo"},
-                                       {0x8003, 0x1103, "drivingAreaIdentification"}}, ""},
-        {0x010A, 0x0001, 52001, 1, 0, {{0x8001, 0x1101, "HudRoadInfo_EG"},
-                                       {0x8002, 0x1101, "HudMappathInfo_EG"},
-                                       {0x8003, 0x1101, "HudNavigationmap"},
-                                       {0x8004, 0x1101, "OverseasHudRoadInfoNotify"}}, "0x8001,0x8003"},
-        {0x0007, 0x0007, 51405, 1, 0, {{0x8001, 0x1101, "NavigationStatus_LinkInfoNotify"}}, ""},
-        {0x0017, 0x0017, 51406, 1, 0, {{0x8003, 0x1101, "NewParkingRealTimeDataNotify"}}, ""},
-        {0x002B, 0x002B, 51407, 1, 0, {{0x8001, 0x1101, "NavigationHDLink2Info"}}, ""},
-        {0x8202, 0x8202, 51408, 1, 0, {{0x8002, 0x1101, "sdTraffiIncident"}}, ""},
-        {0x0018, 0x0018, 51409, 1, 0, {{0x8001, 0x1101, "hpaMapDataNotify"}}, ""},
-    };
-    return svcs;
+    return arhud::services_for(arhud::profile_from_env());
 }
 
 std::string to_hex(uint16_t v) {
@@ -92,15 +65,21 @@ std::string to_hex(uint16_t v) {
 
 /* 生成 SP 分支配置（与板端 someip_arhud01_pcap_server.json 同格式） */
 std::string gen_sp_config(const std::string& unicast,
-                          const std::vector<ServiceDef>& svcs) {
+                          const std::vector<ServiceDef>& svcs,
+                          const std::string& profile) {
+    const arhud::ProfileMeta meta = arhud::meta_for(profile);
     std::ostringstream o;
     o << "{\n";
     o << "  \"unicast\": \"" << unicast << "\",\n";
     o << "  \"netmask\": \"255.255.255.0\",\n";
     o << "  \"network\": \"arhud01\",\n";
+    /* 日志键与参考实现一致（dds/dmesg 开关也要给全，缺键在部分版本会被判为配置错误） */
     o << "  \"logging\": { \"level\": \"info\", \"console\": \"true\", "
-         "\"file\": { \"enable\": \"false\", \"path\": \"arhud_server_sp.log\" }, \"dlt\": \"false\" },\n";
-    o << "  \"applications\": [ { \"name\": \"arhud01\", \"id\": \"0x1443\" } ],\n";
+         "\"file\": { \"enable\": \"false\", \"path\": \"" << meta.log_path << "\" }, "
+         "\"dlt\": \"false\", \"dds_log_enable\": \"false\", \"dmesg_log_enable\": \"false\" },\n";
+    o << "  \"applications\": [ { \"name\": \"arhud01\", \"id\": \"" << meta.app_id
+      << "\", \"max_dispatchers\": \"" << meta.max_dispatchers
+      << "\", \"threads\": \"" << meta.threads << "\" } ],\n";
     o << "  \"services\": [\n";
     for (size_t i = 0; i < svcs.size(); ++i) {
         const ServiceDef& s = svcs[i];
@@ -134,7 +113,7 @@ std::string gen_sp_config(const std::string& unicast,
             }
         }
         o << "      ]";
-        if (!s.tp_events.empty()) {
+        if (s.tp_events && *s.tp_events) {
             o << ",\n      \"someip-tp\": { \"service-to-client\": [\"";
             std::string tmp = s.tp_events;
             size_t pos = 0;
@@ -154,6 +133,8 @@ std::string gen_sp_config(const std::string& unicast,
     }
     o << "  ],\n";
     o << "  \"routing\": \"arhud01\",\n";
+    /* 参考实现里显式给了最大载荷（车道线等大帧可达 ~51KB，缺省值偏小会导致 TP 失败） */
+    o << "  \"max-payload-size-unreliable\": \"3000000\",\n";
     o << "  \"service-discovery\": { \"enable\": \"true\", \"multicast\": \"224.0.2.4\", "
          "\"port\": \"30490\", \"protocol\": \"udp\", "
          "\"initial_delay_min\": \"0\", \"initial_delay_max\": \"100\", "
@@ -169,13 +150,15 @@ struct arhud_server {
     SPInstance spi;
     bool spi_initialized = false;
     std::string config_path;
+    std::string profile;                  // 服务表代（old / bplus）
     std::vector<ServiceDef> services;
     std::map<std::pair<uint16_t, uint16_t>, uint16_t> inst_map;
     std::atomic<bool> started{false};
 
     std::thread replay_thread;
     std::atomic<bool> replay_running{false};
-    std::atomic<uint64_t> replay_sent{0};
+    std::atomic<uint64_t> replay_sent{0};       // 真正发送成功（notify 返回 0）
+    std::atomic<uint64_t> replay_attempted{0};  // 尝试发送（含未注册事件导致的失败）
 
     std::mutex mtx;
 
@@ -197,7 +180,8 @@ extern "C" {
 arhud_server_t* arhud_server_create(const char* unicast, const char* config_path) {
     if (!unicast || !*unicast) return nullptr;
     auto* srv = new arhud_server();
-    srv->services = default_services();
+    srv->profile = arhud::profile_from_env();
+    srv->services = arhud::services_for(srv->profile);
     for (const auto& s : srv->services)
         for (const auto& e : s.events)
             srv->inst_map[{s.service, e.event}] = s.instance;
@@ -209,7 +193,7 @@ arhud_server_t* arhud_server_create(const char* unicast, const char* config_path
         char name[64];
         std::snprintf(name, sizeof(name), "arhud_server_sp_%d.json", (int)GETPID());
         cfg_path(path, sizeof(path), name);
-        std::string cfg = gen_sp_config(unicast, srv->services);
+        std::string cfg = gen_sp_config(unicast, srv->services, srv->profile);
         std::ofstream f(path);
         if (!f) { delete srv; return nullptr; }
         f << cfg;
@@ -235,6 +219,14 @@ int arhud_server_add_service(arhud_server_t* srv, uint16_t service, uint16_t ins
                              uint16_t port, uint16_t major, uint16_t minor) {
     if (!srv) return -1;
     std::lock_guard<std::mutex> lk(srv->mtx);
+    /* 幂等：同 (service, instance) 已存在时只更新端口/版本，不再追加
+     * （否则内置表 + 调用方逐条注册会重复登记，协议栈侧出现重复 offer/回调） */
+    for (auto& s : srv->services) {
+        if (s.service == service && s.instance == instance) {
+            s.port = port; s.major = major; s.minor = minor;
+            return 0;
+        }
+    }
     ServiceDef d;
     d.service = service; d.instance = instance; d.port = port;
     d.major = major; d.minor = minor;
@@ -248,6 +240,9 @@ int arhud_server_add_event(arhud_server_t* srv, uint16_t service, uint16_t insta
     std::lock_guard<std::mutex> lk(srv->mtx);
     for (auto& s : srv->services) {
         if (s.service == service && s.instance == instance) {
+            for (const auto& e : s.events) {           /* 幂等：已登记的事件不重复追加 */
+                if (e.event == event) { srv->inst_map[{service, event}] = instance; return 0; }
+            }
             s.events.push_back({event, group, ""});
             srv->inst_map[{service, event}] = instance;
             return 0;
@@ -298,13 +293,15 @@ int arhud_server_replay_start(arhud_server_t* srv, const char* pcap_path,
 
     srv->replay_running = true;
     srv->replay_sent = 0;
+    srv->replay_attempted = 0;
     srv->replay_thread = std::thread([srv, msgs = std::move(msgs), loop, interval_ms]() {
         while (srv->replay_running.load()) {
             for (const auto& m : msgs) {
                 if (!srv->replay_running.load()) break;
-                arhud_server_notify(srv, m.service, m.event, m.payload.data(),
-                                    (uint32_t)m.payload.size());
-                srv->replay_sent++;
+                const int rc = arhud_server_notify(srv, m.service, m.event, m.payload.data(),
+                                                  (uint32_t)m.payload.size());
+                srv->replay_attempted++;
+                if (rc == 0) srv->replay_sent++;   // 未注册的事件（如换用别的 profile）不计入成功
                 if (interval_ms)
                     std::this_thread::sleep_for(std::chrono::milliseconds(interval_ms));
             }
@@ -323,6 +320,25 @@ void arhud_server_replay_stop(arhud_server_t* srv) {
 
 uint64_t arhud_server_replay_sent(arhud_server_t* srv) {
     return srv ? srv->replay_sent.load() : 0;
+}
+
+uint64_t arhud_server_replay_attempted(arhud_server_t* srv) {
+    return srv ? srv->replay_attempted.load() : 0;
+}
+
+const char* arhud_server_profile(arhud_server_t* srv) {
+    return srv ? srv->profile.c_str() : "";
+}
+
+int arhud_server_service_count(arhud_server_t* srv) {
+    return srv ? (int)srv->services.size() : 0;
+}
+
+int arhud_server_event_count(arhud_server_t* srv) {
+    if (!srv) return 0;
+    int n = 0;
+    for (const auto& s : srv->services) n += (int)s.events.size();
+    return n;
 }
 
 void arhud_server_set_subscribe_cb(arhud_server_t* srv, arhud_subscribe_cb cb, void* ctx) {

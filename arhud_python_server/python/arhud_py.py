@@ -147,6 +147,15 @@ _lib.arhud_server_replay_start.argtypes = [ctypes.c_void_p, ctypes.c_char_p,
 _lib.arhud_server_replay_stop.argtypes = [ctypes.c_void_p]
 _lib.arhud_server_replay_sent.restype = ctypes.c_uint64
 _lib.arhud_server_replay_sent.argtypes = [ctypes.c_void_p]
+# 2026-02 新增：回放尝试计数（含失败）与服务表代诊断
+_lib.arhud_server_replay_attempted.restype = ctypes.c_uint64
+_lib.arhud_server_replay_attempted.argtypes = [ctypes.c_void_p]
+_lib.arhud_server_profile.restype = ctypes.c_char_p
+_lib.arhud_server_profile.argtypes = [ctypes.c_void_p]
+_lib.arhud_server_service_count.restype = ctypes.c_int
+_lib.arhud_server_service_count.argtypes = [ctypes.c_void_p]
+_lib.arhud_server_event_count.restype = ctypes.c_int
+_lib.arhud_server_event_count.argtypes = [ctypes.c_void_p]
 
 U8 = ctypes.POINTER(ctypes.c_uint8)
 U32 = ctypes.POINTER(ctypes.c_uint32)

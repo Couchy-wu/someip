@@ -113,6 +113,12 @@ arhud_python_server/
 
 ## 4. 逐模块详解
 
+### 4.0 服务表 `src/arhud_services.h`（唯一来源）
+
+两代服务表（old 11/23、bplus 6/38）与 profile 参数（应用 id、线程数、日志路径）都在这里；
+SP 版与标准版都通过 `arhud::services_for(profile)` 取表，`arhud::profile_from_env()` 读
+`ARHUD_SERVICE_PROFILE`（默认 old）。**改服务表只改这一处**，避免两版各改一半。
+
 ### 4.1 C 接口层 `src/arhud_server.h`
 
 **为什么是 C 接口**：ctypes 只能绑定 C ABI；C 接口在版本迭代中稳定，Python 封装不用跟着改。
@@ -212,6 +218,18 @@ std::thread([msgs, loop, interval]() {
 | 0x0007/0x0017/0x002B/0x8202/0x0018 | =服务 | 51405-51409 | 各 1-2 个事件 |
 
 ### 4.3 配置自动生成 `gen_sp_config`
+
+生成的 vsomeip 配置与参考实现对齐：`applications[0].id` 按 profile（old `0x1001` / bplus `0x1443`）、
+`max_dispatchers`/`threads`、`max-payload-size-unreliable: 3000000`（大帧 TP 必需）、
+日志键含 `dds_log_enable`/`dmesg_log_enable`。
+
+### 4.2.1 注册与回放语义（2026-02 修正）
+
+- `add_service/add_event` **幂等**：同 (service,instance) / (service,event) 只更新不追加，
+  否则"内置表 + 调用方逐条注册"会膨胀成 22 服务/46 事件；
+- `arhud_server_replay_sent()` = 真正成功（notify 返回 0）；`arhud_server_replay_attempted()` = 尝试次数；
+  二者差值反映"事件未注册"（多为 profile 选错），是排查错配的第一指标。
+
 
 生成 SP 分支格式 JSON（与板端配置同结构），要点：
 - `services[].unreliable`：服务端口；

@@ -13,6 +13,36 @@ Python 负责业务编排（指定 pcap 回放、对数据结构赋值组包）�
 优势：与板端中间件/客户端同一协议栈，无标准 vsomeip 与 SP 分支的兼容性问题；
 51KB 大消息由 SP 栈自动 SOME/IP-TP 分片（无需显式配置）。
 
+## 服务表代（profile）与 2026-02 更新
+
+服务/事件表**只有一处定义**：`src/arhud_services.h`（SP 版与标准 vsomeip 版共用），两代用
+环境变量 `ARHUD_SERVICE_PROFILE` 选择：
+
+| profile | 规模 | 来源（与参考实现逐条对齐） |
+|---------|------|---------------------------|
+| `old`（默认） | 11 服务 / 23 事件 | `lipeng20260228/old/someip_arhud01_pcap_server.json` |
+| `bplus` | 6 服务 / 38 事件 | `lipeng20260228/BPlus/someip_arhud01_pcap_server_B+.json`（0x001A/0x001B/0x001C/0x001D/0x8000/0x010A） |
+
+本次更新内容：
+
+1. **库更新**：`libs/arm64` 换成参考实现 `libs.zip` 的 `lib_bst_t517`（2025-12-15），
+   新增 `libs/x86_64`（`lib_x86`，2025-12-23；库文件不入 git，见 `libs/README.md`）；
+2. **两代服务表**：新增 `bplus` profile（表来自参考配置，脚本生成，可追溯）；
+   实测可注册 6 服务/38 事件并完整回放 B+ 的 pcap（14667/14667）；
+3. **配置生成对齐参考实现**：`gen_sp_config()` 现在带
+   `max-payload-size-unreliable: 3000000`（大帧 TP 必需）、`max_dispatchers`/`threads`、
+   按 profile 取 `applications[0].id`（old `0x1001` / bplus `0x1443`）、
+   补齐 `dds_log_enable`/`dmesg_log_enable` 日志键；
+4. **注册表幂等**：`arhud_server_add_service/add_event` 对同 (service,instance[,event])
+   只更新不重复追加。此前"内置表 + 调用方逐条注册"会把表变成 22 服务/46 事件
+   （协议栈侧重复 offer/回调），现在库自报计数与实际一致；
+5. **回放计数拆开**：`arhud_server_replay_sent()` 只统计**真正发送成功**（notify 返回 0），
+   新增 `arhud_server_replay_attempted()` 统计尝试次数。二者差值即"事件未注册（profile 选错）"
+   导致的跳过量 —— 原来把失败也算成功，容易误判；
+6. **新增诊断接口**：`arhud_server_profile()/service_count()/event_count()`；
+7. **rpath 改为 `$ORIGIN`**：库与同目录 `libsomeip*.so` 一起拷到任何位置都能加载，
+   **不再需要 `LD_LIBRARY_PATH`**；Makefile 的默认 `SP_LIBS` 路径也修正为 `../libs/<arch>`。
+
 ## 架构
 
 ```
@@ -81,6 +111,16 @@ srv.stop()
 支持的结构化类型（与板端 `ArHudSomeipDataType.h` 布局一致，字节级验证通过）：
 `RTK` `IMU` `ChangeLane` `PilotStatus` `PilotAlarm` `Broadcast` `HudMappath`
 `HudNavmap` `VehiclePosition`（动态数组用 `lanes=` / `segs=` 传入）。
+
+## 环境变量
+
+| 变量 | 作用 | 取值 |
+|------|------|------|
+| `ARHUD_SERVICE_PROFILE` | 选择服务表代 | `old`（默认）/ `bplus` |
+| `HUD_SOMEIP_TABLE` | 上位机（HudAutoTest）侧的服务表开关 | `old` / `bplus`，会同步写入 `ARHUD_SERVICE_PROFILE` |
+
+> 两者不一致时以 `HUD_SOMEIP_TABLE` 为准（上位机会记录告警），避免"上位机认为注册了 38 个事件、
+> 库只注册 23 个"的错配。
 
 ## C 接口速览
 

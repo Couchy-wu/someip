@@ -18,3 +18,10 @@ to_longjie_demo_20250625/libs/lib_x86/
 
 # arhud_python_server 构建产物
 arhud_python_server/out/
+
+# x86_64 SOME/IP 协议栈库约 64MB，不入库（获取方式见 arhud_python_server/libs/README.md）
+arhud_python_server/libs/x86_64/*.so
+
+# 服务端库编译产物（源码见 arhud_python_server/src，库按需就地编译）
+arhud_python_server/src/*.o
+arhud_python_server/src/*.so

@@ -67,6 +67,21 @@ cp <你的pcap>                                              /opt/arhud-server/d
 
 ---
 
+## 3.5 库版本与 rpath（2026-02）
+
+- `libs/arm64`：参考实现 `libs.zip → lib_bst_t517`（2025-12-15）；`libs/x86_64`：`lib_x86`（2025-12-23）；
+- 编译产物 `libarhud_server.so` 的 rpath 为 **`$ORIGIN`**：只要 `libsomeip*.so` 与本库**同目录**，
+  拷到任何路径都能加载，**不需要 `LD_LIBRARY_PATH`**（旧版本写死了构建机路径）；
+- 服务表代由 `ARHUD_SERVICE_PROFILE=old|bplus` 选择，见 `src/arhud_services.h`。
+
+部署后自检（任一 Linux 机器）：
+
+```bash
+python -m scripts.someip_replay_check                     # 上位机侧一键自检（HudAutoTest 仓库）
+ARHUD_SERVICE_PROFILE=bplus python -m scripts.someip_replay_check   # 验证 B+ 代
+ldd thirdparty/arhud_someip/linux-x86_64/libarhud_server.so         # 应解析到同目录 libsomeip.so
+```
+
 ## 4. 运行
 
 ### 4.1 前台 / 后台

@@ -63,7 +63,15 @@ int arhud_server_replay_start(arhud_server_t* srv, const char* pcap_path,
                               int loop, uint32_t interval_ms);
 void arhud_server_replay_stop(arhud_server_t* srv);
 /* 已回放条数（供 Python 轮询） */
+/* 回放计数：sent = 真正发送成功（notify 返回 0）；attempted = 尝试次数（含未注册事件的失败）。
+ * 两者差值即为"服务表不匹配/未注册"导致的跳过量，用它判断 profile 选得对不对。 */
 uint64_t arhud_server_replay_sent(arhud_server_t* srv);
+uint64_t arhud_server_replay_attempted(arhud_server_t* srv);
+
+/* 服务表代诊断：old（11 服务/23 事件）/ bplus（6 服务/38 事件），由 ARHUD_SERVICE_PROFILE 选择 */
+const char* arhud_server_profile(arhud_server_t* srv);
+int arhud_server_service_count(arhud_server_t* srv);
+int arhud_server_event_count(arhud_server_t* srv);
 
 /* 订阅状态回调（可选）：subscribed=1 订阅，0 退订 */
 typedef void (*arhud_subscribe_cb)(void* ctx, uint16_t service, uint16_t instance,
