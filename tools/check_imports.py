@@ -32,7 +32,7 @@ SKIP_DIRS = {
     ".git", "__pycache__", ".idea", ".vscode", ".venv", "venv", "node_modules",
     "yolo_framework", "YOLO+=+_", "PaddleOCR-main", "kerneldlls",
     "vendor", "ffmpeg", "models", "Resources", "output", "output_ocr", "logs", "bin",
-    "dataset", "muban", "algri draft",
+    "dataset", "muban", "template_matching",
 }
 
 # 顶层名 → 对应文件/目录是否存在

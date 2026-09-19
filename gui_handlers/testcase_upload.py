@@ -1,17 +1,13 @@
-import sys
 import os
-# 获取当前文件所在目录，并将其添加到模块搜索路径
-current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(current_dir)
-
 import shutil
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import json
 import pandas as pd
 import numpy as np
-from can_testcase_parser import TestCaseProcessor
-import log_setup, logging
+from .can_testcase_parser import TestCaseProcessor
+from hudcore import logging_setup
+import logging
 
 # 代码功能：上传测试用例表格文件，将其解析为json，再根据json解析“脚本”部分
 
@@ -167,7 +163,7 @@ def refresh_json_file(uploaded_file=None):
             log_path = os.path.join(target_folder, f"{log_basename}.log")
 
             # 配置专用 logger，输出到指定日志文件
-            log_setup.setup_logger(
+            logging_setup.setup_logger(
                 logger_name=log_basename,
                 log_dir=target_folder,
                 log_prefix=log_basename,

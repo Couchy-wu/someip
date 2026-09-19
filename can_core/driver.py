@@ -1,4 +1,7 @@
-from ctypes import *
+from ctypes import (
+    CFUNCTYPE, POINTER, Structure, Union, byref, c_char, c_char_p, c_int,
+    c_ubyte, c_uint, c_uint64, c_ulonglong, c_ushort, c_void_p,
+)
 import platform
 import threading
 import time
@@ -436,7 +439,7 @@ class ZCAN(object):
             from hudcore.can import load_zlg_library
             self.__dll = load_zlg_library(library_path)
         except ImportError:
-            # 兼容：hudcore 不在（如单独拷贝 zlgcan_driver.py 使用）
+            # 兼容：hudcore 不在（如单独拷贝 can_core/driver.py 使用）
             if platform.system() == "Windows":
                 self.__dll = windll.LoadLibrary("./zlgcan.dll")
             else:

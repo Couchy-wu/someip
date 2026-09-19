@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from image_preprocessing import preprocess_v_channel
+from ..preprocessing import preprocess_v_channel
 import time
 import os
 import re

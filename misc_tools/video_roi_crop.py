@@ -1,6 +1,7 @@
 import os
 import shutil
-from tkinter import *
+from tkinter import (Tk, Toplevel, Canvas, Label, Button, NW, RIGHT, BOTH,
+                      DISABLED, NORMAL)
 from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk, ImageDraw
 import numpy as np

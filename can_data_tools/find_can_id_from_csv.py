@@ -6,26 +6,46 @@ from typing import List, Tuple, Optional
 # 比如：create_can_data_by_signal('12D', 'BCMPower_Gear_12D_S', 3)
 # →  [0x00, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00]
 
-# 全局缓存 _CSV_CACHE，在模块导入时读取一次 CSV
-try:
-    _CSV_CACHE = pd.read_csv('can_data_tools/outputMatrix.csv')
-except Exception as exc:                     # 若文件不存在或读取出错，保持为 None
-    _CSV_CACHE = None
-    print(f"加载 CSV 失败: {exc}")
+# 信号矩阵缓存：按路径缓存（首次使用时才读取）
+#   · 早期版本在模块导入时用相对路径读取一次 —— 既有导入副作用，又依赖当前工作目录，
+#     且切换 csv_file 时会返回上一次的文件内容。现在改为惰性 + 按路径区分。
+_CSV_CACHE = None
+_CSV_CACHE_PATH: Optional[str] = None
+
 
 # 根据CAN ID 和 信号名称 从csv中找到更多信号信息
-def get_signal_info_by_id_and_name(message_id, signal_name_en, csv_file='can_data_tools/outputMatrix.csv'):
+def _default_matrix_csv() -> str:
+    """默认信号矩阵 CSV：基于项目根定位（不再依赖当前工作目录）。"""
+    try:
+        from hudcore.platform.paths import paths
+        return str(paths.project_root / "can_data_tools" / "outputMatrix.csv")
+    except Exception:
+        return "can_data_tools/outputMatrix.csv"
+
+
+def _load_matrix(csv_file: Optional[str] = None):
+    """读取（并缓存）信号矩阵；csv_file 为空时使用项目内的默认矩阵。"""
+    global _CSV_CACHE, _CSV_CACHE_PATH
+    path = csv_file or _default_matrix_csv()
+    if _CSV_CACHE is not None and _CSV_CACHE_PATH == path:
+        return _CSV_CACHE
+    df = pd.read_csv(path, dtype=str, encoding="utf-8-sig").fillna("")
+    _CSV_CACHE, _CSV_CACHE_PATH = df, path
+    return df
+
+
+def get_signal_info_by_id_and_name(message_id, signal_name_en, csv_file=None):
     """
     根据报文ID和信号名称(英文)提取信号信息。
     如果找到多个信号：
       - 若所有字段完全相同 → 视为重复，取第一条
       - 若字段存在差异 → 报错并返回 None
     """
-    # 读取CSV文件
+    # 读取CSV文件（惰性加载 + 按路径缓存）
     try:
-        df =  _CSV_CACHE if _CSV_CACHE is not None else pd.read_csv(csv_file)
+        df = _load_matrix(csv_file)
     except FileNotFoundError:
-        print(f"错误：找不到文件: {csv_file}")
+        print(f"错误：找不到文件: {csv_file or _default_matrix_csv()}")
         return None
 
     # 标准化输入的 message_id（支持 '12D', '0x12d' 等）
@@ -238,12 +258,12 @@ def format_can_data(data: List[int]) -> str:
 # -------------------------- 主入口 --------------------------
 def create_can_data_by_signal(message_id: str, signal_name_en: str,
                               enum_value: int,
-                              csv_file: str = 'can_data_tools/outputMatrix.csv') -> dict:
+                              csv_file: str = None) -> dict:
     """
     根据报文ID、信号英文名和枚举值生成对应的 CAN 数据。
     返回的字典中既有整数列表，也有十六进制字符串，供调试或直接输出使用。
     """
-    # ① 查表得到信号元信息
+    # ① 查表得到信号元信息（csv_file 为空时按项目根定位默认矩阵）
     signal_info = get_signal_info_by_id_and_name(message_id, signal_name_en, csv_file)
     if signal_info is None:
         return {"success": False, "error": "信号信息未找到"}

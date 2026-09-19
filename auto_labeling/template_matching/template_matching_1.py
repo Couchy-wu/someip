@@ -3,7 +3,7 @@ import numpy as np
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
-from image_preprocessing import preprocess_v_channel
+from ..preprocessing import preprocess_v_channel
 from natsort import natsorted
 import shutil  # 用于删除文件夹内容
 

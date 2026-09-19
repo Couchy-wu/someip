@@ -1,7 +1,5 @@
-import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-import log_setup
+from hudcore import logging_setup
 import json
 import time
 import re
@@ -34,7 +32,7 @@ def _remove_hidden_control_chars(text: str) -> str:
 class TestCaseProcessor:
     """
     测试用例处理器：解析 JSON 测试用例文件 → 过滤 → 抽取 → 输出结构化信息
-    使用 log_setup 模块记录日志，替代 print 输出
+    使用 hudcore.logging_setup 记录日志，替代 print 输出
     """
 
     # ---------- 默认配置（可在实例化时覆盖） ----------
@@ -57,7 +55,7 @@ class TestCaseProcessor:
         :param json_file_path: JSON 测试用例文件路径
         :param target_funcs: 要提取的目标函数集合，默认为 DEFAULT_TARGET_FUNCS
         :param prefix_patterns: 函数调用前缀列表，用于正则匹配（如 "测试台CAN"）
-        :param logger_name: 日志 logger 的唯一名称，用于 log_setup 管理
+        :param logger_name: 日志 logger 的唯一名称，用于 hudcore.logging_setup 管理
         """
         self.json_file_path = json_file_path
         self.target_funcs = target_funcs or self.DEFAULT_TARGET_FUNCS
@@ -75,7 +73,7 @@ class TestCaseProcessor:
         self._signal_frame_cache: Dict[str, List[int]] = {}   # 信号唯一键 → 单信号帧
 
         # 初始化日志器，确保日志目录和配置已就绪
-        log_setup.setup_logger(
+        logging_setup.setup_logger(
             logger_name=self.logger_name,
             log_dir="./logs/testcase",      # 日志保存路径
             log_prefix="testcase",          # 日志前缀名称
@@ -117,7 +115,7 @@ class TestCaseProcessor:
                     "error": str(e)
                 })
                 # 可选：在日志中记录完整 traceback
-                log_setup.error(self.logger_name, f"[用例 {case_id}] 解析时发生异常: {e}")
+                logging_setup.error(self.logger_name, f"[用例 {case_id}] 解析时发生异常: {e}")
 
         # 将内部生成信息的异常也计入 failed_cases（方便后面统一判断）
         if self._has_internal_error:
@@ -172,7 +170,7 @@ class TestCaseProcessor:
                 data = json.load(f)
 
             if not isinstance(data, list):
-                log_setup.error(self.logger_name, "错误：JSON 顶层结构应为用例列表（list）")
+                logging_setup.error(self.logger_name, "错误：JSON 顶层结构应为用例列表（list）")
                 return None
 
             # 递归遍历 data，把所有字符串中的隐藏控制字符全部去掉
@@ -189,11 +187,11 @@ class TestCaseProcessor:
         
             return data
         except FileNotFoundError:
-            log_setup.error(self.logger_name, f"错误：文件未找到 → {self.json_file_path}")
+            logging_setup.error(self.logger_name, f"错误：文件未找到 → {self.json_file_path}")
         except json.JSONDecodeError as e:
-            log_setup.error(self.logger_name, f"错误：JSON 解析失败 → {e}")
+            logging_setup.error(self.logger_name, f"错误：JSON 解析失败 → {e}")
         except Exception as e:
-            log_setup.error(self.logger_name, f"未预期错误 → {e}")
+            logging_setup.error(self.logger_name, f"未预期错误 → {e}")
         return None
 
     # ----------------------------------------------------------------------
@@ -209,7 +207,7 @@ class TestCaseProcessor:
         """
         rows = case.get("rows", [])
         if len(rows) != 4:
-            log_setup.warning(self.logger_name, f"[用例 {case_index}] 行数异常（应为 4 行），跳过...")
+            logging_setup.warning(self.logger_name, f"[用例 {case_index}] 行数异常（应为 4 行），跳过...")
             return
 
         # --- 重置本用例专用的状态 ---
@@ -236,7 +234,7 @@ class TestCaseProcessor:
                        if row is None]
             if missing:
                 for name, _ in missing:
-                    log_setup.warning(self.logger_name, f"[用例 {case_index}] 缺少 【{name}】 行，跳过...")
+                    logging_setup.warning(self.logger_name, f"[用例 {case_index}] 缺少 【{name}】 行，跳过...")
                 return
 
             # 提取基本信息
@@ -246,16 +244,16 @@ class TestCaseProcessor:
             test_env  = test_case_row.get("*测试环境", "")
 
             print(f"✅ 解析到测试用例 {case_id}")
-            log_setup.info(self.logger_name, f"=== 开始处理 用例 {case_id} ===")
-            log_setup.info(self.logger_name, f"功能：{level1} - {level2}")
+            logging_setup.info(self.logger_name, f"=== 开始处理 用例 {case_id} ===")
+            logging_setup.info(self.logger_name, f"功能：{level1} - {level2}")
     
             # 环境过滤：仅处理包含 “台架” 的用例
             if "台架" not in test_env:
-                log_setup.info(self.logger_name, f"测试环境：{test_env} （不含台架），跳过该用例")
-                log_setup.info(self.logger_name, "")  # 添加空行分隔（日志中用于可读性）
+                logging_setup.info(self.logger_name, f"测试环境：{test_env} （不含台架），跳过该用例")
+                logging_setup.info(self.logger_name, "")  # 添加空行分隔（日志中用于可读性）
                 return
     
-            log_setup.info(self.logger_name, f"测试环境：{test_env} （含台架），继续处理")
+            logging_setup.info(self.logger_name, f"测试环境：{test_env} （含台架），继续处理")
 
             # 输出结构信息并抽取脚本
             self._print_case_structure(status_row, action_row, response_row)
@@ -292,9 +290,9 @@ class TestCaseProcessor:
         """
         使用日志输出 “状态‑动作‑响应” 的描述信息
         """
-        log_setup.info(self.logger_name, "  └─ 状态   : " + status_row.get("描述", "无"))
-        log_setup.info(self.logger_name, "  └─ 动作   : " + action_row.get("描述", "无"))
-        log_setup.info(self.logger_name, "  └─ 响应   : " + response_row.get("描述", "无"))
+        logging_setup.info(self.logger_name, "  └─ 状态   : " + status_row.get("描述", "无"))
+        logging_setup.info(self.logger_name, "  └─ 动作   : " + action_row.get("描述", "无"))
+        logging_setup.info(self.logger_name, "  └─ 响应   : " + response_row.get("描述", "无"))
 
     # ----------------------------------------------------------------------
     # 脚本抽取核心
@@ -309,7 +307,7 @@ class TestCaseProcessor:
         新增：若脚本中出现 “立刻截图”，在原有解析顺序中直接记录该文本，只做文本记录（实际截图功能留待后续实现）。
         """
         rows = [("状态", status_row), ("动作", action_row), ("响应", response_row)]
-        log_setup.info(self.logger_name, "  └─ 脚本解析结果：")
+        logging_setup.info(self.logger_name, "  └─ 脚本解析结果：")
 
         for row_type, row in rows:
             script_raw = row.get("测试脚本", "")
@@ -339,13 +337,13 @@ class TestCaseProcessor:
             if not any(("立刻截图" in s) or call_pattern.search(s) for s in statements):
                 continue
 
-            log_setup.info(self.logger_name, f"      {row_type}:")   # 行标题只打印一次
+            logging_setup.info(self.logger_name, f"      {row_type}:")   # 行标题只打印一次
 
             # 按顺序遍历每条语句，依次记录 “立刻截图” 或目标函数调用
             for stmt in statements:
                 # ----- 1 “立刻截图” 文本 ----- 
                 if "立刻截图" in stmt:
-                    log_setup.info(self.logger_name, "          立刻截图")
+                    logging_setup.info(self.logger_name, "          立刻截图")
                     continue
 
                 # ----- 2 目标函数调用 -----
@@ -355,7 +353,7 @@ class TestCaseProcessor:
                     continue
                 func = m.group(1)
                 args = m.group("args").strip()
-                log_setup.info(self.logger_name, f"          {func}({args})")
+                logging_setup.info(self.logger_name, f"          {func}({args})")
 
                 # 下面的业务处理保持原有逻辑不变
                 if func in {"输出", "采集"}:
@@ -376,12 +374,12 @@ class TestCaseProcessor:
                         indices_str = ','.join(map(str, indices)) if indices else ""
 
                         log_msg = f"测试台CANID禁用{can_id}，禁用对应index:{indices_str}"
-                        log_setup.info(self.logger_name, f"          {log_msg}")
+                        logging_setup.info(self.logger_name, f"          {log_msg}")
                         # print(log_msg)  # 同时输出到控制台
                     else:
-                        log_setup.warning(self.logger_name, "          警告：无法解析禁用参数格式")
+                        logging_setup.warning(self.logger_name, "          警告：无法解析禁用参数格式")
 
-            log_setup.info(self.logger_name, "")  # 空行分隔
+            logging_setup.info(self.logger_name, "")  # 空行分隔
 
     @staticmethod
     def _extract_target_calls(
@@ -446,7 +444,7 @@ class TestCaseProcessor:
         """
         match = re.search(r'([0-9A-F]+)\.([a-zA-Z0-9_]+)\s*,\s*(\d+)', arg)
         if not match:
-            log_setup.warning(self.logger_name, f"      警告：无法解析参数 → {arg}")
+            logging_setup.warning(self.logger_name, f"      警告：无法解析参数 → {arg}")
             return
         message_id, signal_name_en, enum_value_str = match.groups()
         enum_value = int(enum_value_str)
@@ -454,7 +452,7 @@ class TestCaseProcessor:
             # 获取信号对应的完整CAN帧（8字节）
             result = create_can_data_by_signal(message_id, signal_name_en, enum_value)
             if not result["success"]:
-                log_setup.warning(self.logger_name,
+                logging_setup.warning(self.logger_name,
                               f"          → 信号解析失败: {message_id}.{signal_name_en}")
                 return
             # 提取基础信息
@@ -524,7 +522,7 @@ class TestCaseProcessor:
                     f"生成CAN数据: [{', '.join(can_data_hex)}] | "
                     f"分配index: {index}"
                 )
-                log_setup.info(self.logger_name, log_msg)
+                logging_setup.info(self.logger_name, log_msg)
                 return
 
             # ---------- 处理 “采集” ----------
@@ -547,11 +545,11 @@ class TestCaseProcessor:
                     f"位:{bit_position} | "
                     f"枚举值:{enum_value}"
                 )
-                log_setup.info(self.logger_name, log_msg)
+                logging_setup.info(self.logger_name, log_msg)
                 return
         except Exception as e:
             self._has_internal_error = True
-            log_setup.error(self.logger_name, f"          → 生成信息时异常: {e}")
+            logging_setup.error(self.logger_name, f"          → 生成信息时异常: {e}")
 
 
 

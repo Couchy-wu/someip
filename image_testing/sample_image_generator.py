@@ -1,4 +1,4 @@
-# File: image_testing/test_image_generator.py
+# File: image_testing/sample_image_generator.py
 import os
 import json
 import tkinter as tk

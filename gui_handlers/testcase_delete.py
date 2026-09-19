@@ -1,6 +1,4 @@
-import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 import logging
 from tkinter import filedialog, messagebox
 
@@ -63,7 +61,7 @@ def delete_test_case():
         deleted_files = []
 
         # === 关键步骤：先关闭可能占用 log 文件的 logger ===
-        potential_logger_name = base_name + "_data"  # 与 log_setup.setup_logger 中一致
+        potential_logger_name = base_name + "_data"  # 与 logging_setup.setup_logger 中一致
         close_logger_if_in_use(potential_logger_name)
 
         # 删除 Excel 文件

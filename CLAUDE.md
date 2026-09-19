@@ -17,7 +17,7 @@ python main.py
 - **GUI**: Tkinter (built-in)
 - **OCR**: PaddleOCR, EasyOCR
 - **Computer Vision**: OpenCV, Ultralytics (YOLO)
-- **CAN Communication**: ZLG CAN driver (zlgcan_driver.py, zlgcan.dll)
+- **CAN Communication**: ZLG CAN driver (`can_core/driver.py` + `can_core/device.py`, `zlgcan.dll`)
 - **Data Processing**: Pandas, NumPy, openpyxl
 
 ## Architecture
@@ -26,8 +26,9 @@ python main.py
 - [main.py](main.py) - Tkinter GUI main window with multiple functionality buttons
 
 ### Core Modules
-- [can_control.py](can_control.py) - ZLG CAN bus communication module
-- [zlgcan_driver.py](zlgcan_driver.py) - ZLG CAN driver Python bindings
+- `can_core/device.py` - ZLG CAN 设备与通道操作（原 `can_control.py`）
+- `can_core/driver.py` - ZLG CAN 驱动 Python 绑定（原 `zlgcan_driver.py`）
+- `hudcore/logging_setup.py` - 统一日志初始化（原根目录 `log_setup.py`）
 
 ### gui_handlers/
 GUI components and handlers:
@@ -55,7 +56,7 @@ GUI components and handlers:
 
 ## CAN Communication
 
-The project uses ZLG CAN devices (USBCANFD series). See [can_control.py](can_control.py) for:
+The project uses ZLG CAN devices (USBCANFD series). See `can_core/device.py` for:
 - Device initialization and handling
 - Send/receive threads
 - Message filtering
@@ -65,7 +66,7 @@ The project uses ZLG CAN devices (USBCANFD series). See [can_control.py](can_con
 
 - Thread-safe logging via `TextRedirector` class in main.py
 - Queue-based cross-thread UI updates
-- Global CAN message cache (`received_messages` deque)
+- Global CAN message cache (`received_messages` deque, in `can_core/device.py`)
 
 ---
 
@@ -89,7 +90,11 @@ The project uses ZLG CAN devices (USBCANFD series). See [can_control.py](can_con
 2. **不要**硬编码外部程序路径 —— 用 `find_executable()` / `get_ffmpeg()` / `get_office_app()`；
 3. **不要**硬编码字体名/字体文件 —— 用 `Theme` / `get_ui_font_name()` / `load_pil_font()`；
 4. **不要**写死 `./zlgcan.dll` —— 用 `hudcore.can.load_zlg_library()`（自动按平台探测）；
-5. 新增平台相关能力 → 加到 `hudcore/` 并保持"探测 + 回退 + 明确报错提示"的风格。
+5. 新增平台相关能力 → 加到 `hudcore/` 并保持"探测 + 回退 + 明确报错提示"的风格；
+6. **根目录只放入口**（`main.py` 与独立脚本）—— 共享库模块必须进包，避免"根目录杂货间"；
+7. 每个包都有 `__init__.py` 声明职责与依赖约束；新模块放入对应包，不要新增根级模块；
+8. **不要**用 `sys.path.append`/`import *` 绕过包结构 —— 用标准包导入（子模块用 `python -m 包.模块` 运行）；
+9. 不要让 import 产生副作用（不要在模块级建 GUI、解析命令行、写日志文件、读大文件）。
 
 ### 自检与自测
 
@@ -115,11 +120,14 @@ python tools/check_imports.py   # 项目内部导入静态校验（重构改名�
 | `CameraUtils/` | `camera_tools/` | 相机与图像工具 |
 | `Simple_Tools/` | `misc_tools/` | 杂项小工具 |
 | `Auto label/` | `auto_labeling/` | 自动标注 |
-| `zlgcan.py` / `mylog.py` | `zlgcan_driver.py` / `log_setup.py` | 驱动绑定 / 日志 |
+| `zlgcan.py` / `mylog.py` | `can_core/driver.py` / `hudcore/logging_setup.py` | 驱动绑定 / 日志 |
+| `can_control.py` | `can_core/device.py` | CAN 设备与通道操作 |
+| `image_preprocessing.py` | `auto_labeling/preprocessing.py` | 图像预处理（就近下沉） |
+| 根目录 `log_setup.py` | `hudcore/logging_setup.py` | 横切基础设施归入 hudcore |
 | `train_freeze.py` / `image_test.py` | `yolo_train.py` / `ocr_icon_test.py` | 训练 / OCR 测试 |
 
-> 日志按"模块级函数"使用（如 `log_setup.info(...)`、`log_setup.setup_logger(...)`），
-> 改名时必须同步更新全部调用点（脚本已覆盖）。
+> 日志按"模块级函数"使用（如 `logging_setup.info(...)`、`logging_setup.setup_logger(...)`，
+> 模块为 `hudcore/logging_setup.py`），改名时必须同步更新全部调用点。
 
 ### Python 版本
 

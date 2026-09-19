@@ -52,7 +52,7 @@ HudAutoTest/
 
 | # | 文件 | 改造前（Windows 假设） | 改造后 |
 |---|------|------------------------|--------|
-| 1 | `zlgcan_driver.py` | `windll.LoadLibrary("./zlgcan.dll")`；非 Windows 直接 `print("No support now!")` | `hudcore.can.load_zlg_library()`：Windows 用 `WinDLL`、Linux 用 `CDLL`；探测 `drivers/<平台>/` → 项目根 → 系统路径；支持 `HUD_ZLG_LIB` 环境变量；**hudcore 缺失时回退原行为** |
+| 1 | `can_core/driver.py`（原 `zlgcan_driver.py`） | `windll.LoadLibrary("./zlgcan.dll")`；非 Windows 直接 `print("No support now!")` | `hudcore.can.load_zlg_library()`：Windows 用 `WinDLL`、Linux 用 `CDLL`；探测 `drivers/<平台>/` → 项目根 → 系统路径；支持 `HUD_ZLG_LIB` 环境变量；**hudcore 缺失时回退原行为** |
 | 2 | `main.py` | 全局脚本 + 字体写死 `微软雅黑` | 重构为 `MainWindow` 类（UI 分块方法）；字体走 `Theme`；启动打印平台自检；`TextRedirector` 复用 `hudcore.ui` |
 | 3 | `gui_handlers/video_extract_ffmpeg.py` | 默认路径 `ffmpeg/bin/ffmpeg.exe`，手选过滤 `.exe` | `_resolve_ffmpeg()`：hudcore 探测（`bin/<平台>` → PATH → 常见路径）→ 手选（按平台后缀）→ 回退系统 PATH |
 | 4 | `gui_handlers/testcase_open_table.py` | 硬编码 `C:\Program Files (x86)\Kingsoft\WPS Office` + `shutil.which('excel')` | `hudcore.platform.executables.open_in_office_app()`：Windows WPS/Excel、Ubuntu LibreOffice、macOS `open`；失败给出安装命令 |
@@ -62,8 +62,8 @@ HudAutoTest/
 | 8 | `requirements.txt` | UTF-16 编码、含 `+cu126` 平台后缀、三个 opencv 冲突包 | 转 UTF-8；去掉平台后缀与冲突包；按平台拆分 3 个文件 |
 | 9 | 目录 | `zlgcan.dll` / `ffmpeg/` 混在根目录 | 按平台归入 `drivers/<平台>/`、`bin/<平台>/`（原位置仍兼容） |
 
-> 说明：原 `can_control.py`、`can_gui/can_send_receive_gui.py` 等业务逻辑**未改动**，
-> 它们通过 `zlgcan_driver.py` 间接受益于跨平台驱动加载。
+> 说明：原 CAN 设备层（现 `can_core/device.py`）、`can_gui/can_send_receive_gui.py` 等业务逻辑**未改动**，
+> 它们通过 `can_core/driver.py` 间接受益于跨平台驱动加载。
 
 ---
 
@@ -163,7 +163,7 @@ python tools/selftest.py
 
 ## 7. 后续可选优化（未在本次改动）
 
-1. `can_control.py`（1148 行过程式）可封装为 `CanController` 类，消除全局 `received_messages`；
+1. `can_core/device.py`（原 `can_control.py`，1148 行过程式）可封装为 `CanController` 类，消除全局 `received_messages`；
 2. `can_gui/can_send_receive_gui.py`（1638 行）可拆分 UI/业务/数据三层；
 3. `image_testing/`、`camera_tools/` 内部路径与配置可统一接入 `hudcore.platform.paths`；
 4. 抽出统一配置中心（`hudcore/config.py`）替代散落的常量。

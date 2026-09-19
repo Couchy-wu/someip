@@ -1,10 +1,8 @@
-import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 import re
 import time
-import can_control
-import log_setup
+from can_core import device
+from hudcore import logging_setup
 import logging
 import threading
 import json
@@ -59,7 +57,7 @@ class LogParser:
         self.delay_after_disable  = 0.2        # 禁用 index 后的短暂等待（秒）  
         # 备注：响应模块触发完成后有2秒的延迟，该阶段视为“执行等待”      
 
-        log_setup.setup_logger(
+        logging_setup.setup_logger(
             logger_name=LOGGER_NAME,
             log_dir="./logs",
             log_prefix="parser",
@@ -76,16 +74,16 @@ class LogParser:
         """加载日志文件内容"""
         if not os.path.exists(self.log_path):
             error_msg = f"日志文件未找到: {self.log_path}"
-            log_setup.error(LOGGER_NAME, error_msg)
+            logging_setup.error(LOGGER_NAME, error_msg)
             raise FileNotFoundError(error_msg)
 
         with open(self.log_path, 'r', encoding='utf-8') as file:
             self.log_content = file.read()
-        log_setup.info(LOGGER_NAME, "文件加载成功！")
+        logging_setup.info(LOGGER_NAME, "文件加载成功！")
 
     def split_test_cases(self):
         """根据日志中的用例分隔符拆分测试用例"""
-        log_setup.info(LOGGER_NAME, "开始处理用例")
+        logging_setup.info(LOGGER_NAME, "开始处理用例")
         case_pattern = r"=== 开始处理 用例 ([A-Z0-9_]+) ==="
         matches = list(re.finditer(case_pattern, self.log_content))
 
@@ -99,7 +97,7 @@ class LogParser:
                 'id': case_id,
                 'content': case_block
             })
-        log_setup.info(LOGGER_NAME, f"共拆分出 {len(self.test_cases)} 个测试用例。")
+        logging_setup.info(LOGGER_NAME, f"共拆分出 {len(self.test_cases)} 个测试用例。")
 
     def has_script_result(self, case_content):
         """
@@ -112,26 +110,26 @@ class LogParser:
     def parse_all_cases(self):
         """依次解析所有测试用例"""
 
-        # log_setup.debug(LOGGER_NAME, f"使用外部CAN设备资源: device={self.can_device[0]}, chn_handles={self.can_device[1]}, threads={self.can_device[2]}")
+        # logging_setup.debug(LOGGER_NAME, f"使用外部CAN设备资源: device={self.can_device[0]}, chn_handles={self.can_device[1]}, threads={self.can_device[2]}")
 
         if not self.test_cases:
-            log_setup.warning(LOGGER_NAME, "未检测到任何测试用例，请先调用 split_test_cases() 方法。")
+            logging_setup.warning(LOGGER_NAME, "未检测到任何测试用例，请先调用 split_test_cases() 方法。")
             return
 
         # ========== 启动 CAN 设备 ==========
         if ENABLE_AUTO_OPEN_CLOSE_CAN:
             if self.can_device and self.can_device[0] is not None:
-                log_setup.info(LOGGER_NAME, "检测到外部传入的CAN设备，跳过自动初始化")
+                logging_setup.info(LOGGER_NAME, "检测到外部传入的CAN设备，跳过自动初始化")
             else:
                 try:
-                    device_handle, channel_handles, receive_threads = can_control.Initialize_Canfd_Device(
-                        device_type=can_control.ZCAN_USBCANFD_200U,
+                    device_handle, channel_handles, receive_threads = device.Initialize_Canfd_Device(
+                        device_type=device.ZCAN_USBCANFD_200U,
                         merge_receive=0
                     )
                     self.can_device = (device_handle, channel_handles, receive_threads)
-                    log_setup.info(LOGGER_NAME, "CAN设备已开启")
+                    logging_setup.info(LOGGER_NAME, "CAN设备已开启")
                 except Exception as e:
-                    log_setup.error(LOGGER_NAME, f"CAN设备开启失败: {e}")
+                    logging_setup.error(LOGGER_NAME, f"CAN设备开启失败: {e}")
                     return
 
         # 提取 CAN 设备句柄
@@ -146,65 +144,65 @@ class LogParser:
 
             # ---------- 外层循环：执行 total_test_rounds 轮完整测试 ----------
             for round_idx in range(1, self.total_test_rounds + 1):
-                log_setup.info(LOGGER_NAME, f"============开始第 {round_idx} 轮完整测试============")
+                logging_setup.info(LOGGER_NAME, f"============开始第 {round_idx} 轮完整测试============")
                 print(f"============开始第 {round_idx} 轮完整测试============", flush=True)
 
                 if getattr(self, '_stop_event', False):
-                    log_setup.info(LOGGER_NAME, "收到中断信号，停止本轮测试。")
+                    logging_setup.info(LOGGER_NAME, "收到中断信号，停止本轮测试。")
                     break
 
                 for i, case in enumerate(self.test_cases):
                     if getattr(self, '_stop_event', False):
-                        log_setup.info(LOGGER_NAME, "收到中断信号，停止执行测试用例。")
+                        logging_setup.info(LOGGER_NAME, "收到中断信号，停止执行测试用例。")
                         break
 
                     case_id = case['id']
 
-                    log_setup.info(LOGGER_NAME, "=============================================")
+                    logging_setup.info(LOGGER_NAME, "=============================================")
 
                     # 读取对应的 JSON 配置（可能为空）
                     cfg = self._load_case_config(case_id)
                     # 清理/重新保存当前用例的缓存
                     self.current_case_config = cfg if cfg else {}
                     if cfg:
-                        log_setup.info(LOGGER_NAME,
+                        logging_setup.info(LOGGER_NAME,
                                    f"已加载 JSON 配置: 用例 '{case_id}' 对应的图标信息 ({len(cfg)} 条)")
                     else:
-                        log_setup.info(LOGGER_NAME,
+                        logging_setup.info(LOGGER_NAME,
                                    f"未找到用例 '{case_id}' 的 JSON 配置，继续按原逻辑执行用例。")
 
                     # 进入“未启用”前先设状态
                     if not self.has_script_result(case['content']):
                         self._set_state("等待")
-                        log_setup.info(LOGGER_NAME, "不存在脚本解析结果，跳过该用例")
+                        logging_setup.info(LOGGER_NAME, "不存在脚本解析结果，跳过该用例")
                         print("不存在脚本解析结果，跳过该用例", flush=True)
                         continue
 
-                    log_setup.info(LOGGER_NAME, f"开始处理用例: {case_id}")
+                    logging_setup.info(LOGGER_NAME, f"开始处理用例: {case_id}")
                     print(f"✅ 开始处理用例: {case_id}", flush=True)
 
                     executed = False
                     if self.has_script_result(case['content']):
-                        log_setup.info(LOGGER_NAME, f"存在脚本解析结果，开始执行测试（每个用例重复 {self.case_repeat_count} 次）")
+                        logging_setup.info(LOGGER_NAME, f"存在脚本解析结果，开始执行测试（每个用例重复 {self.case_repeat_count} 次）")
                         print(f"存在脚本解析结果，开始执行测试（每个用例重复 {self.case_repeat_count} 次）", flush=True)
 
                         for rep in range(1, self.case_repeat_count + 1):
                             if getattr(self, '_stop_event', False):
-                                log_setup.info(LOGGER_NAME, f"第 {rep} 次检测前收到中断，停止执行。")
+                                logging_setup.info(LOGGER_NAME, f"第 {rep} 次检测前收到中断，停止执行。")
                                 break
 
-                            log_setup.info(LOGGER_NAME, f"第 {rep} 次检测开始...")
+                            logging_setup.info(LOGGER_NAME, f"第 {rep} 次检测开始...")
                             print(f"第 {rep} 次检测开始...", flush=True)
                             try:
                                 self.analyze_script_parts(case['content'])
                             except Exception as e:
-                                log_setup.error(LOGGER_NAME, f"第 {rep} 次检测执行异常: {e}")
+                                logging_setup.error(LOGGER_NAME, f"第 {rep} 次检测执行异常: {e}")
                                 print(f"第 {rep} 次检测执行异常: {e}", flush=True)
                             executed = True
 
                             # 每次重复后等待并清理（最后一次不等待）
                             if rep < self.case_repeat_count:
-                                log_setup.info(LOGGER_NAME,
+                                logging_setup.info(LOGGER_NAME,
                                            f"第 {rep} 次检测完成，等待{self.delay_between_repeats}秒后开始下一次...")
                                 print(f"第 {rep} 次检测完成，等待{self.delay_between_repeats}秒后开始下一次...", flush=True)
                                 if not self._safe_wait(self.delay_between_repeats):
@@ -214,19 +212,19 @@ class LogParser:
                                     break
 
                         # 补全最后一次检测完成的日志
-                        log_setup.info(LOGGER_NAME, f"第 {self.case_repeat_count} 次检测完成，正在清理...")
+                        logging_setup.info(LOGGER_NAME, f"第 {self.case_repeat_count} 次检测完成，正在清理...")
                         print(f"第 {self.case_repeat_count} 次检测完成，正在清理...", flush=True)
                         self._clear_can_channel(chn=0)
 
                     else:
-                        log_setup.info(LOGGER_NAME, "不存在脚本解析结果，跳过该用例")
+                        logging_setup.info(LOGGER_NAME, "不存在脚本解析结果，跳过该用例")
                         print("不存在脚本解析结果，跳过该用例", flush=True)
                         continue
 
                     # 用例间延迟
                     if self.test_cases:
                         self._set_state("等待")
-                        log_setup.info(LOGGER_NAME,
+                        logging_setup.info(LOGGER_NAME,
                                    f"用例 {case_id} 已完成，等待{self.delay_between_cases}秒后开始下一个用例...")
                         print(f"用例 {case_id} 已完成，等待{self.delay_between_cases}秒后开始下一个用例...", flush=True)
                         if not self._safe_wait(self.delay_between_cases):
@@ -235,7 +233,7 @@ class LogParser:
                 # 本轮完成，若非最后一轮则等待
                 if round_idx < self.total_test_rounds:
                     self._set_state("等待")
-                    log_setup.info(LOGGER_NAME,
+                    logging_setup.info(LOGGER_NAME,
                                f"第 {round_idx} 轮测试完成，等待{self.delay_between_rounds}秒后开始下一轮...")
                     print(f"第 {round_idx} 轮测试完成，等待{self.delay_between_rounds}秒后开始下一轮...", flush=True)
                     if not self._safe_wait(self.delay_between_rounds):
@@ -247,10 +245,10 @@ class LogParser:
                 device_handle, channel_handles, receive_threads = self.can_device
                 try:
                     if device_handle is not None and channel_handles is not None and receive_threads is not None:
-                        can_control.Close_Canfd_Device(device_handle, channel_handles, receive_threads)
-                        log_setup.info(LOGGER_NAME, "测试结束, 已自动关闭CAN设备")
+                        device.Close_Canfd_Device(device_handle, channel_handles, receive_threads)
+                        logging_setup.info(LOGGER_NAME, "测试结束, 已自动关闭CAN设备")
                 except Exception as e:
-                    log_setup.error(LOGGER_NAME, f"测试结束, 但自动关闭CAN设备失败: {e}")
+                    logging_setup.error(LOGGER_NAME, f"测试结束, 但自动关闭CAN设备失败: {e}")
             self.can_device = (None, None, None)
 
 
@@ -263,15 +261,15 @@ class LogParser:
             return
         device_handle, channel_handles, _ = self.can_device
         if device_handle is None or chn >= len(channel_handles):
-            log_setup.warning(LOGGER_NAME, f"无效的设备或通道编号: {chn}")
+            logging_setup.warning(LOGGER_NAME, f"无效的设备或通道编号: {chn}")
             return
         try:
-            if can_control.Clear_Auto_Can_Send(device_handle, chn):
-                log_setup.info(LOGGER_NAME, f"已清除通道 {chn} 的定时发送列表")
+            if device.Clear_Auto_Can_Send(device_handle, chn):
+                logging_setup.info(LOGGER_NAME, f"已清除通道 {chn} 的定时发送列表")
             else:
-                log_setup.warning(LOGGER_NAME, f"清除通道 {chn} 定时发送列表失败")
+                logging_setup.warning(LOGGER_NAME, f"清除通道 {chn} 定时发送列表失败")
         except Exception as e:
-            log_setup.error(LOGGER_NAME, f"清理定时发送列表时发生异常: {e}")
+            logging_setup.error(LOGGER_NAME, f"清理定时发送列表时发生异常: {e}")
 
     def get_current_state(self): 
         """
@@ -287,21 +285,21 @@ class LogParser:
 
     def _analyze_state(self, content):
         self._set_state("执行状态")
-        log_setup.debug(LOGGER_NAME, "执行“状态”")
+        logging_setup.debug(LOGGER_NAME, "执行“状态”")
         block = self._extract_block(content, "状态")
         if block:
             self._process_block_lines(block)
 
     def _analyze_action(self, content): 
         self._set_state("执行动作")
-        log_setup.debug(LOGGER_NAME, "执行“动作”")
+        logging_setup.debug(LOGGER_NAME, "执行“动作”")
         block = self._extract_block(content, "动作")
         if block:
             self._process_block_lines(block)
 
     def _analyze_response(self, content):
         self._set_state("执行响应")
-        log_setup.debug(LOGGER_NAME, "执行“响应”")
+        logging_setup.debug(LOGGER_NAME, "执行“响应”")
         block = self._extract_block(content, "响应")
         if block:
             self._process_block_lines(block)
@@ -314,7 +312,7 @@ class LogParser:
         pattern = rf'{block_name}[:：]\s*\n((?:[ \t]+.+?(?:\n|$))+)'
         match = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
         if not match:
-            log_setup.debug(LOGGER_NAME, f"未找到 {block_name} 块")
+            logging_setup.debug(LOGGER_NAME, f"未找到 {block_name} 块")
             return []
 
         block_text = match.group(1)
@@ -327,15 +325,15 @@ class LogParser:
         while i < len(lines):
             # 检查是否被中断
             if getattr(self, '_stop_event', False):
-                log_setup.info(LOGGER_NAME, "收到中断信号，停止处理指令。")
+                logging_setup.info(LOGGER_NAME, "收到中断信号，停止处理指令。")
                 break
 
             # 检查是否暂停：如果未 set（即已 clear），则阻塞等待
             while not self._pause_event.is_set():
-                # log_setup.debug(LOGGER_NAME, "处理流程已暂停，等待恢复...")
+                # logging_setup.debug(LOGGER_NAME, "处理流程已暂停，等待恢复...")
                 time.sleep(0.1)  # 避免忙等待
                 if getattr(self, '_stop_event', False):
-                    log_setup.info(LOGGER_NAME, "暂停期间收到中断信号，停止处理。")
+                    logging_setup.info(LOGGER_NAME, "暂停期间收到中断信号，停止处理。")
                     break
             else:
                 # 只有在未中断且未暂停时才继续处理下一行
@@ -348,15 +346,15 @@ class LogParser:
 
             # 检测 “立刻截图” 指令（等价于键盘 a 键）
             if "立刻截图" in line:
-                log_setup.info(LOGGER_NAME, "检测到 ‘立刻截图’ 指令，触发截图回调。")
+                logging_setup.info(LOGGER_NAME, "检测到 ‘立刻截图’ 指令，触发截图回调。")
                 if callable(getattr(self, "screenshot_callback", None)):
                     try:
                         # 交给外部回调执行实际保存，回调自行决定线程/GUI 处理
                         self.screenshot_callback()
                     except Exception as e:
-                        log_setup.error(LOGGER_NAME, f"截图回调异常: {e}")
+                        logging_setup.error(LOGGER_NAME, f"截图回调异常: {e}")
                 else:
-                    log_setup.warning(LOGGER_NAME, "未设置 screenshot_callback，已忽略 ‘立刻截图’。")
+                    logging_setup.warning(LOGGER_NAME, "未设置 screenshot_callback，已忽略 ‘立刻截图’。")
                 i += 1
                 continue
 
@@ -387,7 +385,7 @@ class LogParser:
             if disable_paren_match:
                 can_id_desc = disable_paren_match.group(1).strip()
                 # 这里仅记录日志，实际禁用逻辑视项目需求自行实现
-                log_setup.debug(LOGGER_NAME, f"Disable → 禁用 CAN ID 描述: {can_id_desc}")
+                logging_setup.debug(LOGGER_NAME, f"Disable → 禁用 CAN ID 描述: {can_id_desc}")
                 i += 1
                 continue
             # 原有的 “禁用对应 index” 形式
@@ -401,18 +399,18 @@ class LogParser:
                 device_handle = self.can_device[0] if self.can_device else None
                 if device_handle is not None:
                     for idx in indices:
-                        can_control.Remove_Auto_Send_By_Index(
+                        device.Remove_Auto_Send_By_Index(
                             device_handle=device_handle,
                             chn=0,              # 固定通道0
                             msg_type="canfd",    # 固定类型canfd
                             index=idx
                         )
-                        log_setup.debug(LOGGER_NAME, f"Disable → 禁用定时发送 index: {idx}")
+                        logging_setup.debug(LOGGER_NAME, f"Disable → 禁用定时发送 index: {idx}")
                         time.sleep(0.2)  # 每次禁用后延迟 200ms，确保设备处理完成
                 i += 1
                 continue
 
-            log_setup.warning(LOGGER_NAME, f"未识别的指令: {line}")
+            logging_setup.warning(LOGGER_NAME, f"未识别的指令: {line}")
             i += 1
 
 
@@ -422,75 +420,75 @@ class LogParser:
         - 解析枚举值（仅用于日志）
         - 读取紧随其后的 “→ 输出CAN报文 …” 行
         - 提取 ID、发送类型、数据、分配 index 以及周期/间隔参数
-        - 调用 `can_control.Send_Can_Signal`
+        - 调用 `device.Send_Can_Signal`
         - 修正：不再以 'result is not None' 作为成功唯一标准，避免周期信号被误判为失败
         """
         # 当前 CAN 设备是否已初始化（仅日志）
-        # log_setup.debug(LOGGER_NAME, f"当前 CAN 设备状态: {self.can_device is not None}")
+        # logging_setup.debug(LOGGER_NAME, f"当前 CAN 设备状态: {self.can_device is not None}")
 
         # 1. 解析枚举值（日志用）
         current_line = lines[current_index].strip()
         enum_match = re.match(r'^输出\([^,]+,\s*(\d+)\)', current_line)
         if not enum_match:
-            log_setup.error(LOGGER_NAME, "输出指令格式错误，未匹配到枚举值")
+            logging_setup.error(LOGGER_NAME, "输出指令格式错误，未匹配到枚举值")
             return
         try:
             enum_value = int(enum_match.group(1))
         except ValueError:
-            log_setup.error(LOGGER_NAME, f"无效的枚举值: {enum_match.group(1)}")
+            logging_setup.error(LOGGER_NAME, f"无效的枚举值: {enum_match.group(1)}")
             return
 
         # 2. 读取下一行的 CAN 报文描述
         if current_index + 1 >= len(lines):
-            log_setup.error(LOGGER_NAME, "缺少CAN报文参数：未找到下一行")
+            logging_setup.error(LOGGER_NAME, "缺少CAN报文参数：未找到下一行")
             return
         next_line = lines[current_index + 1].strip()
         if not next_line.startswith("→") or "输出CAN报文" not in next_line:
-            log_setup.error(LOGGER_NAME, "下一行未包含CAN报文参数（应以 → 开头）")
+            logging_setup.error(LOGGER_NAME, "下一行未包含CAN报文参数（应以 → 开头）")
             return
 
         # 3. 提取分配 index（实际发送通道编号）
         index_match = re.search(r'分配index:\s*(\d+)', next_line)
         if not index_match:
-            log_setup.error(LOGGER_NAME, "未找到 '分配index' 字段，请检查日志格式")
+            logging_setup.error(LOGGER_NAME, "未找到 '分配index' 字段，请检查日志格式")
             return
         try:
             index = int(index_match.group(1))
         except ValueError:
-            log_setup.error(LOGGER_NAME, f"无效的分配index: {index_match.group(1)}")
+            logging_setup.error(LOGGER_NAME, f"无效的分配index: {index_match.group(1)}")
             return
 
         # 4. 提取 CAN ID
         id_match = re.search(r'ID:\s*0x([0-9A-Fa-f]+)', next_line)
         if not id_match:
-            log_setup.error(LOGGER_NAME, "未解析到CAN ID")
+            logging_setup.error(LOGGER_NAME, "未解析到CAN ID")
             return
         can_id = int(id_match.group(1), 16)
 
         # 5. 提取发送类型
         type_match = re.search(r'发送类型:\s*(\w+)', next_line)
         if not type_match:
-            log_setup.error(LOGGER_NAME, "未解析到发送类型")
+            logging_setup.error(LOGGER_NAME, "未解析到发送类型")
             return
         signal_type = type_match.group(1).upper()
         valid_types = {"EVENT", "CYCLE", "CE"}
         if signal_type not in valid_types:
-            log_setup.error(LOGGER_NAME, f"不支持的发送类型: {signal_type}")
+            logging_setup.error(LOGGER_NAME, f"不支持的发送类型: {signal_type}")
             return
 
         # 6. 提取 CAN 数据
         data_match = re.search(r'生成CAN数据:\s*(\[[^\]]*\])', next_line)
         if not data_match:
-            log_setup.error(LOGGER_NAME, "未解析到CAN数据")
+            logging_setup.error(LOGGER_NAME, "未解析到CAN数据")
             return
         try:
             data_str = data_match.group(1)
             data = [int(x.strip(), 16) for x in data_str[1:-1].split(',') if x.strip()]
             if not (1 <= len(data) <= 64):
-                log_setup.error(LOGGER_NAME, f"CAN数据长度非法: {len(data)} 字节")
+                logging_setup.error(LOGGER_NAME, f"CAN数据长度非法: {len(data)} 字节")
                 return
         except Exception as e:
-            log_setup.error(LOGGER_NAME, f"解析CAN数据失败: {e}")
+            logging_setup.error(LOGGER_NAME, f"解析CAN数据失败: {e}")
             return
 
         # 7. 解析周期/间隔参数，生成 `cycle_ms` 供 Send_Can_Signal 使用
@@ -498,14 +496,14 @@ class LogParser:
         if signal_type == "CYCLE":
             period_match = re.search(r'周期(?:时间)?:\s*(\d+)', next_line)
             if not period_match:
-                log_setup.error(LOGGER_NAME, "Cycle 类型需提供周期时间")
+                logging_setup.error(LOGGER_NAME, "Cycle 类型需提供周期时间")
                 return
             try:
                 cycle_ms = int(period_match.group(1))
                 if cycle_ms <= 0:
                     raise ValueError
             except Exception:
-                log_setup.error(LOGGER_NAME, "周期时间必须为正整数")
+                logging_setup.error(LOGGER_NAME, "周期时间必须为正整数")
                 return
 
         elif signal_type == "EVENT":
@@ -522,36 +520,36 @@ class LogParser:
             if ce_match:
                 pair_str = ce_match.group(1).replace(' ', '')
                 if '/' not in pair_str:
-                    log_setup.error(LOGGER_NAME, "CE 类型的周期时间格式错误，缺少 '/' 分隔符")
+                    logging_setup.error(LOGGER_NAME, "CE 类型的周期时间格式错误，缺少 '/' 分隔符")
                     return
                 ev_str, per_str = pair_str.split('/', 1)
                 try:
                     event_ms = int(ev_str)
                     cycle_period_ms = int(per_str)
                 except Exception:
-                    log_setup.error(LOGGER_NAME, "CE 类型的事件间隔或周期不是整数")
+                    logging_setup.error(LOGGER_NAME, "CE 类型的事件间隔或周期不是整数")
                     return
             else:
                 ev_match = re.search(r'事件间隔:\s*(\d+)', next_line)
                 per_match = re.search(r'周期:\s*(\d+)', next_line)
                 if not ev_match or not per_match:
-                    log_setup.error(LOGGER_NAME, "CE 类型必须提供事件间隔和周期（或使用‘周期时间: a/b’）")
+                    logging_setup.error(LOGGER_NAME, "CE 类型必须提供事件间隔和周期（或使用‘周期时间: a/b’）")
                     return
                 try:
                     event_ms = int(ev_match.group(1))
                     cycle_period_ms = int(per_match.group(1))
                 except Exception:
-                    log_setup.error(LOGGER_NAME, "CE 类型的事件间隔或周期不是整数")
+                    logging_setup.error(LOGGER_NAME, "CE 类型的事件间隔或周期不是整数")
                     return
 
             if event_ms <= 0 or cycle_period_ms <= 0:
-                log_setup.error(LOGGER_NAME, "CE 类型的事件间隔和周期必须均为正整数")
+                logging_setup.error(LOGGER_NAME, "CE 类型的事件间隔和周期必须均为正整数")
                 return
             cycle_ms = f"{event_ms}/{cycle_period_ms}"
 
         # 获取 CAN 设备句柄
         if not hasattr(self, 'can_device') or self.can_device is None:
-            log_setup.error(LOGGER_NAME, "CAN设备未初始化，无法发送信号")
+            logging_setup.error(LOGGER_NAME, "CAN设备未初始化，无法发送信号")
             return
         device_handle, channel_handles, _ = self.can_device
         chn = 0
@@ -559,7 +557,7 @@ class LogParser:
 
         # 调用发送函数
         try:
-            result = can_control.Send_Can_Signal(
+            result = device.Send_Can_Signal(
                 device_handle=device_handle,
                 chn_handle=chn_handle,
                 chn=chn,
@@ -574,21 +572,21 @@ class LogParser:
 
             # 成功判断逻辑
             if result is not False:  # 只要不是明确返回 False，都认为提交成功
-                log_setup.debug(
+                logging_setup.debug(
                     LOGGER_NAME,
                     f"SndOK → 已启动发送 CAN ID: 0x{can_id:X} (index={index}) [信号枚举值={enum_value}]"
                 )
             else:
-                log_setup.error(
+                logging_setup.error(
                     LOGGER_NAME,
                     f"发送任务提交失败: CAN ID: 0x{can_id:X} (index={index})"
                 )
 
             # 可选：调试用
-            # log_setup.debug(LOGGER_NAME, f"Send_Can_Signal 返回值: {result}")
+            # logging_setup.debug(LOGGER_NAME, f"Send_Can_Signal 返回值: {result}")
 
         except Exception as e:
-            log_setup.error(
+            logging_setup.error(
                 LOGGER_NAME,
                 f"调用 Send_Can_Signal 时发生异常: CAN ID: 0x{can_id:X} (index={index}) 错误: {e}"
             )
@@ -605,29 +603,29 @@ class LogParser:
 
         # 获取下一行
         if current_index + 1 >= len(lines):
-            log_setup.error(LOGGER_NAME, "缺少采集参数：未找到下一行")
+            logging_setup.error(LOGGER_NAME, "缺少采集参数：未找到下一行")
             return False
         next_line = lines[current_index + 1].strip()
 
         if not next_line.startswith("→") or "采集CAN报文" not in next_line:
-            log_setup.error(LOGGER_NAME, "下一行未包含采集CAN报文参数（应以 → 开头）")
+            logging_setup.error(LOGGER_NAME, "下一行未包含采集CAN报文参数（应以 → 开头）")
             return False
 
         # 提取 CAN ID
         id_match = re.search(r'ID:\s*0x([0-9A-Fa-f]+)', next_line)
         if not id_match:
-            log_setup.error(LOGGER_NAME, "未解析到CAN ID")
+            logging_setup.error(LOGGER_NAME, "未解析到CAN ID")
             return False
         try:
             signal_id = int(id_match.group(1), 16)  # 仍需 int 用于传入（支持 int 或 str）
         except ValueError:
-            log_setup.error(LOGGER_NAME, f"无效的CAN ID: {id_match.group(1)}")
+            logging_setup.error(LOGGER_NAME, f"无效的CAN ID: {id_match.group(1)}")
             return False
 
         # 提取 子ID 原始字符串
         sub_id_match = re.search(r'子ID:\s*([^|]+)', next_line)
         if not sub_id_match:
-            log_setup.error(LOGGER_NAME, "未解析到子ID")
+            logging_setup.error(LOGGER_NAME, "未解析到子ID")
             return False
         sub_id_raw = sub_id_match.group(1).strip()
 
@@ -643,25 +641,25 @@ class LogParser:
                     hex_val = int(sub_id_raw, 16)  # 支持无前缀
                 sub_id = f"0x{hex_val:x}"  # 输出小写，如 0xa → 0xa（不补0）
             except ValueError:
-                log_setup.error(LOGGER_NAME, f"无法将子ID转为十六进制: {sub_id_raw}")
+                logging_setup.error(LOGGER_NAME, f"无法将子ID转为十六进制: {sub_id_raw}")
                 return False
 
         # 提取 位域
         bit_match = re.search(r'位:\s*([^|]+)', next_line)
         if not bit_match:
-            log_setup.error(LOGGER_NAME, "未解析到位域")
+            logging_setup.error(LOGGER_NAME, "未解析到位域")
             return False
         bit_position = bit_match.group(1).strip()
 
         # 提取 枚举值
         enum_match = re.search(r'枚举值:(\d+)', next_line)
         if not enum_match:
-            log_setup.error(LOGGER_NAME, "未解析到期望枚举值")
+            logging_setup.error(LOGGER_NAME, "未解析到期望枚举值")
             return False
         try:
             expected_enum_value = int(enum_match.group(1))
         except ValueError:
-            log_setup.error(LOGGER_NAME, f"无效的枚举值: {enum_match.group(1)}")
+            logging_setup.error(LOGGER_NAME, f"无效的枚举值: {enum_match.group(1)}")
             return False
 
         # 固定通道为 0（可根据实际扩展）
@@ -669,12 +667,12 @@ class LogParser:
 
         # 获取 CAN 设备句柄
         if not hasattr(self, 'can_device') or self.can_device is None:
-            log_setup.error(LOGGER_NAME, "CAN设备未初始化，无法接收信号")
+            logging_setup.error(LOGGER_NAME, "CAN设备未初始化，无法接收信号")
             return False
 
         # 调用信号等待函数（sub_id 为字符串："No" 或 "0x..."）
-        log_setup.debug(LOGGER_NAME, f"RcvWait → 等待 CAN ID: 0x{signal_id:X}, 子ID={sub_id_raw}, 位={bit_position}, 期望枚举值={expected_enum_value}")
-        received = can_control.wait_for_check_signal_by_bit_enum(
+        logging_setup.debug(LOGGER_NAME, f"RcvWait → 等待 CAN ID: 0x{signal_id:X}, 子ID={sub_id_raw}, 位={bit_position}, 期望枚举值={expected_enum_value}")
+        received = device.wait_for_check_signal_by_bit_enum(
             signal_id=signal_id,
             sub_id=sub_id,  # 传入标准化字符串："No" 或 "0x..."
             bit_position=bit_position,
@@ -685,28 +683,28 @@ class LogParser:
         )
 
         if received:
-            log_setup.debug(LOGGER_NAME, f"RcvOK → 已接收到满足条件的 CAN ID: 0x{signal_id:X}, 子ID={sub_id_raw}, 位={bit_position}, 值={expected_enum_value}")
+            logging_setup.debug(LOGGER_NAME, f"RcvOK → 已接收到满足条件的 CAN ID: 0x{signal_id:X}, 子ID={sub_id_raw}, 位={bit_position}, 值={expected_enum_value}")
             return True
         else:
-            log_setup.error(LOGGER_NAME, f"RcvFail → 未收到预期信号: ID=0x{signal_id:X}, 子ID={sub_id_raw}, 位={bit_position}, 期望枚举值={expected_enum_value}")
+            logging_setup.error(LOGGER_NAME, f"RcvFail → 未收到预期信号: ID=0x{signal_id:X}, 子ID={sub_id_raw}, 位={bit_position}, 期望枚举值={expected_enum_value}")
             return False
 
     def _delay_ms(self, milliseconds):
         """延迟指定毫秒数，支持暂停和停止"""
         seconds = milliseconds / 1000.0
-        log_setup.debug(LOGGER_NAME, f"Wait {milliseconds} ms")
+        logging_setup.debug(LOGGER_NAME, f"Wait {milliseconds} ms")
         self._safe_wait(seconds)
 
     def run(self):
         """一键运行全流程"""
-        log_setup.info(LOGGER_NAME, f"开始解析日志文件: {self.log_path}")
+        logging_setup.info(LOGGER_NAME, f"开始解析日志文件: {self.log_path}")
         try:
             self.load_log()
             self.split_test_cases()
             self.parse_all_cases()
-            log_setup.info(LOGGER_NAME, "日志解析执行完成。")
+            logging_setup.info(LOGGER_NAME, "日志解析执行完成。")
         except Exception as e:
-            log_setup.error(LOGGER_NAME, f"解析过程中发生未预期异常: {e}")
+            logging_setup.error(LOGGER_NAME, f"解析过程中发生未预期异常: {e}")
             raise
 
 
@@ -715,7 +713,7 @@ class LogParser:
         中断并关闭正在进行的测试
         调用后会尝试关闭 CAN 设备及所有相关资源
         """
-        log_setup.info(LOGGER_NAME, "收到关闭测试请求，正在停止测试...")
+        logging_setup.info(LOGGER_NAME, "收到关闭测试请求，正在停止测试...")
         print("正在关闭测试...")
 
         # 清理内部标志，防止重复执行
@@ -726,12 +724,12 @@ class LogParser:
 
         if device_handle is not None and channel_handles is not None and receive_threads is not None:
             try:
-                can_control.Close_Canfd_Device(device_handle, channel_handles, receive_threads)
-                log_setup.info(LOGGER_NAME, "CAN设备已成功关闭")
+                device.Close_Canfd_Device(device_handle, channel_handles, receive_threads)
+                logging_setup.info(LOGGER_NAME, "CAN设备已成功关闭")
             except Exception as e:
-                log_setup.error(LOGGER_NAME, f"关闭CAN设备时发生异常: {e}")
+                logging_setup.error(LOGGER_NAME, f"关闭CAN设备时发生异常: {e}")
         else:
-            log_setup.warning(LOGGER_NAME, "未检测到有效的CAN设备资源，跳过关闭流程")
+            logging_setup.warning(LOGGER_NAME, "未检测到有效的CAN设备资源，跳过关闭流程")
 
         # 可选：重置设备句柄
         self.can_device = (None, None, None)
@@ -746,7 +744,7 @@ class LogParser:
         step = 0.1  # 每次 sleep 0.1 秒，提高响应速度
         while total_waited < seconds:
             if getattr(self, '_stop_event', False):
-                log_setup.info(LOGGER_NAME, "等待期间收到停止信号，终止等待。")
+                logging_setup.info(LOGGER_NAME, "等待期间收到停止信号，终止等待。")
                 return False
             if not self._pause_event.is_set():
                 # 暂停中，不增加等待时间，持续等待恢复
@@ -761,22 +759,22 @@ class LogParser:
     def pause_test(self):
         """暂停测试流程，等待恢复"""
         if getattr(self, '_pause_event', None) is None:
-            log_setup.warning(LOGGER_NAME, "暂停功能未初始化，请检查 _pause_event 是否在 __init__ 中创建。")
+            logging_setup.warning(LOGGER_NAME, "暂停功能未初始化，请检查 _pause_event 是否在 __init__ 中创建。")
             return
         self.current_state = "等待"
         self._pause_event.clear()  # 进入暂停状态
-        log_setup.info(LOGGER_NAME, "测试流程已暂停。调用 resume_test() 可恢复。")
+        logging_setup.info(LOGGER_NAME, "测试流程已暂停。调用 resume_test() 可恢复。")
         print("测试已暂停。")
 
 
     def resume_test(self):
         """恢复已暂停的测试流程"""
         if getattr(self, '_pause_event', None) is None:
-            log_setup.warning(LOGGER_NAME, "恢复功能未初始化。")
+            logging_setup.warning(LOGGER_NAME, "恢复功能未初始化。")
             return
         self.current_state = "等待"
         self._pause_event.set()  # 恢复运行
-        log_setup.info(LOGGER_NAME, "测试流程已恢复。")
+        logging_setup.info(LOGGER_NAME, "测试流程已恢复。")
         print("测试已恢复。")
 
     # 为外部（GUI）提供状态变化回调
@@ -799,7 +797,7 @@ class LogParser:
                 self._state_callback(new_state)
             except Exception as e:
                 # 回调异常不应影响主流程，记录即可
-                log_setup.error(LOGGER_NAME,
+                logging_setup.error(LOGGER_NAME,
                             f"状态回调异常: {e}")
 
     # 读取 ImageData.json 配置的辅助函数
@@ -825,7 +823,7 @@ class LogParser:
 
         # 2️⃣ 文件不存在 → 直接返回空 dict
         if not os.path.isfile(json_path):
-            log_setup.warning(LOGGER_NAME,
+            logging_setup.warning(LOGGER_NAME,
                          f"对应的 JSON 配置文件未找到: {json_path}")
             return {}
 
@@ -835,11 +833,11 @@ class LogParser:
                 full_cfg = json.load(f)
             case_cfg = full_cfg.get(case_id, {})
             if not case_cfg:
-                log_setup.info(LOGGER_NAME,
+                logging_setup.info(LOGGER_NAME,
                            f"JSON 中未找到键 '{case_id}'，返回空配置")
             return case_cfg
         except Exception as e:
-            log_setup.error(LOGGER_NAME,
+            logging_setup.error(LOGGER_NAME,
                         f"读取 JSON 配置文件出错 ({json_path}): {e}")
             return {}
 

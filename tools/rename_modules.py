@@ -143,6 +143,30 @@ MODULE_RENAMES: list[tuple[str, str]] = [
     ("artificial label",       "draw_labels"),
 ]
 
+# ------------------------------------------------------------------ P0 结构整改记录（第二轮）
+# 目的：让"根目录只放入口"，把共享基础设施下沉到包内；并消除命名残留。
+# 这些改名已完成并通过工具/文档同步（此表用于追溯，不再由脚本执行）。
+P0_STRUCTURE_MOVES: list[tuple[str, str, str]] = [
+    # (原路径, 新路径, 理由)
+    ("log_setup.py",            "hudcore/logging_setup.py",        "横切基础设施，归入 hudcore（零反向依赖层）"),
+    ("zlgcan_driver.py",        "can_core/driver.py",              "CAN 驱动绑定 → can_core 包"),
+    ("can_control.py",          "can_core/device.py",              "CAN 设备/通道操作 → can_core 包"),
+    ("image_preprocessing.py",  "auto_labeling/preprocessing.py",  "仅被模板匹配使用，就近下沉（高内聚）"),
+    ("Auto label/algri draft/", "auto_labeling/template_matching/", "目录名含空格+缩写，且缺包声明"),
+    ("camera_tools/透视变换-结构.py", "camera_tools/perspective_geometry.py", "中文文件名（跨平台工具链风险）"),
+    ("camera_tools/透视变换-颜色.py", "camera_tools/perspective_color.py",    "中文文件名（跨平台工具链风险）"),
+    ("image_testing/test_image_generator.py", "image_testing/sample_image_generator.py",
+     "test_ 前缀会被 pytest 误判为测试代码"),
+    ("can_gui/platfoem_resolution.json", "can_gui/platform_resolution.json", "文件名拼写错误 platform"),
+]
+
+# 新增包（声明 API 边界与依赖约束；此前均为无 __init__.py 的命名空间包）
+INITIALIZED_PACKAGES: list[str] = [
+    "can_core", "gui_handlers", "can_gui", "can_data_tools",
+    "image_testing", "camera_tools", "misc_tools", "auto_labeling",
+    "auto_labeling/template_matching",
+]
+
 # 需要更新引用的文件类型
 TEXT_SUFFIXES = (".py", ".md", ".sh", ".bat", ".txt", ".json", ".yaml", ".yml", ".spec", ".cfg")
 

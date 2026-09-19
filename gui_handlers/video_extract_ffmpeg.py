@@ -33,8 +33,18 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 # -------------------------------------------------
 # 2️⃣ 日志初始化（控制台 + 文件）
 # -------------------------------------------------
+def _log_file_path() -> str:
+    """日志落盘位置：统一到 <项目根>/logs（不再写到源码目录里）。"""
+    try:
+        from hudcore.platform.paths import paths
+        paths.logs_dir.mkdir(parents=True, exist_ok=True)
+        return str(paths.logs_dir / "video_extract_ffmpeg.log")
+    except Exception:                       # 独立拷贝使用时的回退
+        return os.path.abspath(os.path.join(os.path.dirname(__file__), "debug.log"))
+
+
 def setup_logging():
-    log_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "debug.log"))
+    log_file = _log_file_path()
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s",
@@ -47,7 +57,18 @@ def setup_logging():
     logger.addHandler(fileh)
     logging.debug("日志已初始化 → %s", log_file)
 
-setup_logging()
+# 注意：不在模块级调用 setup_logging() —— 那会在 import 时就在源码目录生成
+# debug.log（导入副作用）。改为惰性初始化：首次使用时（VideoProcessor 构造）调用。
+_logging_ready = False
+
+
+def _ensure_logging():
+    """惰性初始化日志（避免导入副作用）。"""
+    global _logging_ready
+    if not _logging_ready:
+        setup_logging()
+        _logging_ready = True
+
 
 # -------------------------------------------------
 # 3️⃣ 把 ffmpeg.exe 的完整路径交给 ffmpeg‑python（可选）
@@ -79,6 +100,7 @@ def set_ffmpeg_executable(ffmpeg_path: str):
 # -------------------------------------------------
 class VideoProcessor:
     def __init__(self, root):
+        _ensure_logging()          # 惰性初始化日志（替代模块级 setup_logging）
         self.root = root
         self.progress = ProgressBar(root)
 

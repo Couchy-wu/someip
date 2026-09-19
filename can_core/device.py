@@ -2,19 +2,28 @@
     支持的设备有 USBCANFD-100U mini   USBCANFD-100U/200U/400U/800U
 '''
 
-from zlgcan_driver import *
+from .driver import (
+    INVALID_DEVICE_HANDLE, ZCAN, ZCANFD_AUTO_TRANSMIT_OBJ, ZCAN_AUTO_TRANSMIT_OBJ,
+    ZCAN_CHANNEL_INIT_CONFIG, ZCAN_DT_ZCAN_CAN_CANFD_DATA, ZCAN_STATUS_OK,
+    ZCAN_TYPE_CAN, ZCAN_TYPE_CANFD, ZCAN_TYPE_MERGE, ZCAN_TransmitFD_Data,
+    ZCAN_Transmit_Data, ZCAN_USBCANFD_200U,
+)
 import threading
 import time
 import os
 import xml.etree.ElementTree as ET
 from collections import deque
-import log_setup
+from hudcore import logging_setup
 import logging
 from typing import Union, Optional, List
 
 # 创建第一个日志：前缀为 "candata"
-LOG_PATH = "./logs/can"
-log_setup.setup_logger(logger_name="candata", log_dir=LOG_PATH, log_prefix="candata", level=logging.INFO, clear_old=True)
+try:                                     # 日志目录统一走 hudcore 路径（不依赖当前工作目录）
+    from hudcore.platform.paths import paths as _paths
+    LOG_PATH = str(_paths.logs_dir / "can")
+except Exception:                        # 独立拷贝使用时回退
+    LOG_PATH = "./logs/can"
+logging_setup.setup_logger(logger_name="candata", log_dir=LOG_PATH, log_prefix="candata", level=logging.INFO, clear_old=True)
 
 # 全局变量
 thread_flag = True              # 控制接收线程是否继续运行
@@ -105,7 +114,7 @@ def receive_thread(device_handle,chn_handle):
                             'channel': chn_handle & 0xFF   # 提取通道号，如 CAN0 -> 0
                         })
                     # 打印输出
-                    log_setup.info("candata", f"[{msg.timestamp}] CAN{chn_handle & 0xFF} {can_type:<{CANType_width}}\t{direction} ID: {can_id:<{id_width}}\t{frame_type} {frame_format}"
+                    logging_setup.info("candata", f"[{msg.timestamp}] CAN{chn_handle & 0xFF} {can_type:<{CANType_width}}\t{direction} ID: {can_id:<{id_width}}\t{frame_type} {frame_format}"
                           f" DLC: {dlc}\tDATA(hex): {data}")
 
         # 接收 CANDU 帧
@@ -135,7 +144,7 @@ def receive_thread(device_handle,chn_handle):
                             'type': 'CANFD',
                             'channel': chn_handle & 0xFF
                         })
-                    log_setup.info("candata", f"[{msg.timestamp}] CAN{chn_handle & 0xFF} {can_type:<{CANType_width}}\t{direction} ID: {can_id:<{id_width}}\t{frame_type} {frame_format}"
+                    logging_setup.info("candata", f"[{msg.timestamp}] CAN{chn_handle & 0xFF} {can_type:<{CANType_width}}\t{direction} ID: {can_id:<{id_width}}\t{frame_type} {frame_format}"
                           f" DLC: {frame.len}\tDATA(hex): {data}")
 
         # 接收 合并模式 帧
@@ -168,7 +177,7 @@ def receive_thread(device_handle,chn_handle):
                                 'type': type,
                                 'channel': msg.chnl
                             })
-                        log_setup.info("candata", f"[{msg.zcanfddata.timestamp}] CAN{msg.chnl} {can_type:<{CANType_width}}\t{direction} ID: {hex(can_id):<{id_width}}\t{frame_type} {frame_format}"
+                        logging_setup.info("candata", f"[{msg.zcanfddata.timestamp}] CAN{msg.chnl} {can_type:<{CANType_width}}\t{direction} ID: {hex(can_id):<{id_width}}\t{frame_type} {frame_format}"
                         f" DLC: {frame.len}\tDATA(hex): {data}")
 
 # 检查是否接收到指定 ID 和 data 的信号
@@ -199,7 +208,7 @@ def check_signal_received(signal_id, expected_data_list, channel):
     expected_data_list = [int(x) for x in expected_data_list]
 
     hex_expected_data = format_hex_bytes(expected_data_list)
-    log_setup.debug("candata", f"正在检查通道: {channel} 是否接收到信号: ID=0x{signal_id:X}, 数据={hex_expected_data}")
+    logging_setup.debug("candata", f"正在检查通道: {channel} 是否接收到信号: ID=0x{signal_id:X}, 数据={hex_expected_data}")
 
     with received_messages_lock:
         for msg in received_messages:
@@ -217,7 +226,7 @@ def check_signal_received(signal_id, expected_data_list, channel):
                     continue
 
             # 完全匹配
-            log_setup.info("candata", f"成功检测到信号 0x{signal_id:X} 接收！")
+            logging_setup.info("candata", f"成功检测到信号 0x{signal_id:X} 接收！")
             return True
 
     # 没找到匹配的消息 → 不打印任何日志
@@ -250,7 +259,7 @@ def wait_for_check_signal_received(
     expected_data_list = [int(x) for x in expected_data_list]
     hex_expected_data = format_hex_bytes(expected_data_list)
     # 日志：开始等待
-    log_setup.info("candata", f"开始等待信号: ID=0x{int(signal_id, 16) if isinstance(signal_id, str) else signal_id:X}, "
+    logging_setup.info("candata", f"开始等待信号: ID=0x{int(signal_id, 16) if isinstance(signal_id, str) else signal_id:X}, "
                           f"数据={hex_expected_data}, 通道={channel}, 等待时长: {timeout} s")
 
     while time.time() < end_time:
@@ -262,7 +271,7 @@ def wait_for_check_signal_received(
         time.sleep(check_interval)
 
     # 超时仍未收到
-    log_setup.warning("candata", f"等待超时！未收到信号: ID=0x{signal_id:X}, 数据={hex_expected_data}, 通道={channel}")
+    logging_setup.warning("candata", f"等待超时！未收到信号: ID=0x{signal_id:X}, 数据={hex_expected_data}, 通道={channel}")
     return False
 
 # 启动通道
@@ -273,7 +282,7 @@ def USBCANFD_Start(zcanlib, device_handle, chn):
     ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/canfd_abit_baud_rate", "500000".encode("utf-8"))
     ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/canfd_dbit_baud_rate", "2000000".encode("utf-8"))
     if ret != ZCAN_STATUS_OK:
-        log_setup.error("candata", "Set CH%d baud failed!" % chn)
+        logging_setup.error("candata", "Set CH%d baud failed!" % chn)
         return None
 
     # 自定义波特率    当产品波特率对采样点有要求，或者需要设置非常规波特率时使用   ---默认不管
@@ -285,7 +294,7 @@ def USBCANFD_Start(zcanlib, device_handle, chn):
     # 打开终端电阻
     ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/initenal_resistance", "1".encode("utf-8"))
     if ret != ZCAN_STATUS_OK:
-        log_setup.warning("candata", "Open CH%d resistance failed!" % chn)
+        logging_setup.warning("candata", "Open CH%d resistance failed!" % chn)
         return None
 
     # 初始化通道
@@ -294,7 +303,7 @@ def USBCANFD_Start(zcanlib, device_handle, chn):
     chn_init_cfg.config.canfd.mode = 0  # 0-正常模式 1-只听模式
     chn_handle = zcanlib.InitCAN(device_handle, chn, chn_init_cfg)
     if chn_handle is None:
-        log_setup.error("candata", "initCAN failed!" % chn)
+        logging_setup.error("candata", "initCAN failed!" % chn)
         return None
 
 
@@ -302,19 +311,19 @@ def USBCANFD_Start(zcanlib, device_handle, chn):
     # 禁用回显，避免收到自己发的消息（除非需要监控）
     ret = zcanlib.ZCAN_SetValue(device_handle,str(chn)+"/set_device_tx_echo","0".encode("utf-8"))   #发送回显设置，0-禁用，1-开启
     if ret != ZCAN_STATUS_OK:
-        log_setup.warning("candata", "Set CH%d  set_device_tx_echo failed!" %(chn))
+        logging_setup.warning("candata", "Set CH%d  set_device_tx_echo failed!" %(chn))
         return None
 
     # 使能/关闭合并接收(startCAN 之前)    0-关闭 1-使能
     ret = zcanlib.ZCAN_SetValue(device_handle, str(0) + "/set_device_recv_merge", repr(enable_merge_receive))
     if ret != ZCAN_STATUS_OK:
-        log_setup.error("candata", "Open CH%d recv merge failed!" % chn)
+        logging_setup.error("candata", "Open CH%d recv merge failed!" % chn)
         return None
 
     # 启动通道
     ret = zcanlib.StartCAN(chn_handle)
     if ret != ZCAN_STATUS_OK:
-        log_setup.error("candata", "startCAN failed!" % chn)
+        logging_setup.error("candata", "startCAN failed!" % chn)
         return None
 
     return chn_handle
@@ -340,7 +349,7 @@ def Send_Can(chn_handle, stdorext, id, data, round):
     # 确保数据长度不超过8字节（CAN帧限制）
     if length > 8:
         with print_lock:
-            log_setup.warning("candata", "警告：CAN数据长度为 %d，超过最大限制8字节，跳过发送。" % length)
+            logging_setup.warning("candata", "警告：CAN数据长度为 %d，超过最大限制8字节，跳过发送。" % length)
         return None  
     
     # 创建ZCAN_Transmit_Data数组
@@ -359,7 +368,7 @@ def Send_Can(chn_handle, stdorext, id, data, round):
             msgs[i].frame.data[j] = data[j]
 
     ret = zcanlib.Transmit(chn_handle, msgs, transmit_num)
-    # with print_lock: log_setup.info("candata", "成功发送 %d 条CAN报文" % ret)
+    # with print_lock: logging_setup.info("candata", "成功发送 %d 条CAN报文" % ret)
     return ret 
 
 # 发送 CANFD 报文
@@ -383,7 +392,7 @@ def Send_Canfd(chn_handle, stdorext, id, data, round):
     # 确保数据长度不超过64字节（CANFD帧限制）
     if length > 64:
         with print_lock:
-            log_setup.warning("candata", "警告：CAN数据长度为 %d，超过最大限制64字节，跳过发送。" % length)
+            logging_setup.warning("candata", "警告：CAN数据长度为 %d，超过最大限制64字节，跳过发送。" % length)
         return None 
     
     # 创建ZCAN_Transmit_Data数组
@@ -400,7 +409,7 @@ def Send_Canfd(chn_handle, stdorext, id, data, round):
         for j in range(length):
             canfd_msgs[i].frame.data[j] = data[j]
     ret = zcanlib.TransmitFD(chn_handle, canfd_msgs, transmit_canfd_num)
-    # with print_lock: log_setup.info("candata", "成功发送 %d 条CANFD报文" % ret)
+    # with print_lock: logging_setup.info("candata", "成功发送 %d 条CANFD报文" % ret)
     return ret
 
 # 清除已有的定时发送设置，关闭发送任务
@@ -408,7 +417,7 @@ def Clear_Auto_Can_Send(device_handle, chn):
     """清除指定通道的定时发送列表"""
     ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/clear_auto_send", "0".encode("utf-8"))
     if ret != ZCAN_STATUS_OK:
-        log_setup.warning("candata", "Clear CH%d USBCANFD AutoSend failed!" % chn)
+        logging_setup.warning("candata", "Clear CH%d USBCANFD AutoSend failed!" % chn)
         return False
     return True
 
@@ -417,7 +426,7 @@ def Enable_Auto_Can_Send(device_handle, chn):
     """使能指定通道的所有定时发送任务"""
     ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/apply_auto_send", "0".encode("utf-8"))
     if ret != ZCAN_STATUS_OK:
-        log_setup.error("candata", "Apply CH%d USBCANFD AutoSend failed!" % chn)
+        logging_setup.error("candata", "Apply CH%d USBCANFD AutoSend failed!" % chn)
         return False
     return True
 
@@ -445,7 +454,7 @@ def Auto_Send_Can(device_handle, chn, stdorext, id, data, signal_cycle, index=0)
     # 确保数据长度不超过8字节（CAN帧限制）
     if length > 8:
         with print_lock:
-            log_setup.warning("candata", "警告：CAN数据长度为 %d，超过最大限制8字节，跳过发送。" % length)
+            logging_setup.warning("candata", "警告：CAN数据长度为 %d，超过最大限制8字节，跳过发送。" % length)
         return None
     memset(addressof(auto_can), 0, sizeof(auto_can))
     auto_can.index = index                          # 定时发送序列号 用于标记这条报文
@@ -464,7 +473,7 @@ def Auto_Send_Can(device_handle, chn, stdorext, id, data, signal_cycle, index=0)
     # 将发送任务配置写入到导通的定时发送列表中
     ret = zcanlib.ZCAN_SetValue(device_handle,str(chn)+"/auto_send",byref(auto_can))
     if ret != ZCAN_STATUS_OK:
-        log_setup.error("candata", "设置定时发送 CAN%d 失败!" % chn)
+        logging_setup.error("candata", "设置定时发送 CAN%d 失败!" % chn)
         return None
 
 # 定时发送 CANFD 设置 
@@ -491,7 +500,7 @@ def Auto_Send_Canfd(device_handle, chn, stdorext, id, data, signal_cycle, index=
     # 确保数据长度不超过8字节（CANFD帧限制）
     if length > 64:
         with print_lock:
-            log_setup.warning("candata", "警告：CAN数据长度为 %d，超过最大限制64字节，跳过发送。" % length)
+            logging_setup.warning("candata", "警告：CAN数据长度为 %d，超过最大限制64字节，跳过发送。" % length)
         return None
 
     memset(addressof(auto_canfd), 0, sizeof(auto_canfd))
@@ -510,7 +519,7 @@ def Auto_Send_Canfd(device_handle, chn, stdorext, id, data, signal_cycle, index=
     # 将发送任务配置写入到导通的定时发送列表中
     ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/auto_send_canfd", byref(auto_canfd))
     if ret != ZCAN_STATUS_OK:
-        log_setup.error("candata", "设置定时发送 CANFD%d 失败!" % chn)
+        logging_setup.error("candata", "设置定时发送 CANFD%d 失败!" % chn)
         return None
 
 
@@ -533,9 +542,9 @@ def Initialize_Canfd_Device(device_type=ZCAN_USBCANFD_200U, merge_receive=0):
     # 打开设备
     handle = zcanlib.OpenDevice(device_type, 0, 0)
     if handle == INVALID_DEVICE_HANDLE:
-        log_setup.error("candata", "打开设备失败！")
+        logging_setup.error("candata", "打开设备失败！")
         return None, None, None
-    log_setup.info("candata", "打开设备成功，设备句柄为: %d." % handle)
+    logging_setup.info("candata", "打开设备成功，设备句柄为: %d." % handle)
     
     # 获取设备信息
     can_number = Read_Device_Info(handle)
@@ -551,10 +560,10 @@ def Initialize_Canfd_Device(device_type=ZCAN_USBCANFD_200U, merge_receive=0):
     for i in range(can_number):  
         chn_handle = USBCANFD_Start(zcanlib, handle, i)
         if chn_handle is None:
-            log_setup.error("candata", "启动通道%d失败!" % i)
+            logging_setup.error("candata", "启动通道%d失败!" % i)
             return None, None, None
         chn_handles.append(chn_handle)  # 将通道句柄添加到列表中
-        log_setup.info("candata", f"打开通道{i}成功, 通道句柄为: %d." % chn_handle)
+        logging_setup.info("candata", f"打开通道{i}成功, 通道句柄为: %d." % chn_handle)
     
     # 接收线程创建策略
     if merge_receive == 1:   #   若开启合并接收，所有通道都由一个接收线程处理
@@ -596,16 +605,16 @@ def Close_Canfd_Device(handle, chn_handles, threads):
     for i in range(len(chn_handles)):
         ret = zcanlib.ResetCAN(chn_handles[i])
         if ret == 1:
-            log_setup.info("candata", f"关闭通道{i}成功")
+            logging_setup.info("candata", f"关闭通道{i}成功")
         else:
-            log_setup.error("candata", f"关闭通道{i}失败")
+            logging_setup.error("candata", f"关闭通道{i}失败")
 
     # 关闭设备
     ret = zcanlib.CloseDevice(handle)
     if ret == 1:
-        log_setup.info("candata", "关闭设备成功")
+        logging_setup.info("candata", "关闭设备成功")
     else:
-        log_setup.error("candata", "关闭设备失败")
+        logging_setup.error("candata", "关闭设备失败")
 
 # 发送 CAN 或 CANFD 报文的通用接口————适用于事件型信号
 def Send_Can_Or_Canfd(chn_handle, stdorext, id, msg_type, data, signal_cycle=None, send_count=1):
@@ -623,12 +632,12 @@ def Send_Can_Or_Canfd(chn_handle, stdorext, id, msg_type, data, signal_cycle=Non
     Returns:
         实际成功发送的报文数量，出错时返回 None
     """
-    log_setup.debug("candata", f"开始以 {signal_cycle} ms频率连续发送 {send_count} 帧0x{id:X}")
+    logging_setup.debug("candata", f"开始以 {signal_cycle} ms频率连续发送 {send_count} 帧0x{id:X}")
 
     # 验证 msg_type
     if msg_type not in ['can', 'canfd']:
         with print_lock:
-            log_setup.error("candata", "错误：不支持的报文类型 '%s'，请使用 'can' 或 'canfd'" % msg_type)
+            logging_setup.error("candata", "错误：不支持的报文类型 '%s'，请使用 'can' 或 'canfd'" % msg_type)
         return None
 
     success_count = 0
@@ -654,7 +663,7 @@ def Send_Can_Or_Canfd(chn_handle, stdorext, id, msg_type, data, signal_cycle=Non
 
     except Exception as e:
         with print_lock:
-            log_setup.error("candata", "发送报文时发生异常: %s" % str(e))
+            logging_setup.error("candata", "发送报文时发生异常: %s" % str(e))
         return None      
 
 # 定时发送 CAN 或 CANFD 报文的通用接口————适用于周期型信号
@@ -686,7 +695,7 @@ def Auto_Send_Can_Or_Canfd(device_handle, chn, stdorext, id, msg_type, data, sig
         Auto_Send_Canfd(device_handle, chn, stdorext, id, data, signal_cycle, index)
     else:
         with print_lock:
-            log_setup.error("candata", "错误：不支持的 type 类型 '%s'，请使用 'can' 或 'canfd'" % msg_type)
+            logging_setup.error("candata", "错误：不支持的 type 类型 '%s'，请使用 'can' 或 'canfd'" % msg_type)
         return
 
     if send_count < 0:
@@ -701,7 +710,7 @@ def Auto_Send_Can_Or_Canfd(device_handle, chn, stdorext, id, msg_type, data, sig
             time.sleep(total_delay) 
             Remove_Auto_Send_By_Index(device_handle, chn, msg_type, index)
             with print_lock:
-                log_setup.debug("candata", f"已停止发送 {msg_type.upper()} 信号：通道 0, ID=0x{id:X}, index={index}")
+                logging_setup.debug("candata", f"已停止发送 {msg_type.upper()} 信号：通道 0, ID=0x{id:X}, index={index}")
         threading.Thread(target=shutdown, daemon=True).start()
 
 # 关闭指定 index 的定时发送
@@ -728,9 +737,9 @@ def Remove_Auto_Send_By_Index(device_handle, chn, msg_type, index):
 
         ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/auto_send", byref(auto_can))
         if ret != ZCAN_STATUS_OK:
-            log_setup.error("candata", "禁用定时发送 CAN[%d][%d] 失败!" % (chn, index))
+            logging_setup.error("candata", "禁用定时发送 CAN[%d][%d] 失败!" % (chn, index))
             return False
-        # log_setup.info("candata", "即将禁用index:%d" % index) 
+        # logging_setup.info("candata", "即将禁用index:%d" % index) 
         return True
 
     elif msg_type == "canfd":
@@ -742,13 +751,13 @@ def Remove_Auto_Send_By_Index(device_handle, chn, msg_type, index):
 
         ret = zcanlib.ZCAN_SetValue(device_handle, str(chn) + "/auto_send_canfd", byref(auto_canfd))
         if ret != ZCAN_STATUS_OK:
-            log_setup.error("candata", "禁用定时发送 CANFD[%d][%d] 失败!" % (chn, index))
+            logging_setup.error("candata", "禁用定时发送 CANFD[%d][%d] 失败!" % (chn, index))
             return False
-        # log_setup.info("candata", "即将禁用index:%d" % index) 
+        # logging_setup.info("candata", "即将禁用index:%d" % index) 
         return True
 
     else:
-        log_setup.error("candata", "不支持的消息类型: %s" % msg_type)
+        logging_setup.error("candata", "不支持的消息类型: %s" % msg_type)
         return False
 
 # 接口实现：以a频率连发b帧，然后以c频率持续发送————适用于事件周期型信号
@@ -771,7 +780,7 @@ def Send_Can_With_Dynamic_Interval(device_handle, chn_handle, chn, stdorext, id,
     # 导入将要定时持续发送的信息
     Auto_Send_Can_Or_Canfd(device_handle, chn, stdorext, id, msg_type, data, cycle_ms, index, send_count=-1)
     # 打印开始日志
-    log_setup.debug("candata", f"开始以 {event_cycle_ms}ms 频率连续发送 {event_count}帧 0x{id:X}")
+    logging_setup.debug("candata", f"开始以 {event_cycle_ms}ms 频率连续发送 {event_count}帧 0x{id:X}")
     # 手动连发帧
     event_cycle_s = event_cycle_ms/1000 # 单位转换成秒
     for i in range(event_count):
@@ -780,7 +789,7 @@ def Send_Can_With_Dynamic_Interval(device_handle, chn_handle, chn, stdorext, id,
     a = 1-event_cycle_s
     if a > 0:
         time.sleep(a)
-    log_setup.debug("candata", f"连续发送{event_count}帧已完成, 现在开始以 {cycle_ms} ms频率持续发送 0x{id:X}")
+    logging_setup.debug("candata", f"连续发送{event_count}帧已完成, 现在开始以 {cycle_ms} ms频率持续发送 0x{id:X}")
     Enable_Auto_Can_Send(device_handle, chn)
 
 # 通用信号发送接口，根据信号类型自动选择发送方式
@@ -817,11 +826,11 @@ def Send_Can_Signal(
     valid_signal_types = {"EVENT", "CYCLE", "CE"}
 
     if msg_type not in ['can', 'canfd']:
-        log_setup.error("candata", f"不支持的报文类型: {msg_type}")
+        logging_setup.error("candata", f"不支持的报文类型: {msg_type}")
         return None
 
     if signal_type not in valid_signal_types:
-        log_setup.error("candata", f"不支持的信号类型: {signal_type}，仅支持 Event, Cycle, CE")
+        logging_setup.error("candata", f"不支持的信号类型: {signal_type}，仅支持 Event, Cycle, CE")
         return None
 
     # === 解析 cycle_ms 参数 ===
@@ -833,10 +842,10 @@ def Send_Can_Signal(
             try:
                 event_cycle_ms_val, cycle_period_ms = map(int, cycle_ms.split('/'))
             except Exception:
-                log_setup.error("candata", "CE信号的cycle_ms格式错误，应为 '事件间隔/周期' 如 '100/1000'")
+                logging_setup.error("candata", "CE信号的cycle_ms格式错误，应为 '事件间隔/周期' 如 '100/1000'")
                 return None
         else:
-            log_setup.error("candata", "CE信号必须提供 '事件间隔/周期' 形式的字符串，如 '100/1000'")
+            logging_setup.error("candata", "CE信号必须提供 '事件间隔/周期' 形式的字符串，如 '100/1000'")
             return None
 
     elif signal_type == "CYCLE":
@@ -845,7 +854,7 @@ def Send_Can_Signal(
             if cycle_period_ms is None or cycle_period_ms <= 0:
                 raise ValueError
         except Exception:
-            log_setup.error("candata", "Cycle信号的cycle_ms必须为正整数或可转换为正整数的值")
+            logging_setup.error("candata", "Cycle信号的cycle_ms必须为正整数或可转换为正整数的值")
             return None
 
     elif signal_type == "EVENT":
@@ -858,7 +867,7 @@ def Send_Can_Signal(
 
     # === 执行发送逻辑 ===
     if signal_type == "EVENT":
-        log_setup.info("candata", f"在通道 {chn} 开始以 {event_cycle_ms_val} ms间隔连发3帧 0x{id:X} , 已为信号分配 index = {index}")
+        logging_setup.info("candata", f"在通道 {chn} 开始以 {event_cycle_ms_val} ms间隔连发3帧 0x{id:X} , 已为信号分配 index = {index}")
         Send_Can_Or_Canfd(
             chn_handle=chn_handle,
             stdorext=stdorext,
@@ -870,7 +879,7 @@ def Send_Can_Signal(
         )
 
     elif signal_type == "CYCLE":
-        log_setup.info("candata", f"在通道 {chn} 开始以 {cycle_period_ms} ms间隔定时发送 0x{id:X} , 已为信号分配 index = {index}")
+        logging_setup.info("candata", f"在通道 {chn} 开始以 {cycle_period_ms} ms间隔定时发送 0x{id:X} , 已为信号分配 index = {index}")
         Auto_Send_Can_Or_Canfd(
             device_handle=device_handle,
             chn=chn,
@@ -885,7 +894,7 @@ def Send_Can_Signal(
         Enable_Auto_Can_Send(device_handle, chn)
 
     elif signal_type == "CE":
-        log_setup.info("candata", f"事件周期信号: 在通道 {chn} 先以 {event_cycle_ms_val} ms 间隔连发3帧,再以 {cycle_period_ms} ms 周期持续发送 0x{id:X}, 已为信号分配 index={index}")
+        logging_setup.info("candata", f"事件周期信号: 在通道 {chn} 先以 {event_cycle_ms_val} ms 间隔连发3帧,再以 {cycle_period_ms} ms 周期持续发送 0x{id:X}, 已为信号分配 index={index}")
         return Send_Can_With_Dynamic_Interval(
             device_handle=device_handle,
             chn_handle=chn_handle,
@@ -925,7 +934,7 @@ def extract_bits_from_data(data_list: List[int], bit_range: str) -> int:
         # 检查数据长度
         max_data_index = max(start_data_index, end_data_index)
         if max_data_index >= len(data_list):
-            log_setup.warning("bit_parse", f"数据长度不足，无法访问 data[{max_data_index}]")
+            logging_setup.warning("bit_parse", f"数据长度不足，无法访问 data[{max_data_index}]")
             return -1
 
         value = 0
@@ -955,7 +964,7 @@ def extract_bits_from_data(data_list: List[int], bit_range: str) -> int:
         return value
 
     except Exception as e:
-        log_setup.error("bit_parse", f"解析位范围失败: {bit_range}, 错误: {e}")
+        logging_setup.error("bit_parse", f"解析位范围失败: {bit_range}, 错误: {e}")
         return -1
 
 def calculate_bit_length(bit_range: str) -> int:
@@ -981,7 +990,7 @@ def calculate_bit_length(bit_range: str) -> int:
         return max(1, length) if length <= 32 else 32
 
     except Exception as e:
-        log_setup.error("bit_parse", f"计算位长度失败: {bit_range}, 错误: {e}")
+        logging_setup.error("bit_parse", f"计算位长度失败: {bit_range}, 错误: {e}")
         return -1
 
 # 等待并检查 CAN 信号
@@ -1003,7 +1012,7 @@ def wait_for_check_signal_by_bit_enum(
         try:
             can_id_int = int(signal_id, 16)
         except ValueError:
-            log_setup.error("can", f"无效 CAN ID: {signal_id}")
+            logging_setup.error("can", f"无效 CAN ID: {signal_id}")
             return False
     else:
         can_id_int = int(signal_id)
@@ -1020,7 +1029,7 @@ def wait_for_check_signal_by_bit_enum(
             else:
                 expect_sub_id_val = int(sub_id)
         except ValueError:
-            log_setup.error("can", f"无效的 sub_id 格式: {sub_id}，应为 'No' 或 '0x...' 形式")
+            logging_setup.error("can", f"无效的 sub_id 格式: {sub_id}，应为 'No' 或 '0x...' 形式")
             return False
 
     # 计算位长度（日志用）
@@ -1035,7 +1044,7 @@ def wait_for_check_signal_by_bit_enum(
         else:
             start_device_ts = 0  # 没有历史消息，接受所有
 
-    log_setup.info("candata", f"开始等待信号: ID={can_id_hex_str}, 子ID={sub_id}, "
+    logging_setup.info("candata", f"开始等待信号: ID={can_id_hex_str}, 子ID={sub_id}, "
                           f"位域={bit_position}({signal_length}bits), "
                           f"期望值={expected_enum_value}, 通道={channel}, 超时={timeout}s, "
                           f"起始设备时间戳={start_device_ts}")
@@ -1088,7 +1097,7 @@ def wait_for_check_signal_by_bit_enum(
             hex_data = " ".join(f"{b:02X}" for b in data_list)
             sub_id_log = "子ID=No" if sub_id == "No" else f"子ID=0x{expect_sub_id_val:x}"
 
-            log_setup.info("candata", f"✅ 条件满足! ID={can_id_hex_str}, 数据=[{hex_data}], "
+            logging_setup.info("candata", f"✅ 条件满足! ID={can_id_hex_str}, 数据=[{hex_data}], "
                                   f"{sub_id_log}, {bit_position}={actual_value}, "
                                   f"消息时间戳={ts}, 相对延迟={(ts - start_device_ts) / 1000.0:.3f}ms")
             
@@ -1097,7 +1106,7 @@ def wait_for_check_signal_by_bit_enum(
         time.sleep(check_interval)
 
     # ❌ 超时
-    log_setup.warning("candata", f"❌ 等待超时! ID={can_id_hex_str}, 子ID={sub_id}, "
+    logging_setup.warning("candata", f"❌ 等待超时! ID={can_id_hex_str}, 子ID={sub_id}, "
                              f"位={bit_position}, 期望值={expected_enum_value}")
     return False
 

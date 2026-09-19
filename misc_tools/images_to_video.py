@@ -1,6 +1,6 @@
 import os
 import cv2
-from tkinter import *
+from tkinter import Tk, Label, Button
 from tkinter import filedialog, messagebox
 from PIL import Image
 import numpy as np

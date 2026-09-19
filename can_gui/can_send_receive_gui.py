@@ -1,10 +1,8 @@
-import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 import tkinter as tk
 from tkinter import messagebox, ttk
 import threading
-import can_control
+from can_core import device
 import re
 import time
 import xml.etree.ElementTree as ET
@@ -751,9 +749,9 @@ class CANFDGUI:
         return dt.strftime("%Y%m%d_%H%M%S_%f")[:-3]
 
     def _load_platform_resolutions(self):
-        """读取平台分辨率的辅助函数: 从 platfoem_resolution.json 加载平台→分辨率映射。"""
+        """读取平台分辨率的辅助函数: 从 platform_resolution.json 加载平台→分辨率映射。"""
         import json, os
-        json_path = os.path.join(os.path.dirname(__file__), "platfoem_resolution.json")
+        json_path = os.path.join(os.path.dirname(__file__), "platform_resolution.json")
         try:
             with open(json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -1024,8 +1022,8 @@ class CANFDGUI:
 
     def init_device(self):
         """调用初始化函数并保存返回值"""
-        device_handle, channel_handles, receive_threads = can_control.Initialize_Canfd_Device(
-            device_type=can_control.ZCAN_USBCANFD_200U,
+        device_handle, channel_handles, receive_threads = device.Initialize_Canfd_Device(
+            device_type=device.ZCAN_USBCANFD_200U,
             merge_receive=0,
         )
         # 保存返回值，后面关闭时会用到
@@ -1059,7 +1057,7 @@ class CANFDGUI:
     def close_device(self):
         """调用关闭can设备函数,并在完成后恢复 UI 状态"""
         if self.device_handle is not None:
-            can_control.Close_Canfd_Device(self.device_handle, self.channel_handles, self.receive_threads)
+            device.Close_Canfd_Device(self.device_handle, self.channel_handles, self.receive_threads)
 
         # 关闭后清理内部状态
         self.device_handle = None
@@ -1089,7 +1087,7 @@ class CANFDGUI:
                 raise Exception("设备未初始化，无法发送信号！")
             device_handle = self.device_handle         
             channel_handles = self.channel_handles[0]
-            can_control.Send_Can_Signal(
+            device.Send_Can_Signal(
                 device_handle=device_handle,
                 chn_handle=channel_handles,
                 chn=0,
@@ -1120,7 +1118,7 @@ class CANFDGUI:
                 raise Exception("设备未初始化，无法发送信号！")
             device_handle = self.device_handle         
             channel_handles = self.channel_handles[0]
-            can_control.Send_Can_Signal(
+            device.Send_Can_Signal(
                 device_handle=device_handle,
                 chn_handle=channel_handles,
                 chn=0,

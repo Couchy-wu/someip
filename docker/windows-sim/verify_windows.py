@@ -238,7 +238,7 @@ def t_import_all():
         "can_data_tools.testcase_runner", "can_data_tools.find_can_id_from_csv",
         "can_data_tools.find_sub_id",
         "image_testing.icon_manager", "image_testing.image_similarity",
-        "image_testing.test_image_generator", "image_testing.verify_icons",
+        "image_testing.sample_image_generator", "image_testing.verify_icons",
         "misc_tools.gif_creator", "misc_tools.image_batch_rename",
         "misc_tools.images_to_video", "misc_tools.video_roi_crop",
         "camera_tools.camera_preview", "camera_tools.error_image_detection",
@@ -247,6 +247,8 @@ def t_import_all():
         "auto_labeling.auto_detect", "auto_labeling.draw_boxes",
         "auto_labeling.draw_boxes_v2", "auto_labeling.draw_labels",
         "hudcore", "hudcore.can", "hudcore.ui", "hudcore.platform",
+        "hudcore.logging_setup", "can_core", "can_core.driver", "can_core.device",
+        "auto_labeling.preprocessing", "auto_labeling.template_matching",
     ]
     import importlib
     bad = []

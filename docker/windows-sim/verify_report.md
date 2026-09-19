@@ -12,11 +12,11 @@
 | 1 | 1. Windows 运行时环境 | PASS | platform.system()=Windows, sys.platform=win32, Python=3.13.15, arch=AMD64, 64bit=True, exe=python.exe |
 | 2 | 2. hudcore 平台探测（system） | PASS | OS=Windows Python=3.13.15 arch=AMD64 \| exe_suffix='.exe' \| py_status=ok |
 | 3 | 3. 路径层 + 中文路径读写 | PASS | root=Z:\work; 中文写入/读取成功 |
-| 4 | 4. 界面字体与中文渲染字体 | PASS | selected='微软雅黑', 可用字体=0, PIL字体=<_io.BytesIO object at 0x00000000015FEF20> |
+| 4 | 4. 界面字体与中文渲染字体 | PASS | selected='微软雅黑', 可用字体=0, PIL字体=<_io.BytesIO object at 0x00000000015FF010> |
 | 5 | 5. Tk 窗口创建（虚拟显示） | PASS | Tk 8.6 创建并销毁成功, geometry=320x120+0+0 |
 | 6 | 6. Theme 样式 + TextRedirector 重定向 | PASS | Theme 样式数=8, TextRedirector 捕获：'重定向-测试-中文' |
 | 7 | 7. main.py 导入链（不启动 GUI 主循环） | PASS | import main 成功；MainWindow/TextRedirector 可用；导出=3 项 |
-| 8 | 8. 全部界面与工具模块导入 | PASS | 37/37 模块全部导入成功 |
+| 8 | 8. 全部界面与工具模块导入 | PASS | 43/43 模块全部导入成功 |
 | 9 | 9. CAN 驱动库探测与加载（stub DLL） | PASS | lib=Z:\work\drivers\windows\zlgcan.dll, Py_GetVersion()=b'3.13.15 (main, Sep  1 2026, 14:16:48) [MSC v.1944 64 bit (AMD64)]' |
 | 10 | 10. CAN 驱动缺失时的报错友好性 | PASS | 已按 HUD_ZLG_LIB 覆盖路径 |
 | 11 | 11. 外部程序探测不抛异常 | PASS | ffmpeg=命中; office=未找到; editor=未找到; terminal=未找到; where_python=命中 |

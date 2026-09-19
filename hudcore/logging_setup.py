@@ -9,7 +9,16 @@ loggers = {}
 logger_configs = {}
 
 
-def setup_logger(logger_name, log_dir="./logs", log_prefix=None, level=logging.INFO, clear_old=False, use_timestamp=True, show_prefix=True):
+def _default_log_dir() -> str:
+    """默认日志目录：优先用 hudcore 统一路径（<项目根>/logs），避免依赖当前工作目录。"""
+    try:
+        from .platform.paths import paths
+        return str(paths.logs_dir)
+    except Exception:                       # 独立拷贝本文件使用时的回退
+        return "./logs"
+
+
+def setup_logger(logger_name, log_dir=None, log_prefix=None, level=logging.INFO, clear_old=False, use_timestamp=True, show_prefix=True):
     """
     创建或获取一个独立的 logger，生成独立的日志文件
     但：日志文件和处理器延迟到第一条日志写入时才创建
@@ -22,6 +31,7 @@ def setup_logger(logger_name, log_dir="./logs", log_prefix=None, level=logging.I
     :param show_prefix: 是否显示日志前缀（时间戳和日志级别）。False 表示只输出消息内容
     :return: 配置好的 logger 实例
     """
+    log_dir = log_dir or _default_log_dir()      # 默认写入 <项目根>/logs
     global loggers, logger_configs
 
     if logger_name in loggers:

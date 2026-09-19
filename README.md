@@ -54,10 +54,11 @@ HudAutoTest/
 ├── hudcore/                      # ★ 核心公共层（平台抽象/通用能力）
 │   ├── platform/                 #   OS 探测、路径、外部程序、字体
 │   ├── can/                      #   CAN 驱动库探测与加载（DLL / .so）
+│   ├── logging_setup.py          #   日志初始化（原根目录 log_setup.py）
 │   └── ui/                       #   主题样式、stdout→Text 重定向
-├── can_control.py                # ZLG CAN 通信（设备初始化/收发线程/信号解析）
-├── zlgcan_driver.py              # ZLG 驱动 Python 绑定（加载层已跨平台）
-├── log_setup.py                  # 日志初始化（原 mylog.py）
+├── can_core/                     # ★ CAN 设备基础设施（驱动绑定 + 设备/通道收发）
+│   ├── driver.py                 #   ZLG 驱动 Python 绑定（原 zlgcan_driver.py）
+│   └── device.py                 #   设备打开/关闭、周期发送、接收线程、信号级收发
 ├── yolo_train.py                 # YOLO 微调/验证脚本（原 train_freeze.py）
 ├── ocr_icon_test.py              # OCR + YOLO 图标识别测试（原 image_test.py）
 ├── gui_handlers/                 # 各功能 GUI 处理器（用例管理/图像/视频/矩阵转换…）
@@ -66,7 +67,7 @@ HudAutoTest/
 ├── image_testing/                # 图标测试（相似度/图标管理/测试图生成）
 ├── camera_tools/                 # 相机工具（预览/标定/增强/稳定性）
 ├── misc_tools/                   # 小工具（GIF/改名/图片转视频/ROI）
-├── auto_labeling/                # 标注辅助
+├── auto_labeling/                # 标注辅助（preprocessing + template_matching/）
 ├── drivers/{windows,linux}/      # CAN 驱动库（按平台）
 ├── bin/{windows,linux}/          # 外部可执行（ffmpeg 等，按平台）
 ├── vendor/ffmpeg/                # 随项目分发的 ffmpeg 构建
@@ -101,7 +102,7 @@ HudAutoTest/
 | 模块 | 说明 |
 |------|------|
 | 测试用例管理 | 上传/删除/查看用例，解析日志查看（上位机主界面） |
-| CAN 测试 | ZLG USBCANFD 设备收发、周期发送、信号级解析与断言（`can_control.py` + `can_gui/can_send_receive_gui.py`） |
+| CAN 测试 | ZLG USBCANFD 设备收发、周期发送、信号级解析与断言（`can_core/device.py` + `can_gui/can_send_receive_gui.py`） |
 | 图像/视频 | 打开图片、视频抽帧（ffmpeg）、图片序列播放、ROI 提取 |
 | 图标测试 | YOLO + OCR 的图像识别与相似度校验（`image_testing/`） |
 | 工具集 | 信号矩阵转 CSV、CAN 数据生成器（binhex）、GIF/改名/转视频 |
