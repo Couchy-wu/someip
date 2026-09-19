@@ -3,8 +3,17 @@ import numpy as np
 import json
 from pathlib import Path
 from threading import Thread, Timer
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+try:                                     # 文件监视（可选依赖）
+    from watchdog.observers import Observer
+    from watchdog.events import FileSystemEventHandler
+    WATCHDOG_AVAILABLE = True
+except ImportError:                      # pragma: no cover - 环境相关
+    Observer = None                      # type: ignore[assignment]
+
+    class FileSystemEventHandler:        # 占位基类，保证模块可导入
+        """watchdog 缺失时的占位实现：监视功能自动禁用。"""
+
+    WATCHDOG_AVAILABLE = False
 import uuid
 import threading
 

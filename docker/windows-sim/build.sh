@@ -11,10 +11,15 @@
 #       容器内 Wine 直接运行 Windows x64 的 CPython，无需嵌套模拟。
 # =====================================================================
 set -euo pipefail
+
+# 默认使用传统 builder（本机 Docker 未安装 buildx 组件时 BuildKit 不可用）；
+# 若环境已装 buildx，可 DOCKER_BUILDKIT=1 ./build.sh 获得更快的构建缓存。
+export DOCKER_BUILDKIT="${DOCKER_BUILDKIT:-0}"
 cd "$(dirname "$0")"
 
 IMAGE="${IMAGE:-hudautotest-win:py313}"
-PY_VER="${PY_VER:-3.13.7}"
+PY_VER="${PY_VER:-3.13.15}"
+PY_SOURCE="${PY_SOURCE:-standalone}"
 PIP_INDEX="${PIP_INDEX:-https://mirrors.aliyun.com/pypi/simple/}"
 APT_MIRROR="${APT_MIRROR:-http://mirrors.aliyun.com/ubuntu}"
 WITH_MINGW="${WITH_MINGW:-0}"
@@ -27,6 +32,7 @@ docker build \
     --build-arg "PIP_INDEX=${PIP_INDEX}" \
     --build-arg "APT_MIRROR=${APT_MIRROR}" \
     --build-arg "WITH_MINGW=${WITH_MINGW}" \
+    --build-arg "PY_SOURCE=${PY_SOURCE}" \
     -f Dockerfile \
     -t "${IMAGE}" \
     "$@" \

@@ -28,7 +28,10 @@ from functools import partial
 import tkinter as tk            # 标准库自带
 
 import threading, queue
-from auto_detect import load_templates, detect_multi
+try:                                     # 包导入优先
+    from .auto_detect import load_templates, detect_multi
+except ImportError:                      # 脚本模式回退
+    from auto_detect import load_templates, detect_multi
 # -------------------------------------------------
 # 1️⃣ 参数 & 环境检查
 # -------------------------------------------------
@@ -43,12 +46,29 @@ parser.add_argument('--max_class',   type=int, default=79,
                     help='最大类别 ID（含），默认 0~79（80 类）')
 parser.add_argument('--yaml_path',   type=str, default='',
                     help='YOLO‑style yaml 文件路径（默认 data_root/data.yaml）')
-args = parser.parse_args()
-DATA_ROOT    = args.data_root
-SUBSET       = args.subset.strip()
-DEFAULT_CLASS = args.default_class
-MAX_CLASS    = args.max_class
-YAML_PATH    = args.yaml_path or os.path.join(DATA_ROOT, 'data.yaml')
+# 注意：不要在模块级调用 parser.parse_args()。
+# 早期版本在导入时即解析命令行，导致 `import` 本模块时若携带其它参数
+# （主程序 / 测试框架的命令行）就会以 SystemExit(2) 终止进程。
+# 现在：导入无副作用；作为脚本运行或显式调用 configure() 时才解析。
+args = None
+
+
+def configure(argv=None):
+    """解析命令行参数并刷新模块级配置（argv=None 时取 sys.argv[1:]）。"""
+    global args, DATA_ROOT, SUBSET, DEFAULT_CLASS, MAX_CLASS, YAML_PATH
+    args = parser.parse_args(argv)
+    DATA_ROOT = args.data_root
+    SUBSET = args.subset.strip()
+    DEFAULT_CLASS = args.default_class
+    MAX_CLASS = args.max_class
+    YAML_PATH = args.yaml_path or os.path.join(DATA_ROOT, "data.yaml")
+    return args
+# 模块级默认值（导入无副作用）；脚本运行或调用 configure() 时由命令行覆盖
+DATA_ROOT     = 'dataset'
+SUBSET        = ''
+DEFAULT_CLASS = 0
+MAX_CLASS     = 79
+YAML_PATH     = os.path.join(DATA_ROOT, 'data.yaml')
 
 # -------------------------------------------------
 # 2️⃣ 小工具（仅使用 os / os.path）
@@ -723,4 +743,5 @@ def main():
     print('\n✅ 所有图片已完成标注！')
 
 if __name__ == '__main__':
+    configure()          # 脚本模式：解析命令行
     main()

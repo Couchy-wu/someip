@@ -8,12 +8,22 @@ import re
 # 找子ID的副产物，与测试无关
 
 
-# 导入你已有的模块（确保 find_can_id_from_csv.py 在同一目录或可导入路径）
-try:
-    from find_can_id_from_csv import create_can_data_by_signal
-except ImportError as e:
-    messagebox.showerror("导入错误", f"无法导入 find_can_id_from_csv 模块：{e}")
-    raise e
+# 导入同目录的 find_can_id_from_csv。
+# 注意：早期版本在导入失败时直接 `messagebox.showerror` 并 raise —— 这会让
+# `import can_data_tools.find_sub_id` 在无人值守环境（自动化测试/无显示）
+# 直接弹框卡死。现在只记录导入状态，真正使用功能时再给出明确错误。
+try:                                     # 包导入优先
+    from .find_can_id_from_csv import create_can_data_by_signal
+    _IMPORT_ERROR = None
+except ImportError as _e:                # 脚本模式或依赖缺失
+    try:
+        from find_can_id_from_csv import create_can_data_by_signal
+        _IMPORT_ERROR = None
+    except ImportError as _e2:
+        create_can_data_by_signal = None
+        _IMPORT_ERROR = _e2
+        print(f"[警告] find_sub_id: 无法导入 find_can_id_from_csv（{_e2}），"
+              f"相关功能不可用")
 
 class CANDataGeneratorApp:
     def __init__(self, root):

@@ -125,10 +125,23 @@ def t_font_tk():
 section("platform.executables")
 @test("executables 查找解释器")
 def t_find_exe():
+    """验证 find_executable 能在 PATH / 平台目录中找到解释器。
+
+    健壮性说明：容器或精简安装环境中，Windows 版 Python 可能没有写入 PATH
+    （例如解压式安装），此时"找不到 python"并不代表功能异常。因此先按常规
+    查找，再退化为"查找当前正在运行的解释器所在目录"，两者都失败才判失败。
+    """
+    import sys
+    from pathlib import Path
     from hudcore.platform.executables import find_executable
-    p = find_executable(["python3", "python", "py"])
-    assert p, "连 python 解释器都找不到（异常）"
-    return str(p)
+
+    found = find_executable(["python3", "python", "py"])
+    if found:
+        return str(found)
+    exe = Path(sys.executable)
+    found = find_executable([exe.stem], extra_dirs=[str(exe.parent)])
+    assert found, f"在当前解释器目录 {exe.parent} 中也找不到 {exe.name}"
+    return f"{found}（PATH 中未注册，按当前解释器目录回退）"
 
 
 
@@ -238,12 +251,20 @@ def t_redirector():
     except Exception as e:
         raise _Skip(f"无显示环境: {type(e).__name__}")
     try:
+        import time
         text = tk.Text(root)
         r = TextRedirector(text, root, poll_interval=10)
         r.write("hello\n")
-        root.update()          # 触发 after 轮询
-        root.update()
-        content = text.get("1.0", tk.END)
+        # TextRedirector 通过 root.after(poll_interval) 轮询队列把内容写入 Text，
+        # 单次 update() 未必覆盖到一个轮询周期（不同平台/负载下时序不同），
+        # 因此循环驱动事件循环直到内容出现或超时。
+        content = ""
+        for _ in range(50):
+            root.update()
+            content = text.get("1.0", tk.END)
+            if "hello" in content:
+                break
+            time.sleep(0.02)
         r.stop_polling()
         assert "hello" in content, f"未写入: {content!r}"
         return "stdout 重定向写入 Text 成功"

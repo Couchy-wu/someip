@@ -111,3 +111,9 @@ ultralytics==8.3.217
 ultralytics-thop==2.0.17
 urllib3==2.5.0
 wcwidth==0.2.14
+
+# ---- 运行期必需的纯 Python 依赖（曾被漏列：缺失会导致主界面导入失败）----
+ffmpeg-python==0.2.0
+pyperclip==1.11.0
+watchdog==6.0.0
+natsort==8.4.0

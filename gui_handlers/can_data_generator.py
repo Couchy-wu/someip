@@ -1,7 +1,10 @@
 # gui_handlers/can_data_generator.py
 import tkinter as tk
 from tkinter import ttk, messagebox  
-import pyperclip
+try:
+    import pyperclip                     # 剪贴板复制（可选依赖，缺失时仅该按钮不可用）
+except ImportError:                      # pragma: no cover - 环境相关
+    pyperclip = None
 
 class BinHexRow(ttk.Frame):
     """
@@ -359,6 +362,14 @@ class BinHexConverter:
     def copy_data(self):
         """将 data 的内容复制到系统剪贴板（持久化），并弹出提示"""
         data_content = self.data_var.get()
+        if pyperclip is None:
+            messagebox.showwarning(
+                title="复制不可用",
+                message="缺少 pyperclip 库，无法访问系统剪贴板。\n"
+                        "请执行：pip install pyperclip",
+                parent=self.window
+            )
+            return
         try:
             pyperclip.copy(data_content)
             messagebox.showinfo(

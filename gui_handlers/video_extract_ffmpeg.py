@@ -18,7 +18,10 @@ import logging
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog
-import ffmpeg               # <-- ffmpeg‑python
+try:
+    import ffmpeg            # <-- ffmpeg-python（可选依赖：缺失时本功能的抽帧不可用）
+except ImportError:          # pragma: no cover - 环境相关
+    ffmpeg = None
 import cv2
 from datetime import datetime
 from gui_handlers.progress_bar import ProgressBar
@@ -200,6 +203,10 @@ class VideoProcessor:
                 input_kwargs["hwaccel"] = "cuda"
                 input_kwargs["hwaccel_output_format"] = "cuda"
 
+            if ffmpeg is None:
+                raise RuntimeError(
+                    "缺少 ffmpeg-python 库，无法执行抽帧。\n"
+                    "请执行：pip install ffmpeg-python")
             stream = ffmpeg.input(video_path, **input_kwargs)
             if fps is not None:
                 stream = stream.filter('fps', fps=fps)
@@ -251,8 +258,9 @@ class VideoProcessor:
             )
             logging.info("抽帧完成 → %s", out_dir)
 
-        except ffmpeg.Error as e:
-            err_msg = e.stderr.decode(errors='ignore')
+        except (ffmpeg.Error if ffmpeg else RuntimeError) as e:
+            err_msg = getattr(e, "stderr", b"")
+            err_msg = err_msg.decode(errors="ignore") if isinstance(err_msg, bytes) else str(e)
             logging.error("ffmpeg 错误: %s", err_msg)
             self.root.after(0,
                             messagebox.showerror,

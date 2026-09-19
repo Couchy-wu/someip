@@ -16,7 +16,10 @@ from PIL import Image
 # --------------------------------------------------------------
 # 该函数在 image_testing/image_similarity.py 中实现，
 # 用来比较裁剪后图像的 dHash 与预先保存的 hash。
-from image_similarity import compare_with_precomputed_hash  # noqa: E402
+try:                                     # 包导入优先
+    from .image_similarity import compare_with_precomputed_hash  # noqa: E402
+except ImportError:                      # 脚本模式回退
+    from image_similarity import compare_with_precomputed_hash  # noqa: E402
 
 
 def _load_json(json_path: str) -> Dict[str, Any]:

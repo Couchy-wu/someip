@@ -54,26 +54,35 @@ def select_folder():
             else:
                 print("文件名包含非法字符，请重新输入。")
 
-# 创建GUI窗口
-root = tk.Tk()
-root.title("图片转GIF工具")
-root.geometry("400x200")
+def main():
+    """启动图片转 GIF 小工具（GUI）。
 
-# 添加按钮
-select_button = tk.Button(
-    root,
-    text="选择图片文件夹并生成GIF",
-    command=select_folder,
-    font=("Arial", 12),
-    width=30,
-    bg="#4A90E2",              # 按钮背景色
-    fg="white" ,               # 按钮文字颜色    
-    relief=tk.FLAT,            # 使按钮看起来更平滑
-    bd=0,                      # 移除默认边框
-    highlightthickness=2,      # 增加点击/聚焦效果
-    activebackground="#005fa3" # 点击时的背景色
-)
-select_button.pack(pady=40)
+    注意：GUI 构造必须放在函数里 —— 早期版本在模块级直接 `tk.Tk()` 并
+    `mainloop()`，导致 `import misc_tools.gif_creator` 会永久阻塞
+    （自动化测试/被其他模块引用时表现为"卡死"）。
+    """
+    root = tk.Tk()
+    root.title("图片转GIF工具")
+    root.geometry("400x200")
 
-# 启动GUI主循环
-root.mainloop()
+    # 添加按钮
+    select_button = tk.Button(
+        root,
+        text="选择图片文件夹并生成GIF",
+        command=select_folder,
+        font=("Arial", 12),
+        width=30,
+        bg="#4A90E2",              # 按钮背景色
+        fg="white" ,               # 按钮文字颜色    
+        relief=tk.FLAT,            # 使按钮看起来更平滑
+        bd=0,                      # 移除默认边框
+        highlightthickness=2,      # 增加点击/聚焦效果
+        activebackground="#005fa3" # 点击时的背景色
+    )
+    select_button.pack(pady=40)
+
+    # 启动GUI主循环
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()

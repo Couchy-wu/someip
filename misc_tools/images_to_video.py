@@ -6,10 +6,14 @@ from PIL import Image
 import numpy as np
 from natsort import natsorted  # 使用自然排序
 
-# 全局变量：保存选中的文件夹路径
+# 模块级状态（回调函数需要访问；导入本模块不会创建任何窗口）
 image_folder = ""
 output_video = "output.mp4"
 fps = 30  # 可调节帧率
+
+# GUI 控件（由 main() 创建；模块级声明便于回调引用）
+root = None
+label_folder = None
 
 # 选择文件夹
 def select_folder():
@@ -76,26 +80,38 @@ def convert_to_mp4():
         messagebox.showinfo("成功", f"视频已保存为: {os.path.abspath(output_video)}")
 
 # 创建GUI界面
-root = Tk()
-root.title("图片转MP4工具（正确排序版）")
-root.geometry("500x300")
+def main():
+    """启动 GUI 工具。
 
-# 标题
-Label(root, text="图片转MP4工具", font=("微软雅黑", 16)).pack(pady=10)
+    注意：GUI 构造与 mainloop 必须在函数内、并由 __main__ 守卫调用 ——
+    早期版本写在模块级，会让 `import` 本模块永久阻塞（自动化测试
+    或被其它模块引用时表现为卡死）。
+    """
+    global root, label_folder
+    root = Tk()
+    root.title("图片转MP4工具（正确排序版）")
+    root.geometry("500x300")
 
-# 上传按钮
-Button(root, text="上传文件夹", width=20, height=2, command=select_folder).pack(pady=10)
+    # 标题
+    Label(root, text="图片转MP4工具", font=("微软雅黑", 16)).pack(pady=10)
 
-# 显示路径
-label_folder = Label(root, text="未选择文件夹", fg="gray")
-label_folder.pack(pady=5)
+    # 上传按钮
+    Button(root, text="上传文件夹", width=20, height=2, command=select_folder).pack(pady=10)
 
-# 转换按钮
-Button(root, text="转换为MP4", width=20, height=2, bg="green", fg="white", command=convert_to_mp4).pack(pady=20)
+    # 显示路径
+    label_folder = Label(root, text="未选择文件夹", fg="gray")
+    label_folder.pack(pady=5)
 
-# 说明
-Label(root, text="支持格式: .png, .jpg, .jpeg, .bmp, .tiff\n按文件名数字大小排序（1,2,3...）\n输出视频: output.mp4", 
-      fg="blue").pack(pady=5)
+    # 转换按钮
+    Button(root, text="转换为MP4", width=20, height=2, bg="green", fg="white", command=convert_to_mp4).pack(pady=20)
 
-# 运行主循环
-root.mainloop()
+    # 说明
+    Label(root, text="支持格式: .png, .jpg, .jpeg, .bmp, .tiff\n按文件名数字大小排序（1,2,3...）\n输出视频: output.mp4", 
+          fg="blue").pack(pady=5)
+
+    # 运行主循环
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()

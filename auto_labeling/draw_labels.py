@@ -16,11 +16,26 @@ parser.add_argument('--new_root',    type=str, default='new_labels',
                     help='新增标注根目录（同名 txt）')
 parser.add_argument('--subset',      type=str, default='',
                     help='子集名称（train / val / test），空字符串表示全部')
-args = parser.parse_args()
+# 注意：不要在模块级调用 parser.parse_args()。
+# 早期版本在导入时即解析命令行，导致 `import` 本模块时若携带其它参数
+# （主程序 / 测试框架的命令行）就会以 SystemExit(2) 终止进程。
+# 现在：导入无副作用；作为脚本运行或显式调用 configure() 时才解析。
+args = None
 
-DATA_ROOT = args.data_root
-NEW_ROOT  = args.new_root
-SUBSET    = args.subset.strip()   # '' 表示全部子集
+
+def configure(argv=None):
+    """解析命令行参数并刷新模块级配置（argv=None 时取 sys.argv[1:]）。"""
+    global args, DATA_ROOT, NEW_ROOT, SUBSET
+    args = parser.parse_args(argv)
+    DATA_ROOT = args.data_root
+    NEW_ROOT = args.new_root
+    SUBSET = args.subset.strip()
+    return args
+
+# 模块级默认值（导入无副作用）；脚本运行或调用 configure() 时由命令行覆盖
+DATA_ROOT = 'dataset'
+NEW_ROOT  = 'new_labels'
+SUBSET    = ''                    # '' 表示全部子集
 
 # -------------------------------------------------
 # 2️⃣ 辅助函数（全部基于 os / os.path）
@@ -139,4 +154,5 @@ def glob_recursive(pattern):
 # 入口
 # -------------------------------------------------
 if __name__ == '__main__':
+    configure()          # 脚本模式：解析命令行
     main()

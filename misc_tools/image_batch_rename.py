@@ -65,12 +65,22 @@ def rename_images():
     messagebox.showinfo("完成", "图片重命名完成！")
 
 # 创建GUI窗口
-root = tk.Tk()
-root.title("图片重命名工具")
-root.geometry("400x100")
+def main():
+    """启动 GUI 工具。
 
-# 添加选择文件夹按钮
-select_button = tk.Button(root, text="选择文件夹", command=rename_images)
-select_button.pack(pady=20)
+    注意：GUI 构造与 mainloop 必须在函数内、并由 __main__ 守卫调用 ——
+    早期版本写在模块级，会让 `import` 本模块永久阻塞（自动化测试
+    或被其它模块引用时表现为卡死）。
+    """
+    root = tk.Tk()
+    root.title("图片重命名工具")
+    root.geometry("400x100")
 
-root.mainloop()
+    # 添加选择文件夹按钮
+    select_button = tk.Button(root, text="选择文件夹", command=rename_images)
+    select_button.pack(pady=20)
+
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()

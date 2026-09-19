@@ -4,7 +4,10 @@ import json
 import tkinter as tk
 from tkinter import ttk, messagebox
 from PIL import Image, ImageTk
-from image_similarity import get_image_hash
+try:                                     # 作为包导入（python -m / import image_testing.icon_manager）
+    from .image_similarity import get_image_hash
+except ImportError:                      # 直接运行本文件（脚本模式，目录已在 sys.path）
+    from image_similarity import get_image_hash
 import random
 
 # ========================================

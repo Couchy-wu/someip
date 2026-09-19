@@ -28,7 +28,11 @@ fi
 echo "== 镜像: ${IMAGE} =="
 echo "== 项目: ${PROJECT} → 容器 /work（Wine: Z:\\work）=="
 
-exec docker run --rm -it \
+# 仅在交互终端下附加 -it（CI / 后台执行时没有 TTY，加了会报错）
+TTY_FLAG=""
+if [ -t 0 ] && [ -t 1 ]; then TTY_FLAG="-it"; fi
+
+exec docker run --rm ${TTY_FLAG} \
     --platform linux/amd64 \
     -v "${PROJECT}:/work" \
     -w /work \

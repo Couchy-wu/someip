@@ -17,19 +17,49 @@
 # =====================================================================
 set -uo pipefail
 
-WINPY="C:\\Program Files\\Python313\\python.exe"
-WINPY_UNIX="${WINEPREFIX}/drive_c/Program Files/Python313/python.exe"
+# 说明：本项目用 python-build-standalone 的 Windows 构建（解压即用）安装到
+#       C:\Python313（而非安装器的 "C:\Program Files\Python313"）。
+WINPY="C:\\Python313\\python.exe"
+WINPY_UNIX="${WINEPREFIX}/drive_c/Python313/python.exe"
 PROJECT_DIR="${PROJECT_DIR:-/work}"
 STUB_SRC="/opt/stub/zlgcan.dll"
 STUB_DST="${PROJECT_DIR}/drivers/windows/zlgcan.dll"
 
 log() { printf '\n\033[1;36m=== %s ===\033[0m\n' "$*"; }
 
+# 加载原生 UCRT 的 DLL 覆盖（镜像构建时生成）：
+# 缺它时 numpy/pandas/opencv 等 MSVC 构建的扩展会因 Wine 内置 UCRT 缺函数而崩溃。
+if [ -f /opt/ucrt_overrides.env ]; then
+    # shellcheck disable=SC1091
+    . /opt/ucrt_overrides.env
+    echo "[准备] 已加载原生 UCRT 覆盖（$(printf '%s' "${WINEDLLOVERRIDES}" | tr ';' '\n' | wc -l) 项）"
+fi
+
 # Windows Python 是否就绪
 have_winpy() { [ -f "${WINPY_UNIX}" ]; }
 
 # 统一用 xvfb-run 提供虚拟显示（Tk 需要；-a 自动挑选空闲 display）
-winrun() { xvfb-run -a --server-args="-screen 0 1280x800x24" wine "$@"; }
+# 说明：Windows 程序在 Wine + 模拟层下较慢，且个别调用可能阻塞，因此：
+#   · 所有 wine 调用都套 timeout（默认 900s）；
+#   · 验证套件的单项超时放宽到 180s（HUD_VERIFY_TIMEOUT）。
+export HUD_VERIFY_TIMEOUT="${HUD_VERIFY_TIMEOUT:-180}"
+WINE_TIMEOUT="${WINE_TIMEOUT:-900}"
+DISPLAY_NUM="${DISPLAY_NUM:-:99}"
+
+# 自起 Xvfb（不用 xvfb-run：实测在本环境的模拟层下会自动选号卡住）
+ensure_display() {
+    export DISPLAY="${DISPLAY_NUM}"
+    if [ -S "/tmp/.X11-unix/X${DISPLAY_NUM#:}" ]; then return 0; fi
+    rm -f "/tmp/.X${DISPLAY_NUM#:}-lock" 2>/dev/null || true
+    Xvfb "${DISPLAY_NUM}" -screen 0 1280x800x24 >/tmp/xvfb.log 2>&1 &
+    for _ in $(seq 1 30); do
+        [ -S "/tmp/.X11-unix/X${DISPLAY_NUM#:}" ] && return 0
+        sleep 0.5
+    done
+    echo "[警告] Xvfb 启动超时（GUI 相关项可能失败）" >&2
+}
+
+winrun() { ensure_display; timeout "${WINE_TIMEOUT}" wine "$@" </dev/null; }
 
 prepare() {
     if ! have_winpy; then

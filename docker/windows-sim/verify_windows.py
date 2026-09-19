@@ -29,6 +29,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import traceback
 from pathlib import Path
 
@@ -43,16 +44,42 @@ def record(name: str, status: str, detail: str = "") -> None:
     print(f"{icon} {name}" + (f"  — {detail}" if detail else ""), flush=True)
 
 
+# 单项超时（秒）：Windows 程序在 Wine / 无显示环境里可能挂起（例如 Tk 阻塞），
+# 因此每项验证都在独立线程中执行，超时即判 FAIL，保证整套测试不会卡死。
+ITEM_TIMEOUT = int(os.environ.get("HUD_VERIFY_TIMEOUT", "120"))
+
+
 def test(name: str):
-    """装饰器：把函数结果登记到 RESULTS（抛异常 → FAIL）。"""
+    """装饰器：在线程中执行函数，带超时；异常 → FAIL。"""
     def deco(fn):
         def wrapper():
-            try:
-                status, detail = fn()
-                record(name, status, detail)
-            except Exception as exc:
+            box: dict = {}
+
+            def run():
+                try:
+                    box["result"] = fn()
+                except BaseException as exc:        # noqa: BLE001
+                    # 必须捕获 BaseException：被验证的模块可能在导入期调用
+                    # sys.exit()（argparse 解析到外部参数时），那是 SystemExit，
+                    # 属于 BaseException 而非 Exception，漏捕会让整个用例"无返回值"。
+                    box["error"] = exc
+                    box["tb"] = traceback.format_exc()
+
+            th = threading.Thread(target=run, daemon=True,
+                                  name=f"verify-{fn.__name__}")
+            th.start()
+            th.join(ITEM_TIMEOUT)
+            if th.is_alive():
+                record(name, "FAIL", f"超时（>{ITEM_TIMEOUT}s）未返回，可能阻塞在 "
+                                     f"GUI/外部程序调用；已跳过并继续后续验证")
+                return
+            if "error" in box:
+                exc = box["error"]
                 record(name, "FAIL", f"{type(exc).__name__}: {exc}")
-                traceback.print_exc()
+                print(box.get("tb", ""), flush=True)
+                return
+            status, detail = box.get("result", ("FAIL", "无返回值"))
+            record(name, status, detail)
         wrapper.__name__ = fn.__name__
         return wrapper
     return deco
@@ -161,15 +188,26 @@ def t_theme_redirect():
     import tkinter as tk
     from hudcore.ui import TextRedirector, Theme
     root = tk.Tk()
-    theme_ok = 0
-    for w in ("button", "label", "entry", "treeview", "notebook"):
-        if hasattr(Theme, w):
-            theme_ok += 1
+    # Theme 暴露的是"样式工厂"（primary_button / label_style / log_text_style …），
+    # 因此统计可调用的样式方法数量，而不是固定属性名。
+    factories = [n for n in dir(Theme)
+                 if not n.startswith("_")
+                 and (n.endswith(("_button", "_style")) or n.startswith("font"))]
+    theme_ok = len(factories)
+    assert theme_ok >= 3, f"Theme 样式工厂过少: {factories}"
     txt = tk.Text(root)
-    rd = TextRedirector(txt)
+    rd = TextRedirector(txt, root)          # 签名: (widget, root, poll_interval=50)
     sys.stdout = rd
     print("重定向-测试-中文")
     sys.stdout = sys.__stdout__
+    # TextRedirector 通过 root.after 轮询队列，需要驱动一次事件循环
+    for _ in range(10):
+        root.update()
+        root.after(60)
+        if "重定向-测试-中文" in txt.get("1.0", "end"):
+            break
+        import time
+        time.sleep(0.06)
     content = txt.get("1.0", "end").strip()
     root.destroy()
     assert "重定向-测试-中文" in content, f"Text 内容={content!r}"

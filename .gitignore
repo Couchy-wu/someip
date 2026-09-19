@@ -10,3 +10,8 @@ drivers/*/*.dll
 # macOS / 编辑器
 .DS_Store
 .vscode/
+
+# 运行时产物
+debug.log
+*.log
+!logs/.gitkeep
