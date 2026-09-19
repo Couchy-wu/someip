@@ -27,6 +27,19 @@ STUB_DST="${PROJECT_DIR}/drivers/windows/zlgcan.dll"
 
 log() { printf '\n\033[1;36m=== %s ===\033[0m\n' "$*"; }
 
+STUB_CREATED=""          # 记录"本次运行是否由我们创建了桩库文件"
+
+# 退出清理：桩库只是验证用的替身（本项目 drivers/windows/ 下的 zlgcan.dll 会被
+# hudcore 当作真实驱动加载），因此除显式 KEEP_STUB=1 外，运行结束即删除，
+# 避免把"假驱动"留在使用者的工作副本里造成误解。
+cleanup() {
+    if [ -n "${STUB_CREATED}" ] && [ "${KEEP_STUB:-0}" != "1" ] && [ -f "${STUB_DST}" ]; then
+        rm -f "${STUB_DST}"
+        echo "[清理] 已移除验证用桩库: ${STUB_DST}（保留请设置 KEEP_STUB=1）"
+    fi
+}
+trap cleanup EXIT
+
 # 加载原生 UCRT 的 DLL 覆盖（镜像构建时生成）：
 # 缺它时 numpy/pandas/opencv 等 MSVC 构建的扩展会因 Wine 内置 UCRT 缺函数而崩溃。
 if [ -f /opt/ucrt_overrides.env ]; then
@@ -72,11 +85,13 @@ prepare() {
     #   · 镜像未编译（无 MinGW）时，用 Windows Python 自带的 python313.dll 充当：
     #     同样走「探测 → WinDLL 加载 → 调用导出函数」全链路，只是导出名不同
     mkdir -p "$(dirname "${STUB_DST}")"
-    if [ -f "${STUB_SRC}" ]; then
-        cp -f "${STUB_SRC}" "${STUB_DST}"
+    if [ -f "${STUB_DST}" ]; then
+        echo "[准备] 复用已有 ${STUB_DST}（运行结束不会删除非本次创建的文件）"
+    elif [ -f "${STUB_SRC}" ]; then
+        cp -f "${STUB_SRC}" "${STUB_DST}"; STUB_CREATED=1
         echo "[准备] CAN 桩库: MinGW 编译版 zlgcan.dll"
     elif [ -f "${WINPY_UNIX%/python.exe}/python313.dll" ]; then
-        cp -f "${WINPY_UNIX%/python.exe}/python313.dll" "${STUB_DST}"
+        cp -f "${WINPY_UNIX%/python.exe}/python313.dll" "${STUB_DST}"; STUB_CREATED=1
         echo "[准备] CAN 桩库: 回退为 python313.dll（导出 Py_GetVersion，用于验证加载链路）"
     else
         echo "[准备] 未找到可充当桩库的 DLL，第 9 项将 SKIP"
