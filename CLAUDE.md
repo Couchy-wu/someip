@@ -111,6 +111,14 @@ python -m pytest tests -q        # 单元测试 + 架构规则守卫（需 pip i
 ./run.sh --check                # Linux 一键自检
 ```
 
+### SOME/IP 回放（someip_core / someip_gui）
+
+- 业务：`someip_core/`（models 定义表 / api ctypes 绑定 / pcap_info 解析 / config / replay 控制器），
+  **不依赖界面**；库探测在 `hudcore/someip/backend.py`（环境变量 → `drivers/someip/<平台>/` → 系统路径）
+- 界面：`someip_gui/`（独立窗口；左侧配置、右侧回放/发送/日志；字段表由 ctypes 结构体自动生成）
+- 约定：库**惰性加载**（不在 import 时 dlopen）；Windows DLL 暂缺时窗口照常打开、动作置灰并给提示
+- 文档：`docs/SOMEIP_REPLAY.md`（含实测结果与排障）
+
 ### 单元测试与架构规则守卫
 
 `tests/` 下的 pytest 用例除了核心行为（位工具/CAN 状态与编码/日志解析/平台路径），
@@ -164,6 +172,7 @@ cd docker/windows-sim && ./build.sh && ./run_verify.sh
 
 ### 文档
 
+- `docs/SOMEIP_REPLAY.md` — SOME/IP 回放（界面布局、库部署、实测与排障）
 - `docs/STRUCTURE.md` — 项目结构说明（分层、依赖方向、设计约定、量化对比）
 - `docs/PLATFORM_GUIDE.md` — 平台化改造说明与扩展指南
 - `docs/UBUNTU_SETUP.md` — Ubuntu 22.04 部署（含 ZLG Linux 驱动安装）

@@ -32,6 +32,7 @@ from gui_handlers.image_open import ImageHandler
 from gui_handlers.video_extract_frames import VideoProcessor
 from can_gui.can_send_receive_gui import CANFDGUI
 
+import someip_gui
 from hudcore.platform import describe_platform, paths
 from hudcore.platform.executables import get_ffmpeg, get_office_app, get_text_editor
 from hudcore.ui import TextRedirector, Theme
@@ -54,6 +55,7 @@ class MainWindow:
 
         self._log_redirector = None
         self._can_window = None
+        self._someip_window = None
         self._time_after_id = None
 
         self._init_handlers()
@@ -176,6 +178,12 @@ class MainWindow:
                                             **Theme.success_button())
         self.can_control_button.grid(row=1, column=2, padx=20, pady=20)
 
+        # SOME/IP 回放：与 CAN 测试并列的通信类工具
+        self.someip_button = tk.Button(root, text="SOME/IP 回放",
+                                       command=self.open_someip_replay,
+                                       **Theme.success_button())
+        self.someip_button.grid(row=1, column=3, padx=20, pady=20)
+
         # 第 2 行：图像/视频类
         self.image_button = tk.Button(root, text="打开图片",
                                       command=self.image_open.open_image,
@@ -237,6 +245,38 @@ class MainWindow:
             win.destroy()
             self._can_window = None
             self.can_control_button.config(state=tk.NORMAL)
+
+    def open_someip_replay(self) -> None:
+        """打开 SOME/IP 回放子窗口（单例；关闭时恢复按钮）。"""
+        if self._someip_window is not None:
+            try:
+                if self._someip_window.winfo_exists():
+                    self._someip_window.focus()
+                    return
+            except tk.TclError:
+                self._someip_window = None
+
+        self.someip_button.config(state=tk.DISABLED)
+        self._someip_window = someip_gui.open_replay_window(
+            self.root, selected_file=self.selected_file)
+        self._someip_window.protocol("WM_DELETE_WINDOW", self._on_someip_window_close)
+
+    def _on_someip_window_close(self) -> None:
+        """SOME/IP 子窗口关闭回调：交给窗口自身清理（停回放/停服务/保存配置）"""
+        win = self._someip_window
+        if not win:
+            return
+        app = getattr(win, "someip_app", None)
+        try:
+            if app is not None:
+                app.on_closing()                      # 内含资源释放与窗口销毁
+            elif win.winfo_exists():
+                win.destroy()
+        except tk.TclError:
+            pass
+        finally:
+            self._someip_window = None
+            self.someip_button.config(state=tk.NORMAL)
 
     # ------------------------------------------------------------ 生命周期
     def _bind_close(self) -> None:

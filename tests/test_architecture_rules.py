@@ -51,6 +51,7 @@ def test_every_package_has_init():
         if len(rel.parts) > 1 and rel.parts[0] in {
             "hudcore", "can_core", "gui_handlers", "can_gui", "can_data_tools",
             "image_testing", "camera_tools", "misc_tools", "auto_labeling",
+            "someip_core", "someip_gui",
         }:
             packages.add(rel.parts[0])
     assert packages, "未识别到任何业务包，检查目录结构"

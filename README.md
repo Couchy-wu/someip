@@ -94,6 +94,7 @@ HudAutoTest/
 
 | 文档 | 内容 |
 |------|------|
+| [`docs/SOMEIP_REPLAY.md`](docs/SOMEIP_REPLAY.md) | **SOME/IP 回放**：界面布局说明、库部署（含 Windows 占位）、实测结果与排障 |
 | [`docs/STRUCTURE.md`](docs/STRUCTURE.md) | **项目结构说明**：分层与依赖方向、设计约定、改造前后量化对比、持续改进点 |
 | [`docs/PLATFORM_GUIDE.md`](docs/PLATFORM_GUIDE.md) | **平台化改造说明**：hudcore 层、改造点清单、扩展指南、验证方式 |
 | [`docs/UBUNTU_SETUP.md`](docs/UBUNTU_SETUP.md) | **Ubuntu 22.04 部署**：系统依赖、ZLG Linux 驱动、字体、常见问题 |
@@ -113,6 +114,7 @@ HudAutoTest/
 | 图像/视频 | 打开图片、视频抽帧（ffmpeg）、图片序列播放、ROI 提取 |
 | 图标测试 | YOLO + OCR 的图像识别与相似度校验（`image_testing/`） |
 | 工具集 | 信号矩阵转 CSV、CAN 数据生成器（binhex）、GIF/改名/转视频 |
+| SOME/IP 回放 | 指定 pcap 回放、服务/事件勾选注册、结构化赋值单条发送（`someip_core/` + `someip_gui/`，底层 C++ 库） |
 
 ---
 

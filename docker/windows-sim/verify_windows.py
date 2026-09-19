@@ -243,6 +243,11 @@ def t_import_all():
         "image_testing.icon_config", "image_testing.icon_thumbnail",
         "image_testing.icon_form", "image_testing.image_similarity",
         "image_testing.sample_image_generator", "image_testing.verify_icons",
+        "someip_core", "someip_core.models", "someip_core.api",
+        "someip_core.pcap_info", "someip_core.config", "someip_core.replay",
+        "someip_gui", "someip_gui.field_table", "someip_gui.panel_config",
+        "someip_gui.panel_control", "someip_gui.replay_window",
+        "hudcore.someip", "hudcore.someip.backend",
         "image_testing.tooltip", "image_testing.image_gen_data",
         "image_testing.image_gen_preview",
         "misc_tools.gif_creator", "misc_tools.image_batch_rename",
@@ -500,6 +505,61 @@ def t_unit_tests():
     return "PASS", tail[0][:120]
 
 
+@test("19. SOME/IP 回放窗口（布局与降级）")
+def t_someip_window():
+    """创建 SOME/IP 回放窗口，校验布局要素与"库不可用"时的降级行为。
+
+    · 不依赖真实 SOME/IP 库：库缺失时应给出提示并把动作按钮置灰（Windows 现状）
+    · 校验：事件表 23 行、字段表按结构体自动生成、勾选/全选、关闭时安全释放
+    """
+    import tkinter as tk
+    from tkinter import messagebox
+    from someip_core import all_events
+    from someip_gui import open_replay_window
+
+    # 无人值守：屏蔽模态弹窗（否则会阻塞验证）
+    warns = []
+    messagebox.showwarning = lambda *a, **k: warns.append(a[:1])
+    messagebox.showerror = lambda *a, **k: warns.append(a[:1])
+
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        win = open_replay_window(root)
+        win.update_idletasks()
+        app = win.someip_app
+        rows = len(app.event_tree.get_children())
+        assert rows == len(all_events()) == 23, f"事件表行数异常：{rows}"
+
+        counts = {}
+        for kind in ("RTK", "PilotStatus", "VehiclePosition", "HudNavmap"):
+            app.var_kind.set(kind)
+            app._on_kind_changed()
+            counts[kind] = len(app.field_table._entries)
+        assert counts["RTK"] > 20 and counts["VehiclePosition"] > 30, f"字段表异常：{counts}"
+
+        app._select_all(False)
+        assert app.config.selected == [], "全不选后应为空（表示不注册）"
+        app._select_all(True)
+        assert app.config.selected == [], "全选后应为空列表（表示注册全部）"
+
+        status = str(app.lbl_status.cget("text"))
+        lib_ok = "库就绪" in status
+        btn_state = str(app.btn_replay_start.cget("state"))
+        if not lib_ok:
+            assert btn_state == "disabled", "库不可用时回放按钮应置灰"
+        app.on_replay_start()                     # 库不可用时不应崩溃
+        app.on_closing()
+        detail = (f"{rows} 个事件，字段数 {counts}；状态={status[:28]}；"
+                  f"库{'可用' if lib_ok else '不可用(已降级)'}")
+        return "PASS", detail
+    finally:
+        try:
+            root.destroy()
+        except tk.TclError:
+            pass
+
+
 # ---------------------------------------------------------------- main
 
 def main() -> int:
@@ -522,7 +582,7 @@ def main() -> int:
     tests = [t_runtime, t_system, t_paths, t_fonts, t_tk, t_theme_redirect,
              t_import_main, t_import_all, t_can_load, t_can_hint, t_external,
              t_similarity, t_gif, t_cv_modules, t_can_signal, t_matrix_csv,
-             t_project_scripts, t_unit_tests]
+             t_project_scripts, t_unit_tests, t_someip_window]
     skip = {s.strip() for s in args.skip.split(",") if s.strip()}
     print()
     for fn in tests:

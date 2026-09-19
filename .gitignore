@@ -19,3 +19,8 @@ debug.log
 # 应用数据目录（随仓库分发，勿忽略）
 !data/
 !data/**
+
+# SOME/IP 服务端库（按平台放置，不随仓库分发）
+drivers/someip/**/*.so
+drivers/someip/**/*.dll
+drivers/someip/**/*.dylib

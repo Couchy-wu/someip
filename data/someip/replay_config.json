@@ -1,0 +1,11 @@
+{
+  "unicast": "",
+  "network": "arhud01",
+  "config_path": "",
+  "pcap_path": "",
+  "loop": true,
+  "interval_ms": 10,
+  "auto_start": false,
+  "selected": [],
+  "last_event_kind": "HudNavmap"
+}
