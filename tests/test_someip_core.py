@@ -275,3 +275,52 @@ def test_controller_reports_graceful_error_without_library(monkeypatch):
     # 状态摘要也应反映"库不可用"
     ctl.state.library_ok = False
     assert "库不可用" in ctl.summary()
+
+
+# --------------------------------------------------------------------------- 库探测优先级
+
+def test_library_probe_priority(tmp_path, monkeypatch):
+    """库探测顺序：环境变量 > thirdparty/arhud_someip/<平台> > drivers/someip（旧位置）。"""
+    import hudcore.someip.backend as be
+
+    class StubPaths:
+        project_root = tmp_path
+        thirdparty_dir = tmp_path / "thirdparty"
+        platform_dir_name = "linux"
+
+        @property
+        def drivers_dir(self):
+            return tmp_path / "drivers" / "linux"
+
+    monkeypatch.setattr(be, "paths", StubPaths())
+    monkeypatch.delenv("HUD_SOMEIP_LIB", raising=False)
+    monkeypatch.delenv("ARHUD_LIB_PATH", raising=False)
+    monkeypatch.delenv("HUD_SOMEIP_LIB_DIR", raising=False)
+    monkeypatch.delenv("ARHUD_LIB_DIR", raising=False)
+    lib_name = be.LIB_CANDIDATES[0]
+
+    assert be.find_someip_library() is None, "任何位置都没有库时应返回 None"
+
+    legacy = tmp_path / "drivers" / "linux" / "someip"
+    legacy.mkdir(parents=True)
+    (legacy / lib_name).write_bytes(b"")
+    assert be.find_someip_library() == legacy / lib_name, "旧位置应可作为兜底命中"
+
+    preferred = tmp_path / "thirdparty" / "arhud_someip" / "linux"
+    preferred.mkdir(parents=True)
+    (preferred / lib_name).write_bytes(b"")
+    assert be.find_someip_library() == preferred / lib_name, "thirdparty 位置优先于旧位置"
+
+    override = tmp_path / "custom" / lib_name
+    override.parent.mkdir()
+    override.write_bytes(b"")
+    monkeypatch.setenv("HUD_SOMEIP_LIB", str(override))
+    assert be.find_someip_library() == override, "环境变量应优先于所有项目内位置"
+
+
+def test_not_found_hint_points_to_thirdparty(monkeypatch):
+    """修复提示应指向 thirdparty/arhud_someip/<平台>/。"""
+    import hudcore.someip.backend as be
+    hint = be._not_found_hint()
+    assert "thirdparty/arhud_someip" in hint
+    assert "drivers/someip" in hint, "同时说明旧位置兼容"

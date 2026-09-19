@@ -70,9 +70,10 @@
 
 1. 环境变量 `HUD_SOMEIP_LIB` / `ARHUD_LIB_PATH`（完整文件路径）
 2. 环境变量 `HUD_SOMEIP_LIB_DIR` / `ARHUD_LIB_DIR`（目录）
-3. `drivers/someip/<平台>/`（推荐：随项目分发）
-4. `vendor/arhud_someip/<平台>/`
-5. 项目根目录、系统库路径
+3. **`thirdparty/arhud_someip/<平台>/`（首选：第三方运行时库统一收纳位置）**
+4. `thirdparty/arhud_someip/`（不分平台时的扁平放置）
+5. `drivers/someip/<平台>/`（旧位置，兼容既有部署）
+6. 项目根目录、系统库路径
 
 ### Linux（已验证）
 
@@ -82,11 +83,11 @@ cd arhud_python_server/src
 make libarhud_server.so ARCH=aarch64 SP_LIBS=<SP库目录>      # x86_64 用 ARCH=x86_64
 
 # 2) 部署：libarhud_server.so 与 libsomeip*.so 必须放在同一目录
-mkdir -p data_test/HudAutoTest/drivers/someip/linux
-cp libarhud_server.so libsomeip*.so data_test/HudAutoTest/drivers/someip/linux/
+mkdir -p data_test/HudAutoTest/thirdparty/arhud_someip/linux
+cp libarhud_server.so libsomeip*.so data_test/HudAutoTest/thirdparty/arhud_someip/linux/
 
 # 3) 运行（SP 版 libsomeip 由插件方式加载，需 LD_LIBRARY_PATH 指向该目录）
-LD_LIBRARY_PATH=$PWD/data_test/HudAutoTest/drivers/someip/linux python main.py
+LD_LIBRARY_PATH=$PWD/data_test/HudAutoTest/thirdparty/arhud_someip/linux python main.py
 ```
 
 依赖：`zlib1g-dev`（编译期）、`libusb` 等（运行期按 SP 库要求）。
@@ -94,7 +95,7 @@ LD_LIBRARY_PATH=$PWD/data_test/HudAutoTest/drivers/someip/linux python main.py
 ### Windows（**当前留占位，尚未提供 DLL**）
 
 - 需要把 `arhud_python_server` 用 **MSVC** 编译为 `libarhud_server.dll`（并链接 Windows 版 vsomeip），
-  放到 `drivers/someip/windows/`；
+  放到 `thirdparty/arhud_someip/windows/`（旧位置 `drivers/someip/windows/` 仍兼容）；
 - 在该 DLL 就绪前，Windows 上打开窗口会显示：
 
   > SOME/IP 库不可用（动作已置灰）
@@ -128,7 +129,7 @@ LD_LIBRARY_PATH=$PWD/data_test/HudAutoTest/drivers/someip/linux python main.py
 
 | 现象 | 原因 | 处理 |
 |------|------|------|
-| 状态栏「库不可用（动作已置灰）」 | 未找到 `libarhud_server.so/.dll` | 按 §3 放置；点 **[重新检测库]** 重试 |
+| 状态栏「库不可用（动作已置灰）」 | 未找到 `libarhud_server.so/.dll` | 按 §3 放到 `thirdparty/arhud_someip/<平台>/`；点 **[重新检测库]** 重试 |
 | `库加载失败` 且提示缺 `libsomeip*.so` | SP 库未同目录 或 未设 `LD_LIBRARY_PATH` | 把 `libsomeip*.so` 与 `libarhud_server.so` 放同一目录并设置 `LD_LIBRARY_PATH` |
 | 发送报 `rc=-1` | 事件未注册或服务未启动 | 先 **[打开服务]/[启动服务]**；确认该事件已在 ② 勾选 |
 | 回放 `rc=-1` | pcap 无法解析 | 点 **[解析摘要]** 看本地解析结果（无通知的 pcap 无法回放） |

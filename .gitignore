@@ -24,3 +24,8 @@ debug.log
 drivers/someip/**/*.so
 drivers/someip/**/*.dll
 drivers/someip/**/*.dylib
+
+# 第三方运行时库（按平台放置，不随仓库分发）
+thirdparty/arhud_someip/**/*.so
+thirdparty/arhud_someip/**/*.dll
+thirdparty/arhud_someip/**/*.dylib

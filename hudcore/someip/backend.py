@@ -4,10 +4,14 @@
 搜索顺序（先命中先用）：
     1. 环境变量 HUD_SOMEIP_LIB / ARHUD_LIB_PATH（完整文件路径，便于现场临时替换）
     2. 环境变量 HUD_SOMEIP_LIB_DIR（所在目录）
-    3. 项目内 drivers/someip/<平台>/      （随项目分发的库）
-    4. 项目内 vendor/arhud_someip/<平台>/ （备用位置）
-    5. 项目根目录
-    6. 系统库路径（LD_LIBRARY_PATH / 系统目录，由动态加载器自行查找）
+    3. 项目内 thirdparty/arhud_someip/<平台>/   （**首选**：第三方运行时库统一收纳位置）
+    4. 项目内 thirdparty/arhud_someip/
+    5. 项目内 drivers/someip/<平台>/            （旧位置，兼容既有部署）
+    6. 项目根目录
+    7. 系统库路径（LD_LIBRARY_PATH / 系统目录，由动态加载器自行查找）
+
+放置规则见 thirdparty/README.md：**第三方运行时库（按平台区分）** 统一放
+thirdparty/<组件>/<平台>/；drivers/<平台>/ 与 bin/<平台>/ 为历史部署目录，仍兼容。
 
 加载器选择：
     Windows → ctypes.WinDLL（stdcall；本库导出为 C 接口，x64 下与 CDLL 等价）
@@ -49,10 +53,11 @@ def _search_dirs() -> list[Path]:
         v = os.environ.get(env)
         if v:
             dirs.append(Path(v))
+    tp = paths.thirdparty_dir / "arhud_someip"          # 首选：第三方统一收纳目录
     dirs += [
-        paths.drivers_dir / "someip",                  # drivers/<平台>/someip/
-        paths.project_root / "vendor" / "arhud_someip" / paths.platform_dir_name,
-        paths.project_root / "vendor" / "arhud_someip",
+        tp / paths.platform_dir_name,                  # thirdparty/arhud_someip/<平台>/
+        tp,                                            # thirdparty/arhud_someip/
+        paths.drivers_dir / "someip",                  # drivers/<平台>/someip/（旧位置，兼容）
         paths.project_root,
     ]
     return [d for d in dirs if d]
@@ -127,11 +132,12 @@ def describe_library_status() -> str:
 def _not_found_hint() -> str:
     """找不到库时的中文修复提示（区分平台，Windows 说明暂无产物）。"""
     names = " / ".join(LIB_CANDIDATES)
-    where = "drivers/someip/windows/" if IS_WINDOWS else "drivers/someip/linux/"
+    where = "thirdparty/arhud_someip/windows/" if IS_WINDOWS else "thirdparty/arhud_someip/linux/"
     lines = [f"未找到 SOME/IP 服务端库（{names}）"]
     if IS_WINDOWS:
         lines += [
-            f"  1) 把 libarhud_server.dll 放到 {where}（或设置 HUD_SOMEIP_LIB=<完整路径>）",
+            f"  1) 把 libarhud_server.dll 放到 {where}（或设置 HUD_SOMEIP_LIB=<完整路径>）；"
+            f"旧位置 drivers/someip/windows/ 仍兼容",
             "  2) 当前仓库**暂无 Windows DLL 产物**：需用 MSVC 编译 arhud_python_server",
             "     （编译方式见 docs/SOMEIP_REPLAY.md「Windows 支持」一节）",
             "  3) 临时替代：在 Ubuntu 上运行本功能，或用 WSL/容器承载 SOME/IP 回放",
@@ -139,7 +145,7 @@ def _not_found_hint() -> str:
     else:
         lines += [
             f"  1) 把 libarhud_server.so 与 libsomeip*.so 放到 {where}"
-            f"（或设置 HUD_SOMEIP_LIB=<完整路径>）",
+            f"（或设置 HUD_SOMEIP_LIB=<完整路径>）；旧位置 drivers/someip/linux/ 仍兼容",
             "  2) 运行前设置 LD_LIBRARY_PATH 指向同一目录（SP 版 libsomeip 由插件方式加载）",
             "  3) 就地编译：arhud_python_server/src 下 `make libarhud_server.so`",
         ]
