@@ -21,7 +21,7 @@
     {
       "name": "4. 界面字体与中文渲染字体",
       "status": "PASS",
-      "detail": "selected='微软雅黑', 可用字体=0, PIL字体=<_io.BytesIO object at 0x00000000015FF010>"
+      "detail": "selected='微软雅黑', 可用字体=0, PIL字体=<_io.BytesIO object at 0x00000000015FF150>"
     },
     {
       "name": "5. Tk 窗口创建（虚拟显示）",
@@ -41,7 +41,7 @@
     {
       "name": "8. 全部界面与工具模块导入",
       "status": "PASS",
-      "detail": "43/43 模块全部导入成功"
+      "detail": "45/45 模块全部导入成功"
     },
     {
       "name": "9. CAN 驱动库探测与加载（stub DLL）",
