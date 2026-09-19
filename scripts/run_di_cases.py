@@ -122,11 +122,22 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--wait-scale", type=float, default=1.0, help="wait_ms 缩放系数")
     ap.add_argument("--report", default=None, help="把 JSON 报告写到该路径")
     ap.add_argument("--summary-only", action="store_true", help="只打印汇总，不逐条列出")
+    ap.add_argument("--someip-table", default=None, choices=["old", "bplus"],
+                    help="SOME/IP 服务表代（默认跟随 HUD_SOMEIP_TABLE / old）")
+    ap.add_argument("--show-someip", action="store_true",
+                    help="逐条打印 SOME/IP 输入的代际结论（需要哪一代服务表）")
     return ap
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+
+    from someip_core import active_table, available_tables, registrable, set_table
+
+    if args.someip_table:
+        set_table(args.someip_table)
+    table = active_table()
+    info = available_tables()[table]
 
     fmt = case_format.set_format(args.format)
     if fmt != case_format.DI:
@@ -145,6 +156,9 @@ def main(argv: list[str] | None = None) -> int:
 
     stats = parser.summarize(cases)
     print(f"== Di 用例集：{target} ==")
+    print(f"SOME/IP 服务表：{table}（{info['label']}｜{info['services']} 服务/"
+          f"{info['events']} 事件）｜{'可注册' if registrable(table) else '⚠ 库侧暂不可注册'}"
+          f"｜配置 {info['config']}")
     print(f"用例 {stats['cases']} 个｜支持度 {stats['support']}")
     print(f"输入：CAN {stats['can_entries']} 条、SOME/IP 字段 {stats['someip_field_entries']} 条、"
           f"SOME/IP 链路 {stats['someip_link_entries']} 条、mem {stats['mem_entries']} 条")
@@ -165,6 +179,7 @@ def main(argv: list[str] | None = None) -> int:
 
     can_sender, close_can = _open_can(args)
     exec_runner = runner.DiCaseRunner(
+        service_table=table,
         can_sender=can_sender,
         someip_controller=_someip_controller(args),
         frame_provider=_frame_provider(args),
@@ -173,6 +188,15 @@ def main(argv: list[str] | None = None) -> int:
         wait_scale=args.wait_scale,
         on_log=lambda m: logging_setup.info(LOGGER_NAME, m),
     )
+    if args.show_someip:
+        from can_data_tools.someip_field_map import describe_inputs
+        for case in cases[:20]:
+            lines = describe_inputs(case, table=table)
+            if lines:
+                print(f"[{case.scenario_id}]")
+                for line in lines:
+                    print("   ", line)
+
     if args.execute and exec_runner.can_sender is None and any(c.can for c in cases):
         print("[警告] 没有可用的 CAN 下发实现，含 CAN 输入的用例会记为 error")
 

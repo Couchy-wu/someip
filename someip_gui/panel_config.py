@@ -17,7 +17,10 @@ from tkinter import filedialog, ttk
 from hudcore.platform.executables import open_with_default_app
 from hudcore.ui import Theme
 
-from someip_core import all_events, services
+from someip_core import (
+    TABLE_OLD, active_table, all_events, available_tables, registrable, services,
+    set_table, shipped_config_path,
+)
 from someip_core.api import default_ip
 
 
@@ -61,9 +64,27 @@ class ConfigPanelMixin:
         ttk.Entry(row_c, textvariable=self.var_config_path).grid(row=0, column=0, sticky="ew")
         ttk.Button(row_c, text="浏览…", width=7,
                    command=self._on_pick_config).grid(row=0, column=1, padx=(4, 0))
-        ttk.Label(net, text="（留空=用库内置默认配置；固定配置客户端场景需指向对应 json）",
+        ttk.Label(net, text="（留空=用当前代随仓库分发的配置；也可指向现场 json）",
                   foreground=Theme.FG_DARK).grid(row=4, column=1, columnspan=2,
                                                  sticky="w", padx=6)
+
+        # ---- 服务表代（old / bplus）：影响事件树、可注册范围与默认配置 ----
+        ttk.Label(net, text="服务表").grid(row=6, column=0, sticky="w", padx=6, pady=3)
+        row_t = ttk.Frame(net)
+        row_t.grid(row=6, column=1, columnspan=2, sticky="ew", padx=6, pady=3)
+        self.var_table = tk.StringVar(value=active_table())
+        self._table_labels = {name: f"{info['label']}｜{info['services']} 服务/{info['events']} 事件"
+                              for name, info in available_tables().items()}
+        self._table_by_label = {v: k for k, v in self._table_labels.items()}
+        combo = ttk.Combobox(row_t, state="readonly", width=34, textvariable=self.var_table,
+                             values=list(self._table_labels.values()))
+        combo.set(self._table_labels.get(active_table(), ""))
+        combo.grid(row=0, column=0, sticky="ew")
+        combo.bind("<<ComboboxSelected>>", self._on_table_changed)
+        self.combo_table = combo
+        self.lbl_table_hint = ttk.Label(net, text=self._table_hint(), foreground=Theme.FG_DARK,
+                                        wraplength=420, justify="left")
+        self.lbl_table_hint.grid(row=7, column=1, columnspan=2, sticky="w", padx=6, pady=(0, 6))
 
         self.var_auto_start = tk.BooleanVar(value=self.config.auto_start)
         ttk.Checkbutton(net, text="打开服务时自动启动（offer + SD）",
@@ -197,6 +218,32 @@ class ConfigPanelMixin:
     def _on_detect_ip(self) -> None:
         self.var_unicast.set(default_ip())
         self.log(f"已探测本机 IP：{default_ip()}")
+
+    def _table_hint(self) -> str:
+        """服务表提示：来源、是否可注册、随仓库配置文件名。"""
+        name = active_table()
+        info = available_tables().get(name, {})
+        shipped = shipped_config_path(name)
+        parts = [f"来源：参考实现 {info.get('config', '-')}"]
+        parts.append("可注册（回放服务端支持）" if info.get("registrable")
+                     else "⚠ 库侧暂不支持注册该代（仅用于查看/解析用例）")
+        if shipped:
+            parts.append(f"默认配置：{shipped.name}")
+        if info.get("note"):
+            parts.append(info["note"])
+        return "；".join(parts)
+
+    def _on_table_changed(self, _event=None) -> None:              # noqa: ANN001
+        """切换服务表：刷新事件树与提示（不改动库侧实际注册能力）。"""
+        label = self.var_table.get()
+        name = self._table_by_label.get(label, TABLE_OLD)
+        set_table(name)
+        self.log(f"服务表切换 → {name}（{label}）")
+        if not registrable(name):
+            self.log("⚠ 该代服务表暂不能由当前回放库注册：可查看/解析，但回放发送仅 old 代有效")
+        self.lbl_table_hint.configure(text=self._table_hint())
+        if hasattr(self, "event_tree"):
+            self._refresh_event_tree()
 
     def _on_pick_config(self) -> None:
         path = filedialog.askopenfilename(

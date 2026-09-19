@@ -1,0 +1,354 @@
+{
+  "summary": "6 服务 / 38 事件",
+  "generation": "bplus",
+  "source": "参考实现 lipeng20260228/BPlus/someip_arhud01_pcap_server_B+.json",
+  "status": "参考实现标注为「B+ 还不能用」；本项目仅收录服务表与配置，回放服务端（库）目前只注册 old 代服务",
+  "services": [
+    {
+      "service": "0x001A",
+      "instance": "0x001A",
+      "port": 51211,
+      "events": [
+        {
+          "event": "0x8001",
+          "name": "vehiclePositionInfoNotify",
+          "group": "0x1101",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8002",
+          "name": "rtkNotify",
+          "group": "0x1102",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8003",
+          "name": "imuNotify",
+          "group": "0x1103",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        }
+      ]
+    },
+    {
+      "service": "0x001B",
+      "instance": "0x001B",
+      "port": 51240,
+      "events": [
+        {
+          "event": "0x8001",
+          "name": "obstacleNotify",
+          "group": "0x1101",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8002",
+          "name": "laneLineDataNotify",
+          "group": "0x1101",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8003",
+          "name": "changeLaneDataNotify",
+          "group": "0x1101",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8004",
+          "name": "pilotStatusNotify",
+          "group": "0x1102",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8005",
+          "name": "pilotAlarmAndNoticeNotify",
+          "group": "0x1102",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8006",
+          "name": "broadcastNotify",
+          "group": "0x1102",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8007",
+          "name": "planningLineNotify",
+          "group": "0x1101",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8008",
+          "name": "drivingAreaIdentification_notify",
+          "group": "0x1101",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8009",
+          "name": "parkingDataNotify",
+          "group": "0x1103",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x800A",
+          "name": "hpaMapDataNotify",
+          "group": "0x1103",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x800B",
+          "name": "commonObstaclesInMapDataNotify",
+          "group": "0x1103",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x800C",
+          "name": "notifyMediaHPAPath",
+          "group": "0x1104",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x800D",
+          "name": "drivingJourneyDataNotify",
+          "group": "0x1105",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        }
+      ]
+    },
+    {
+      "service": "0x001C",
+      "instance": "0x001C",
+      "port": 51237,
+      "events": [
+        {
+          "event": "0x8001",
+          "name": "navigationPathMatchStatusNotify",
+          "group": "0x1101",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8002",
+          "name": "naviPathUserSelectStsConfirmNotify",
+          "group": "0x1102",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8003",
+          "name": "navigationPathMatchP2PStatusNotify",
+          "group": "0x1104",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        }
+      ]
+    },
+    {
+      "service": "0x001D",
+      "instance": "0x001D",
+      "port": 51246,
+      "events": [
+        {
+          "event": "0x8001",
+          "name": "sWSaleablecheckStatusNotify",
+          "group": "0x1101",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        }
+      ]
+    },
+    {
+      "service": "0x010A",
+      "instance": "0x0001",
+      "port": 52001,
+      "events": [
+        {
+          "event": "0x8001",
+          "name": "HudRoadInfoNotify",
+          "group": "0x1101",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8002",
+          "name": "HudMappathInfoNotify",
+          "group": "0x1101",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8003",
+          "name": "HudNavigationmap",
+          "group": "0x1101",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8004",
+          "name": "OverseasHudRoadInfoNotify",
+          "group": "0x1101",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        }
+      ]
+    },
+    {
+      "service": "0x8000",
+      "instance": "0x8000",
+      "port": 51534,
+      "events": [
+        {
+          "event": "0x8001",
+          "name": "naviGlobalInfoNotify",
+          "group": "0x1101",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8002",
+          "name": "naviPositionInfoNotify",
+          "group": "0x1102",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8003",
+          "name": "naviRouteInfoNotify",
+          "group": "0x1103",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8004",
+          "name": "naviPathInfoNotify",
+          "group": "0x1103",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8005",
+          "name": "aheadIntersectionsLanesInfoNotify",
+          "group": "0x1104",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8006",
+          "name": "mixForkInfolistNotify",
+          "group": "0x1104",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8007",
+          "name": "naviGuideInfoNotify",
+          "group": "0x1105",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8008",
+          "name": "nextCrossLaneInfoNotify",
+          "group": "0x1105",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x8009",
+          "name": "facilityInfoNotify",
+          "group": "0x1105",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x800A",
+          "name": "cameraInMapInfoNotify",
+          "group": "0x1105",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x800B",
+          "name": "naviHighwayGuideInfoNotify",
+          "group": "0x1105",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x800C",
+          "name": "naviTrafficLightNotify",
+          "group": "0x1106",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x800D",
+          "name": "trafficJamNotify",
+          "group": "0x1106",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        },
+        {
+          "event": "0x800E",
+          "name": "trafficEventInfoNotify",
+          "group": "0x1106",
+          "kind": "Opaque",
+          "need_tp": false,
+          "struct_sendable": false
+        }
+      ]
+    }
+  ]
+}

@@ -357,12 +357,14 @@ def gate_only_ids(case: DiCase) -> tuple[int, ...]:
 
 
 def classify(case: DiCase, someip_field_support: dict[str, bool] | None = None,
-             gate_ids: Iterable[int] | None = None) -> Support:
+             gate_ids: Iterable[int] | None = None,
+             someip_table: str | None = None) -> Support:
     """判断用例能否被自动化程序执行（见 `Support`）。
 
     :param someip_field_support: `{key: 是否可由本项目回放库结构化发送}`；
                                  缺省时按 `someip_field_map` 的解析表推断
     :param gate_ids: 已由 gate_frame.json 补齐默认位的报文 ID（这些报文可编码）
+    :param someip_table: 依据哪一代 SOME/IP 服务表判断（old / bplus；默认当前代）
     """
     reasons: list[str] = []
     gate_ids = set(gate_ids or ())
@@ -381,6 +383,17 @@ def classify(case: DiCase, someip_field_support: dict[str, bool] | None = None,
             reasons.append(f"SOME/IP 字段无法结构化下发：{', '.join(sorted(set(unsupported)))}")
         else:
             drivable = True
+
+    if case.someip_links:
+        # 链路型输入要看"该服务属于哪一代服务表"以及"该代能否被回放库注册"
+        from .someip_field_map import service_generation, _active_table_name, _registrable
+        table = someip_table or _active_table_name()
+        can_register = _registrable(table)
+        missing = [l.service_id for l in case.someip_links if table not in service_generation(l.service_id)]
+        if missing:
+            reasons.append(f"SOME/IP 服务不在 {table} 代服务表中：{', '.join(sorted(set(missing)))}")
+        elif not can_register:
+            reasons.append(f"{table} 代服务暂不可由回放库注册（参考实现亦未调通）")
 
     if not drivable:
         return Support("external", tuple(reasons) or ("没有任何可下发输入",))

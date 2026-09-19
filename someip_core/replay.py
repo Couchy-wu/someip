@@ -21,7 +21,9 @@ from hudcore.someip import is_library_available
 from hudcore.someip.backend import _not_found_hint
 
 from . import api as api_mod
-from .models import KIND_SERVICE_EVENT, STRUCT_TYPES, all_events, find_event, services
+from .models import (
+    KIND_SERVICE_EVENT, STRUCT_TYPES, active_table, all_events, find_event, services,
+)
 from .pcap_info import parse_summary
 
 LogFn = Callable[[str], None]
@@ -96,11 +98,14 @@ class ReplayController:
         if self._handle is not None:
             self._log("服务端已打开，忽略重复打开")
             return
-        cfg = config_path or None
+        # 未显式指定时，用"当前服务表代"随仓库分发的 vsomeip 配置（参考实现同款配置）
+        from .config import shipped_config_path
+        cfg = config_path or (str(shipped_config_path()) or None)
         self._handle = lib.create(unicast or None, cfg)
         self.state.opened = True
         self._log(f"服务端已创建：unicast={unicast or api_mod.default_ip()}"
-                  f"{'，配置=' + cfg if cfg else '（使用库内置默认配置）'}")
+                  f"{'，配置=' + cfg if cfg else '（使用库内置默认配置）'}"
+                  f"｜服务表={active_table()}")
 
     def register(self, only_kinds: Iterable[str] | None = None,
                  selected_services: Iterable[str] | None = None) -> tuple[int, int]:

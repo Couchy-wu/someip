@@ -74,6 +74,7 @@ class RunReport:
     started_at: str = ""
     finished_at: str = ""
     case_dir: str = ""
+    service_table: str = ""            # 本次执行依据的 SOME/IP 服务表代（old / bplus）
 
     # ---- 统计 ----
     @property
@@ -91,6 +92,9 @@ class RunReport:
     def describe(self, limit: int = 12) -> str:
         s = self.summary
         lines = [f"=== Di 用例执行报告（{self.mode}）===",
+                 f"SOME/IP 服务表：{self.service_table or '(未指定)'}"
+                 + ("（该代库侧暂不可注册）" if self.service_table and not _table_registrable(self.service_table)
+                    else ""),
                  f"用例 {s['cases']} 个｜结论 {s['status']}",
                  f"下发 CAN {s['sent_can_total']} 条、SOME/IP {s['sent_someip_total']} 项；"
                  f"需台架注入 {s['unsupported_total']} 项",
@@ -105,7 +109,8 @@ class RunReport:
 
     def to_dict(self) -> dict:
         return {"mode": self.mode, "started_at": self.started_at, "finished_at": self.finished_at,
-                "case_dir": self.case_dir, "summary": self.summary,
+                "case_dir": self.case_dir, "service_table": self.service_table,
+                "summary": self.summary,
                 "results": [asdict(r) for r in self.results]}
 
     def dump(self, path: str | Path) -> Path:
@@ -117,6 +122,24 @@ class RunReport:
 
 # --------------------------------------------------------------------------- 门控默认位
 GATE_CONFIG = Path("data") / "DI_Config" / "gate_frame.json"
+
+
+def _current_table() -> str:
+    """当前生效的服务表代（缺 someip_core 时回退 old）。"""
+    try:
+        from someip_core import active_table
+        return active_table()
+    except Exception:                                  # noqa: BLE001
+        return "old"
+
+
+def _table_registrable(table: str) -> bool:
+    """该代服务表是否可由回放库注册（缺 someip_core 时按 old 处理）。"""
+    try:
+        from someip_core import registrable
+        return bool(registrable(table))
+    except Exception:                                  # noqa: BLE001
+        return table == "old"
 
 
 def load_gate_defaults(path: str | Path | None = None) -> dict[int, dict]:
@@ -232,6 +255,7 @@ class DiCaseRunner:
                  verifier: LabelVerifier | None = None,
                  dry_run: bool = True, wait_scale: float = 1.0,
                  gate_defaults: dict[int, dict] | None = None,
+                 service_table: str | None = None,
                  on_log: Callable[[str], None] | None = None) -> None:
         self.can_sender = can_sender
         self.someip_controller = someip_controller
@@ -241,12 +265,14 @@ class DiCaseRunner:
         self.wait_scale = float(wait_scale)
         # 门控默认位：{} 表示未配置（此时"只有门控说明"的报文会记为无法编码）
         self.gate_defaults = load_gate_defaults() if gate_defaults is None else dict(gate_defaults)
+        # 本次执行依据的 SOME/IP 服务表代（None=当前生效代）
+        self.service_table = _current_table() if service_table is None else service_table
         self._log = on_log or (lambda m: logging_setup.info(LOGGER_NAME, m))
 
     # ---- 单条用例 ----
     def run_case(self, case: parser.DiCase) -> CaseResult:
         started = time.time()
-        support = parser.classify(case, gate_ids=self.gate_defaults)
+        support = parser.classify(case, gate_ids=self.gate_defaults, someip_table=self.service_table)
         gate_only = [i for i in parser.gate_only_ids(case) if i not in self.gate_defaults]
         sent_can: list[str] = []
         sent_someip: list[str] = []
@@ -358,12 +384,14 @@ class DiCaseRunner:
             selected = [c for c in selected if only in c.scenario_id]
         if only_auto:
             selected = [c for c in selected
-                        if parser.classify(c, gate_ids=self.gate_defaults).level == "auto"]
+                        if parser.classify(c, gate_ids=self.gate_defaults,
+                                           someip_table=self.service_table).level == "auto"]
         if limit is not None:
             selected = selected[:limit]
 
         report = RunReport(mode="dry-run" if self.dry_run else "execute",
-                           case_dir=str(selected[0].path.parent) if selected and selected[0].path else "")
+                           case_dir=str(selected[0].path.parent) if selected and selected[0].path else "",
+                           service_table=self.service_table)
         report.started_at = time.strftime("%Y-%m-%d %H:%M:%S")
         for case in selected:
             result = self.run_case(case)

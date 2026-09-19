@@ -164,6 +164,15 @@ python -m pytest tests -q        # 单元测试 + 架构规则守卫（需 pip i
 
 ### SOME/IP 回放（someip_core / someip_gui）
 
+- **两代服务表**（`someip_core.models`，开关 `HUD_SOMEIP_TABLE` / `set_table()` / 界面下拉）：
+  `old`（11 服务/23 事件，回放库可注册，**默认**）与 `bplus`（6 服务/38 事件，参考实现标注
+  "还不能用"，库侧暂不可注册 —— 界面会明确提示，不要当成跑通）；
+- **随仓库分发的 vsomeip 配置**：`data/someip/config/*.json`（来自参考实现 lipeng20260228），
+  `ReplayConfig.config_path` 留空时用当前代的配置（`someip_core.config.shipped_config_path()`）；
+- 库版本已对齐参考实现 `libs.zip`（aarch64 2025-12-15 / x86_64 2025-12-23）；
+  `thirdparty/arhud_someip/windows/` **按要求留空**；
+- 一键自检：`python -m scripts.someip_replay_check`（自带样例 pcap，clone 后即可跑）；
+- 单测 `tests/test_someip_tables.py` 会逐条比对"配置 ↔ 代码表"，防止三者漂移；
 - 业务：`someip_core/`（models 定义表 / api ctypes 绑定 / pcap_info 解析 / config / replay 控制器），
   **不依赖界面**；库探测在 `hudcore/someip/backend.py`（环境变量 → `drivers/someip/<平台>/` → 系统路径）
 - 界面：`someip_gui/`（独立窗口；左侧配置、右侧回放/发送/日志；字段表由 ctypes 结构体自动生成）

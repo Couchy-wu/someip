@@ -28,7 +28,10 @@ from tkinter import messagebox, ttk
 from hudcore.someip import describe_library_status, is_library_available
 from hudcore.ui import Theme
 
-from someip_core import ReplayConfig, ReplayController, SomeipUnavailable, export_service_table
+from someip_core import (
+    ReplayConfig, ReplayController, SomeipUnavailable, active_table, export_service_table,
+    set_table,
+)
 from someip_core.models import summarize
 
 from .panel_config import ConfigPanelMixin
@@ -48,6 +51,8 @@ class SomeipReplayWindow(ConfigPanelMixin, ControlPanelMixin):
         self.selected_file = selected_file
 
         self.config = ReplayConfig.load().normalized()
+        # 服务表代（old / bplus）需在构建界面之前生效，事件树与默认配置都依赖它
+        set_table(self.config.service_table)
         self.controller = ReplayController(on_log=self.log)
         self._refresh_job = None
         self._closing = False
@@ -252,6 +257,7 @@ class SomeipReplayWindow(ConfigPanelMixin, ControlPanelMixin):
         self.config.loop = bool(self.var_loop.get())
         self.config.auto_start = bool(self.var_auto_start.get())
         self.config.last_event_kind = self.var_kind.get()
+        self.config.service_table = active_table()
         try:
             self.config.interval_ms = int(self.var_interval.get() or 0)
         except ValueError:

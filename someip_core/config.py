@@ -22,11 +22,21 @@ from pathlib import Path
 
 from hudcore.platform.paths import paths
 
-from .models import all_events, services
+from .models import (
+    TABLE_BPLUS, TABLE_OLD, active_table, all_events, available_tables, services, table_meta,
+)
 
 CONFIG_DIR_NAME = "someip"
 CONFIG_FILE_NAME = "replay_config.json"
 TABLE_FILE_NAME = "services.json"
+TABLE_FILE_BPLUS = "services_bplus.json"
+SHIPPED_CONFIG_DIR = "config"          # data/someip/config/：随仓库分发的 vsomeip 配置
+
+# 各代对应的"随仓库分发"配置（来自参考实现 lipeng20260228）
+SHIPPED_CONFIGS: dict[str, str] = {
+    TABLE_OLD: "someip_arhud01_pcap_server.json",              # unicast=auto，参考实现默认
+    TABLE_BPLUS: "someip_arhud01_pcap_server_B+.json",
+}
 
 
 def data_dir() -> Path:
@@ -40,8 +50,35 @@ def config_path() -> Path:
     return data_dir() / CONFIG_FILE_NAME
 
 
-def table_path() -> Path:
-    return data_dir() / TABLE_FILE_NAME
+def table_path(table: str | None = None) -> Path:
+    """服务表摘要文件（old → services.json；bplus → services_bplus.json）。"""
+    name = table or active_table()
+    return data_dir() / (TABLE_FILE_BPLUS if name == TABLE_BPLUS else TABLE_FILE_NAME)
+
+
+def shipped_config_dir() -> Path:
+    """随仓库分发的 vsomeip 配置目录（data/someip/config/）。"""
+    return data_dir() / SHIPPED_CONFIG_DIR
+
+
+def shipped_config_path(table: str | None = None) -> Path | None:
+    """取某代随仓库分发的 vsomeip 配置路径；不存在返回 None。
+
+    参考实现的行为是"把配置放在可执行文件同目录、直接运行"，本项目改为**随仓库分发**，
+    由界面/命令行显式传给服务端（`ReplayController.open(config_path=...)`）。
+    """
+    name = table or active_table()
+    file_name = SHIPPED_CONFIGS.get(name)
+    if not file_name:
+        return None
+    path = shipped_config_dir() / file_name
+    return path if path.is_file() else None
+
+
+def available_shipped_configs() -> list[Path]:
+    """列出随仓库分发的全部配置（供界面下拉）。"""
+    d = shipped_config_dir()
+    return sorted(d.glob("*.json")) if d.is_dir() else []
 
 
 @dataclass
@@ -50,7 +87,8 @@ class ReplayConfig:
 
     unicast: str = ""
     network: str = "arhud01"
-    config_path: str = ""
+    config_path: str = ""                                 # 空=用当前代随仓库分发的配置
+    service_table: str = TABLE_OLD                        # 服务表代号（old / bplus）
     pcap_path: str = ""
     loop: bool = True
     interval_ms: int = 10
@@ -79,8 +117,17 @@ class ReplayConfig:
         p.write_text(json.dumps(asdict(self), ensure_ascii=False, indent=2), encoding="utf-8")
         return p
 
+    def effective_config_path(self) -> str:
+        """实际生效的 vsomeip 配置：显式指定优先，否则用当前代的随仓库配置。"""
+        if self.config_path:
+            return self.config_path
+        shipped = shipped_config_path(self.service_table)
+        return str(shipped) if shipped else ""
+
     def normalized(self) -> "ReplayConfig":
         """修正非法取值（供界面直接使用）。"""
+        from .models import normalize_table
+        self.service_table = normalize_table(self.service_table)
         self.interval_ms = max(0, min(5000, int(self.interval_ms or 0)))
         self.network = (self.network or "arhud01").strip()
         return self

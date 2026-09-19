@@ -120,8 +120,8 @@ python -m scripts.run_di_cases --execute --camera --camera-index 0
 |------|------|-------------|
 | `can`（有位域） | ✅ 完整 | 按 `bit_range`+`value` 合成整帧（同报文多信号合并），经 `can_core.device` 下发（CAN/CANFD 可选） |
 | `can`（**无位域**，415 条） | ⚠️ 需补配置 | 只写"门控有效"无法定位到具体位 → 记为**不可编码**；若已从 CAN 矩阵确认，写进 `data/DI_Config/gate_frame.json`（按报文给默认位）即可套用 |
-| `someip` 链路型 | ✅ 完整 | `0x010A`/`0x000C` 都在回放库服务表内：`online=1` 注册该服务、`online=0` 不注册（`ReplayController.register(selected_services=…)`） |
-| `someip` 字段型 | ⚠️ 部分 | `hnmap_s.*` → `HudNavmap`（可结构化发送，如 `navigation_map` → `Navigation_map`）；`hrinfo_s.*` 与 `PlanningLinePointCount` 属 **Opaque 原始载荷**，库未提供结构体布局 → 不可下发（见 `someip_field_map.resolve()` 的原因说明） |
+| `someip` 链路型 | ✅ 完整（old 代） | `0x010A`/`0x000C` 都在 old 代服务表内：`online=1` 注册该服务、`online=0` 不注册（`ReplayController.register(selected_services=…)`）。**已按服务表代校验**：切到 `bplus` 代时，`0x000C` 会被明确报成"不在当前服务表中"，`0x010A` 会报"该代暂不可注册"（见 `someip_field_map.service_generation()`） |
+| `someip` 字段型 | ⚠️ 部分（两代通用） | `hnmap_s.*` → `HudNavmap`（可结构化发送，如 `navigation_map` → `Navigation_map`，`0x010A:0x8003` 两代都有）；`hrinfo_s.*` 与 `PlanningLinePointCount` 属 **Opaque 原始载荷**，库未提供结构体布局 → 不可下发（原因写在 `FieldTarget.reason` 里，并带 `table`/`registrable` 两个字段说明依据哪一代、该代能否注册） |
 | `mem` | ❌ 需台架 | HUD 内部状态量，外部接口没有对应通道；执行器如实记为"需台架注入" |
 | `expected_output` 标贴 | ⚠️ 受参考图限制 | 见下节 |
 
@@ -157,7 +157,8 @@ can_data_tools/can_bit_writer.py     位域写入（base=0/1）
 can_data_tools/someip_field_map.py   字段型键 → 回放库结构体
 can_data_tools/di_case_runner.py     执行器（依赖全部可注入）
 can_data_tools/label_verify.py       标贴校验
-scripts/run_di_cases.py              命令行入口
+scripts/run_di_cases.py              命令行入口（--someip-table old|bplus、--show-someip）
+scripts/someip_replay_check.py       SOME/IP 回放一键自检（库→配置→服务表→注册→发送→回放）
 gui_handlers/di_case_window.py       GUI 窗口（含格式开关）
 docker/…                             （无）
 tests/test_di_cases.py               33 项单测（解析/位写入/执行/校验/开关）
@@ -176,6 +177,8 @@ tests/test_di_cases.py               33 项单测（解析/位写入/执行/校�
 - 标贴校验用合成画面跑通：命中、负向命中（判 fail）、无参考图（`unverifiable`）、
   无画面（`error`）。
 - 格式开关：默认 `legacy`、环境变量覆盖、非法值回退、按内容识别（单测断言）。
+- SOME/IP 服务表代际：old/bplus 两代规模、切换开关、随仓库配置与代码表**逐条一致**、
+  Di 用例在 bplus 代下对 `0x000C` 的缺失判定（`tests/test_someip_tables.py` 17 项）。
 
 **未验证（需现场）**
 - 真实 CAN 总线上的字段/字节序是否被 HUD 按预期解析（取决于 Di 用例作者的编码假设）。

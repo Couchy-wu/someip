@@ -116,6 +116,59 @@ python main.py
 
 ---
 
+## 3.5 与参考实现的更新（lipeng20260228）
+
+参考实现（`lipeng20260228/`，含 old / BPlus 两套程序与 `libs.zip`）给出了 HUD 团队实际在用的
+服务端配置与 vsomeip 库。本项目据此做了三处对齐：
+
+### ① 库更新（Linux 两架构）
+
+| 位置 | 来源 | 版本日期 | 说明 |
+|------|------|----------|------|
+| `thirdparty/arhud_someip/linux-aarch64/libsomeip*.so` | `libs.zip → libs/lib_bst_t517` | 2025-12-15 | 与 `libarhud_server.so`（本项目 C++ 库）实测兼容 |
+| `thirdparty/arhud_someip/linux-x86_64/libsomeip*.so` | `libs.zip → libs/lib_x86` | 2025-12-23 | 同上 |
+| `thirdparty/arhud_someip/windows/` | — | — | **按要求留空**：暂无 Windows 版 vsomeip/服务端库，界面会显示"库不可用"而不是崩溃 |
+
+库文件不入 git（`.gitignore` 忽略）；同目录依赖由 `hudcore.can`/`hudcore.someip` 的预加载机制处理，
+无需设置 `LD_LIBRARY_PATH`。
+
+### ② vsomeip 配置随仓库分发
+
+参考实现的做法是"把配置放在可执行文件同目录直接运行"；本项目改为**随仓库分发 + 显式传给服务端**：
+
+```
+data/someip/config/someip_arhud01_pcap_server.json                 # old 代，unicast=auto（默认使用）
+data/someip/config/someip_arhud01_pcap_server_static_unicast.json   # old 代，unicast=192.168.195.11（现场固定 IP）
+data/someip/config/someip_arhud01_pcap_server_B+.json               # B+ 代（见下）
+```
+
+`ReplayConfig.config_path` 留空时，默认使用**当前服务表代**对应的配置（见
+`someip_core.config.shipped_config_path()`）。
+
+### ③ 两代服务表（新增 B+）
+
+| 代 | 服务/事件 | 来源 | 回放库能否注册 |
+|----|-----------|------|----------------|
+| `old`（默认） | 11 / 23 | `someip_arhud01_pcap_server.json` | ✅ 已实测（11 服务/23 事件、RTK 194 字节、样例 pcap 90/90） |
+| `bplus` | 6 / 38 | `someip_arhud01_pcap_server_B+.json` | ❌ 暂不可（参考实现亦标注"B+ 还不能用"，本项目库只注册 old 代） |
+
+- 开关：环境变量 `HUD_SOMEIP_TABLE=old|bplus`、`someip_core.set_table()`、或界面
+  **SOME/IP 回放 → ① 网络与 SD 配置 → 服务表** 下拉框（切换即刷新事件树，并明确提示该代能否注册）；
+- 单测 `tests/test_someip_tables.py` 会**逐条比对**两代配置与我们代码里的服务表，防止三者漂移；
+- 实测（容器内，B+ 服务表 + B+ 配置 + B+ pcap）：创建/启动正常，但通知只能发出 pcap 中属于
+  old 代服务的部分（14667 条里发出 6594 条）—— 这正是"B+ 服务端未就绪"的表现，故界面对该代标注
+  "暂不可注册"，不会让人误以为已经跑通。
+
+### ④ 一键自检
+
+```bash
+python -m scripts.someip_replay_check          # 库 → 配置 → 服务表 → 注册 → 单条发送 → pcap 回放
+python -m scripts.someip_replay_check --table bplus    # 查看 B+ 代（预期提示不可注册）
+```
+
+自带小样例 `data/someip/sample/out_sample.pcap`（参考实现 `old/out.pcap` 的前 400 包，454 KB，
+解析出 90 条可回放通知），因此**任何机器 clone 后都能立即自检**，不依赖现场 pcap。
+
 ## 4. 实测验证（容器内真实库）
 
 在 Ubuntu（aarch64）容器中编译真实 `libarhud_server.so` 并跑通全链路：
@@ -124,6 +177,7 @@ python main.py
 |------|------|
 | 编译 | `make libarhud_server.so` → 83 KB，导出 11 个 `arhud_server_*` 符号 |
 | 库探测 | 库放 `thirdparty/arhud_someip/linux-aarch64/`，**不设任何环境变量** → 自动命中并显示「SOME/IP 库就绪」 |
+| 库版本 | 换成参考实现 `libs.zip` 的版本（aarch64 2025-12-15 / x86_64 2025-12-23）后复测通过 |
 | 同目录依赖预加载 | 自动预加载 `libsomeip*.so` 4 个（多轮：`libsomeip.so` → cfg/sd/e2e）；按文件名 `dlopen("libsomeip-cfg.so")` 命中成功，**无需 `LD_LIBRARY_PATH`** |
 | 创建/注册 | `open()` 成功；默认 `register()` → **11 服务 / 23 事件**（仅选 RTK 时 → 1 服务 / 2 事件） |
 | 启动 | `start()` 成功，vsomeip 应用 `arhud01` 启动并 offer（SD 报文可见） |
