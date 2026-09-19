@@ -243,6 +243,8 @@ def t_import_all():
         "image_testing.icon_config", "image_testing.icon_thumbnail",
         "image_testing.icon_form", "image_testing.image_similarity",
         "image_testing.sample_image_generator", "image_testing.verify_icons",
+        "image_testing.tooltip", "image_testing.image_gen_data",
+        "image_testing.image_gen_preview",
         "misc_tools.gif_creator", "misc_tools.image_batch_rename",
         "misc_tools.images_to_video", "misc_tools.video_roi_crop",
         "camera_tools.camera_preview", "camera_tools.error_image_detection",
