@@ -39,8 +39,9 @@ HudAutoTest/
 ├── tools/                     自检与重构工具（见 §4）
 ├── docker/windows-sim/        Windows 环境验证工程（Wine + Windows CPython）
 ├── docs/                      文档
-├── drivers/  bin/  vendor/    按平台分发的二进制与第三方工具
-└── Resources/  models/        界面素材与模型文件
+├── thirdparty/                ★ 第三方内容（ultralytics / paddleocr / zlg / ffmpeg / models）
+├── drivers/  bin/             按平台分发的部署目录（现场替换，不进仓库）
+└── Resources/                 界面素材
 ```
 
 ---
@@ -119,6 +120,7 @@ HudAutoTest/
 | 模块级副作用（GUI/mainloop/parse_args） | 7 处 | 0 |
 | 单文件最大行数 | 1641 | 679 |
 | 业务数据文件位于代码包内 | 7 个（含 6.1MB 矩阵、5.3MB 图片） | 0（统一 `data/`） |
+| 第三方内容位置 | 项目根散落 5 处（yolo_framework / PaddleOCR-main / kerneldlls / vendor / models） | 0（统一 `thirdparty/<名称>/`） |
 | 自动化测试 | 仅 `tools/selftest.py` | 18 项容器验证 + 18 个 pytest 用例（含架构守卫） |
 
 ---

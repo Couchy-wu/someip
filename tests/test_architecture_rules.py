@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # 第三方/资源目录：不属于自研代码
 SKIP_DIRS = {
-    "PaddleOCR-main", "yolo_framework", "kerneldlls", "vendor", "__pycache__",
+    "thirdparty", "PaddleOCR-main", "yolo_framework", "kerneldlls", "vendor", "__pycache__",
     ".git", ".idea", ".vscode", "Resources", "models", "bin", "logs",
     "output", "output_ocr", "TestcaseCollection", "drivers", "tests",
     "docker",          # 验证工程（自身需要 sys.path 注入以便挂载运行）

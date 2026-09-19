@@ -50,7 +50,7 @@ cd docker/windows-sim
 | 8 | 全部界面与工具模块导入 | ✅ PASS | **37/37 个模块全部导入成功** |
 | 9 | CAN 驱动探测与加载 | ✅ PASS | 命中 `Z:\work\drivers\windows\zlgcan.dll`，经 `ctypes.WinDLL` 加载并**成功调用导出函数**（`Py_GetVersion()` 返回 3.13.15） |
 | 10 | 驱动缺失时的报错友好性 | ✅ PASS | `HUD_ZLG_LIB` 指向不存在路径 → 给出中文修复提示，不崩溃 |
-| 11 | 外部程序探测 | ✅ PASS | ffmpeg 命中（`vendor/ffmpeg` 探测链生效）；解释器命中；Office/编辑器缺失时返回 None 不抛异常 |
+| 11 | 外部程序探测 | ✅ PASS | ffmpeg 命中（`thirdparty/ffmpeg` 探测链生效）；解释器命中；Office/编辑器缺失时返回 None 不抛异常 |
 | 12 | 图标相似度（dHash） | ✅ PASS | 相同图→True、不同图→False，哈希差 32 bit |
 | 13 | GIF 合成（含中文路径） | ✅ PASS | `中文输出目录/结果.gif` 生成成功，5 帧 |
 | 14 | OpenCV 链路 | ✅ PASS | cv2 5.0.0 中文路径读写正常；`ImageEnhancer` 可导入 |
@@ -150,7 +150,7 @@ except ImportError as e:
 
 另外修复了一个**隐蔽的包名遮蔽**：项目根的 `ffmpeg/` 目录（vendored ffmpeg 构建）
 会被 Python 当作命名空间包，遮蔽 PyPI 的 `ffmpeg-python`（`import ffmpeg` 拿到的是目录，
-`ffmpeg.input()` 必然 AttributeError）。已迁移到 `vendor/ffmpeg/` 并纳入外部程序探测路径。
+`ffmpeg.input()` 必然 AttributeError）。已迁移到 `thirdparty/ffmpeg/` 并纳入外部程序探测路径。
 
 ### 3.6 顺带修复的测试稳健性问题
 

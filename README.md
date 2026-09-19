@@ -74,7 +74,12 @@ HudAutoTest/
 ├── auto_labeling/                # 标注辅助（preprocessing + template_matching/）
 ├── drivers/{windows,linux}/      # CAN 驱动库（按平台）
 ├── bin/{windows,linux}/          # 外部可执行（ffmpeg 等，按平台）
-├── vendor/ffmpeg/                # 随项目分发的 ffmpeg 构建
+├── thirdparty/                   # ★ 第三方内容统一收纳（按子目录管理）
+│   ├── ultralytics/              #   YOLO 框架源码（原 yolo_framework/…）
+│   ├── paddleocr/                #   PaddleOCR 源码（原 PaddleOCR-main）
+│   ├── zlg/                      #   ZLG CAN SDK 资源（原 kerneldlls）
+│   ├── ffmpeg/                   #   随项目分发的 ffmpeg 构建（原 vendor/ffmpeg）
+│   └── models/                   #   第三方预训练权重（原 models）
 ├── data/                         # 应用数据与运行期状态（与代码分离）
 ├── tests/                        # ★ 单元测试（pytest；含架构规则守卫）
 ├── tools/                        # check_env / selftest / check_imports / check_static / rename_modules
@@ -94,6 +99,7 @@ HudAutoTest/
 
 | 文档 | 内容 |
 |------|------|
+| [`thirdparty/README.md`](thirdparty/README.md) | **第三方内容说明**：各子目录用途与更新方式、与 drivers/bin 的边界、新增流程 |
 | [`docs/SOMEIP_REPLAY.md`](docs/SOMEIP_REPLAY.md) | **SOME/IP 回放**：界面布局说明、库部署（含 Windows 占位）、实测结果与排障 |
 | [`docs/STRUCTURE.md`](docs/STRUCTURE.md) | **项目结构说明**：分层与依赖方向、设计约定、改造前后量化对比、持续改进点 |
 | [`docs/PLATFORM_GUIDE.md`](docs/PLATFORM_GUIDE.md) | **平台化改造说明**：hudcore 层、改造点清单、扩展指南、验证方式 |
@@ -125,7 +131,7 @@ HudAutoTest/
 | GUI（tkinter） | ✅ | ✅（需 `python3-tk`） |
 | 中文字体 | 微软雅黑（自动） | Noto Sans CJK（自动探测） |
 | CAN 驱动 | `drivers/windows/zlgcan.dll` | `drivers/linux/libzlgcan.so`（ZLG Linux 驱动） |
-| ffmpeg | `bin/windows/ffmpeg.exe` / `vendor/ffmpeg/bin` | 系统 `ffmpeg`（apt） |
+| ffmpeg | `bin/windows/ffmpeg.exe` / `thirdparty/ffmpeg/bin` | 系统 `ffmpeg`（apt） |
 | 打开 xlsx / 日志 | WPS/Excel · notepad | LibreOffice · gedit/xdg-open |
 | YOLO / OCR | CUDA | CUDA 或 CPU（torch 按平台安装） |
 | Python | 3.10 ~ 3.13 | 3.10（系统自带）~ 3.13 |

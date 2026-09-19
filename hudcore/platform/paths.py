@@ -74,8 +74,41 @@ class Paths:
         return self._ensure(self.project_root / "data")
 
     @property
+    def thirdparty_dir(self) -> Path:
+        """第三方内容目录（统一收纳，按子目录分别管理）
+
+        约定（见 thirdparty/README.md）：
+            thirdparty/ultralytics/   YOLO 框架源码
+            thirdparty/paddleocr/     PaddleOCR 源码
+            thirdparty/zlg/           ZLG CAN SDK 资源
+            thirdparty/ffmpeg/        随项目分发的 ffmpeg 构建
+            thirdparty/models/        第三方预训练权重
+
+        与 drivers/、bin/ 的边界：drivers/<平台>/ 与 bin/<平台>/ 是**按平台分发的
+        部署目录**（现场替换库/可执行文件、且被 .gitignore 忽略），不属于"随仓库
+        分发的第三方源码"，因此保留在项目根。
+        """
+        return self.project_root / "thirdparty"
+
+    def thirdparty(self, name: str, *legacy_relpaths: str) -> Path:
+        """取第三方子目录；若新位置不存在则回退到旧位置（便于平滑迁移）。
+
+        :param name: 子目录名（如 "ultralytics"）
+        :param legacy_relpaths: 旧相对路径（如 "yolo_framework/ultralytics-8.3.217"）
+        """
+        new = self.thirdparty_dir / name
+        if new.exists():
+            return new
+        for rel in legacy_relpaths:
+            old = self.project_root / rel
+            if old.exists():
+                return old
+        return new                     # 都不存在时返回约定位置（便于给出明确报错）
+
+    @property
     def models_dir(self) -> Path:
-        return self.project_root / "models"
+        """第三方预训练权重目录（thirdparty/models，兼容旧 models/）"""
+        return self.thirdparty("models", "models")
 
     @property
     def docs_dir(self) -> Path:

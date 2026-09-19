@@ -46,14 +46,14 @@ def get_args():
         type=str,
         default=None,
         help="官方预训练权重路径（训练阶段使用）或任意 .pt 权重（在 --do_train=False 时使用）。\n"
-             "默认：<项目根>/yolov8m.pt；找不到时在 yolo_framework/ 下搜索 yolov8*.pt。"
+             "默认：<项目根>/yolov8m.pt；找不到时在 thirdparty/ultralytics 下搜索 yolov8*.pt。"
     )
     parser.add_argument(
         "--data",
         type=str,
         default=None,
         help="dataset.yaml（必须包含 val: 条目）。\n"
-             "默认：<项目根>/yolo_framework/ultralytics-8.3.217/YOLODataset/dataset.yaml。"
+             "默认：thirdparty/ultralytics/YOLODataset/dataset.yaml（兼容旧 yolo_framework 布局）。"
     )
     # ------------------- 训练超参数 -------------------
     parser.add_argument("--epochs", type=int, default=80)
@@ -119,8 +119,20 @@ def filter_boxes(cls_arr, conf_arr, xywhn_arr, args):
 # --------------------------------------------------------------
 # 5️⃣ 主函数
 # --------------------------------------------------------------
+def _thirdparty_dir(root: pathlib.Path, name: str, *legacy: str) -> pathlib.Path:
+    """第三方目录定位：thirdparty/<name> 优先，兼容旧位置（yolo_framework/... 等）。"""
+    try:
+        import hudcore.platform.paths as _p
+        return pathlib.Path(_p.paths.thirdparty(name, *legacy))
+    except Exception:                                     # 独立拷贝时的回退
+        new = root / "thirdparty" / name
+        if new.is_dir():
+            return new
+        return root / legacy[0] if legacy else new
+
+
 def resolve_weights(root: pathlib.Path, given: str | None) -> pathlib.Path:
-    """权重路径：命令行优先 → <项目根>/yolov8m.pt → yolo_framework/ 下任意 yolov8*.pt。
+    """权重路径：命令行优先 → <项目根>/yolov8m.pt → thirdparty/ultralytics 下任意 yolov8*.pt。
 
     不再硬编码任何开发机绝对路径，Windows / Ubuntu 行为一致。
     """
@@ -129,7 +141,7 @@ def resolve_weights(root: pathlib.Path, given: str | None) -> pathlib.Path:
     root_pt = (root / "yolov8m.pt").resolve()
     if root_pt.is_file():
         return root_pt
-    framework = root / "yolo_framework"
+    framework = _thirdparty_dir(root, "ultralytics", "yolo_framework/ultralytics-8.3.217")
     if framework.is_dir():
         for cand in sorted(framework.rglob("yolov8*.pt")):
             return cand.resolve()
@@ -137,14 +149,14 @@ def resolve_weights(root: pathlib.Path, given: str | None) -> pathlib.Path:
 
 
 def resolve_dataset_yaml(root: pathlib.Path, given: str | None) -> pathlib.Path:
-    """数据集配置：命令行优先 → YOLODataset/dataset.yaml → yolo_framework/ 下任意 dataset.yaml。"""
+    """数据集配置：命令行优先 → YOLODataset/dataset.yaml → thirdparty/ultralytics 下任意 dataset.yaml。"""
     if given:
         return pathlib.Path(given).expanduser().resolve()
-    default = (root / "yolo_framework" / "ultralytics-8.3.217"
-               / "YOLODataset" / "dataset.yaml").resolve()
+    base = _thirdparty_dir(root, "ultralytics", "yolo_framework/ultralytics-8.3.217")
+    default = (base / "YOLODataset" / "dataset.yaml").resolve()
     if default.is_file():
         return default
-    framework = root / "yolo_framework"
+    framework = base
     if framework.is_dir():
         for cand in sorted(framework.rglob("dataset.yaml")):
             return cand.resolve()
@@ -176,7 +188,7 @@ def main():
         raise FileNotFoundError(
             f"dataset.yaml 未找到 → {DATA_CFG}\n"
             f"提示：把 YOLODataset/dataset.yaml 放到 "
-            f"yolo_framework/ultralytics-8.3.217/ 下，或用 --data 指定绝对路径。"
+            f"thirdparty/ultralytics/ 下，或用 --data 指定绝对路径。"
         )
 
     # ------------------- 设备 -------------------

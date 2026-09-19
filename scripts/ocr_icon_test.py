@@ -20,8 +20,19 @@ def _project_root() -> str:
 
 
 CURRENT_DIR = _project_root()
-YOLO_DIR = os.path.abspath(os.path.join(CURRENT_DIR, "yolo_framework", "ultralytics-8.3.217"))
-OCR_DIR = os.path.abspath(os.path.join(CURRENT_DIR, "PaddleOCR-main"))
+
+
+def _thirdparty(name: str, *legacy: str) -> str:
+    """第三方目录定位：thirdparty/<name> 优先，兼容旧位置。"""
+    try:
+        import hudcore.platform.paths as _p
+        return str(_p.paths.thirdparty(name, *legacy))
+    except Exception:                        # 独立拷贝时的回退
+        return os.path.join(CURRENT_DIR, legacy[0] if legacy else name)
+
+
+YOLO_DIR = _thirdparty("ultralytics", "yolo_framework/ultralytics-8.3.217")
+OCR_DIR = _thirdparty("paddleocr", "PaddleOCR-main")
 os.environ["PADDLE_DISABLE_AUTO_DOWNLOAD"] = "1"
 os.environ["PADDLE_MODEL_HOME"] = OCR_DIR
 
@@ -85,7 +96,7 @@ if __name__ == '__main__':
     test_images_path = os.path.join(YOLO_DIR, 'ARHUD_frames')
     output_dir = "./image_result/output_images"
     crop_dir = "./image_result/crop_images"
-    OCR_MODEL_ROOT = r"./PaddleOCR-main/model"
+    OCR_MODEL_ROOT = os.path.join(OCR_DIR, "model")
     DET_MODEL_DIR = os.path.join(OCR_MODEL_ROOT, "PP-OCRv5_server_det_infer")  # e.g. det_infer/
     REC_MODEL_DIR = os.path.join(OCR_MODEL_ROOT, "PP-OCRv5_server_rec_infer")  # e.g. rec_infer/
     CLS_MODEL_DIR = os.path.join(OCR_MODEL_ROOT, "cls")  # 若不需要方向分类可不写

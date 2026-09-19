@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # 第三方/生成目录：不参与校验
 SKIP_DIRS = {
     ".git", "__pycache__", ".idea", ".vscode", ".venv", "venv", "node_modules",
-    "yolo_framework", "YOLO+=+_", "PaddleOCR-main", "kerneldlls",
+    "thirdparty", "yolo_framework", "YOLO+=+_", "PaddleOCR-main", "kerneldlls",
     "vendor", "ffmpeg", "models", "Resources", "output", "output_ocr", "logs", "bin",
     "dataset", "muban", "template_matching",
 }

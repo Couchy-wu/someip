@@ -55,13 +55,13 @@ def find_executable(names: Iterable[str] | str,
             if p.is_file():
                 return p
 
-    # 项目内置目录：bin/<平台>（优先）+ vendor 下随项目分发的第三方工具
-    # 注意：vendor/ffmpeg 曾位于项目根的 `ffmpeg/`，会作为命名空间包遮蔽
-    #       PyPI 的 ffmpeg-python（`import ffmpeg` 拿到的是目录而非库），
-    #       因此统一收纳到 vendor/ 下，避免与本项目模块同名。
+    # 项目内置目录：bin/<平台>（优先）+ thirdparty 下随项目分发的第三方工具
+    # 注意：随项目分发的 ffmpeg 构建曾位于项目根的 `ffmpeg/`，会作为命名空间包
+    #       遮蔽 PyPI 的 ffmpeg-python（`import ffmpeg` 拿到的是目录而非库），
+    #       因此统一收纳到 thirdparty/ffmpeg（旧位置 vendor/ffmpeg 仍兼容）。
     search_dirs: list[Path] = [paths.bin_dir]
-    search_dirs += [paths.project_root / "vendor" / "ffmpeg" / "bin",
-                    paths.project_root / "vendor" / "ffmpeg"]
+    ffmpeg_root = paths.thirdparty("ffmpeg", "vendor/ffmpeg")
+    search_dirs += [ffmpeg_root / "bin", ffmpeg_root]
     search_dirs += [Path(d) for d in extra_dirs]
 
     # 2) 项目 bin 目录 + 附加目录（含带/不带 .exe 后缀）

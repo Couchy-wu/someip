@@ -167,13 +167,25 @@ INITIALIZED_PACKAGES: list[str] = [
     "auto_labeling/template_matching",
 ]
 
+# ------------------------------------------------------------------ P2 第三方内容收敛记录
+# 目的：把随仓库分发的第三方内容统一收敛到 thirdparty/，按子目录分别管理；
+#       drivers/<平台>/ 与 bin/<平台>/ 属于"按平台分发的部署目录"（现场替换、被 .gitignore
+#       忽略），不在本次收敛范围内，边界说明见 thirdparty/README.md。
+THIRDPARTY_MOVES: list[tuple[str, str, str]] = [
+    ("yolo_framework/ultralytics-8.3.217", "thirdparty/ultralytics", "YOLO 框架源码"),
+    ("PaddleOCR-main",                     "thirdparty/paddleocr",  "PaddleOCR 源码"),
+    ("kerneldlls",                         "thirdparty/zlg",        "ZLG CAN SDK 资源"),
+    ("vendor/ffmpeg",                      "thirdparty/ffmpeg",     "随项目分发的 ffmpeg 构建"),
+    ("models",                             "thirdparty/models",     "第三方预训练权重"),
+]
+
 # 需要更新引用的文件类型
 TEXT_SUFFIXES = (".py", ".md", ".sh", ".bat", ".txt", ".json", ".yaml", ".yml", ".spec", ".cfg")
 
 # 跳过目录：版本库/缓存/第三方库/资源（第三方目录内的引用不属于本次重构范围）
 SKIP_DIRS = (".git", "__pycache__", ".idea", ".vscode", ".venv", "node_modules",
              "yolo_framework", "YOLO+=+_", "PaddleOCR-main", "kerneldlls",
-             "vendor", "ffmpeg", "models", "Resources", "output", "output_ocr", "logs")
+             "vendor", "thirdparty", "vendor", "ffmpeg", "models", "Resources", "output", "output_ocr", "logs")
 
 # 跳过文件：本脚本自身（含映射表，不应被改写）
 SKIP_FILES = {Path(__file__).resolve()}
