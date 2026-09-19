@@ -1,0 +1,16 @@
+# -*- coding: utf-8 -*-
+# 开发/校验依赖（运行期不需要）
+# ------------------------------------------------------------------
+# 用法：pip install -r requirements-dev.txt
+#
+# 用途：
+#   · pytest                  —— 运行 tests/ 单元测试与架构规则守卫
+#                                python -m pytest tests -q
+#   · pyflakes                —— 静态检查（undefined name / 重复定义 / 通配符导入）
+#                                python tools/check_static.py
+#
+# 说明：这两项只用于开发与 CI 校验，**不进入运行期依赖清单**，
+#       避免现场部署时引入不必要的包。
+-r requirements.txt
+pytest==8.4.2
+pyflakes==3.4.0

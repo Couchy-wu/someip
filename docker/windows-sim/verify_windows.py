@@ -481,6 +481,25 @@ def t_project_scripts():
     return "PASS", "; ".join(outputs)
 
 
+@test("18. 单元测试（pytest）")
+def t_unit_tests():
+    """运行 tests/ 下的单元测试（架构规则守卫 + 核心行为）。
+
+    pytest 未安装时 SKIP（容器镜像默认不装测试框架，避免影响运行期镜像体积）。
+    """
+    import subprocess
+    try:
+        import pytest  # noqa: F401
+    except ImportError:
+        return "SKIP", "未安装 pytest（pip install pytest 后可运行单元测试）"
+    r = subprocess.run([exe_python(), "-m", "pytest", "tests", "-q"],
+                       capture_output=True, text=True, cwd=str(PROJECT_ROOT), timeout=600)
+    tail = (r.stdout or r.stderr).strip().splitlines()[-1:] or [""]
+    if r.returncode != 0:
+        return "FAIL", f"pytest rc={r.returncode} | {tail[0][:120]}"
+    return "PASS", tail[0][:120]
+
+
 # ---------------------------------------------------------------- main
 
 def main() -> int:
@@ -503,7 +522,7 @@ def main() -> int:
     tests = [t_runtime, t_system, t_paths, t_fonts, t_tk, t_theme_redirect,
              t_import_main, t_import_all, t_can_load, t_can_hint, t_external,
              t_similarity, t_gif, t_cv_modules, t_can_signal, t_matrix_csv,
-             t_project_scripts]
+             t_project_scripts, t_unit_tests]
     skip = {s.strip() for s in args.skip.split(",") if s.strip()}
     print()
     for fn in tests:

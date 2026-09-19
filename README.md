@@ -29,6 +29,8 @@ python tools/check_env.py        # 依赖 / Python 版本 / 字体 / CAN 驱动 
 python tools/selftest.py         # 平台抽象层回归自测
 python tools/check_imports.py    # 项目内部导入静态校验（改名/重构后兜底）
 python tools/check_static.py     # 静态检查（pyflakes，拦截 undefined name 等）
+pip install -r requirements-dev.txt   # 开发/校验依赖（pytest、pyflakes）
+python -m pytest tests -q        # 单元测试（含架构规则守卫：包边界/无副作用/无 sys.path 注入）
 ```
 
 ### Windows 环境免真机验证（Docker）
@@ -72,7 +74,8 @@ HudAutoTest/
 ├── drivers/{windows,linux}/      # CAN 驱动库（按平台）
 ├── bin/{windows,linux}/          # 外部可执行（ffmpeg 等，按平台）
 ├── vendor/ffmpeg/                # 随项目分发的 ffmpeg 构建
-├── tools/                        # check_env.py / selftest.py / check_imports.py / rename_modules.py
+├── tests/                        # ★ 单元测试（pytest；含架构规则守卫）
+├── tools/                        # check_env / selftest / check_imports / check_static / rename_modules
 ├── docker/windows-sim/           # ★ 容器内 Windows 环境验证
 ├── docs/                         # 平台化 / 部署 / 兼容性 / 验证文档
 ├── requirements*.txt             # 基线 + 平台增量 + py313 清单

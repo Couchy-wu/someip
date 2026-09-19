@@ -117,6 +117,4 @@ ffmpeg-python==0.2.0
 pyperclip==1.11.0
 watchdog==6.0.0
 natsort==8.4.0
-
-# ---- 校验工具（tools/check_static.py 使用）----
-pyflakes==3.4.0
+\n\n# ---- 单元测试（tests/，运行：python -m pytest tests -q）----\npytest==8.4.2\n

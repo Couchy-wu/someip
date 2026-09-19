@@ -22,6 +22,8 @@ MODULES = [
     "tkinter", "numpy", "pandas", "openpyxl", "PIL", "cv2",
     # 可选（缺失时对应功能禁用，但主程序仍可启动）
     "yaml", "requests", "psutil", "pyperclip", "watchdog", "ffmpeg", "tqdm", "natsort",
+    # 测试/校验工具（验证镜像内提供，便于在容器中运行 tests/ 与静态检查）
+    "pytest", "pyflakes",
 ]
 
 failed: list[str] = []

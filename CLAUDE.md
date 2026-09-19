@@ -105,8 +105,16 @@ python tools/check_env.py       # 环境自检（依赖/版本/字体/驱动/外
 python tools/selftest.py        # hudcore 回归自测（跨平台可跑）
 python tools/check_imports.py   # 项目内部导入静态校验（重构改名后兜底）
 python tools/check_static.py     # 静态检查（pyflakes：undefined name 等，需 pip install pyflakes）
+python -m pytest tests -q        # 单元测试 + 架构规则守卫（需 pip install pytest）
 ./run.sh --check                # Linux 一键自检
 ```
+
+### 单元测试与架构规则守卫
+
+`tests/` 下的 pytest 用例除了核心行为（位工具/CAN 状态与编码/日志解析/平台路径），
+还包含 **架构规则守卫**：包必须有 `__init__.py`、禁止 `import *`、禁止业务代码
+`sys.path` 注入、禁止模块级副作用（建 GUI/跑 mainloop/解析命令行）、根目录只放入口。
+改动结构后这些用例会直接失败，防止已确立的约定被破坏。
 
 ### 命名约定与重构工具
 

@@ -150,7 +150,7 @@ RUN set -eux; \
 RUN set -eux; \
     SP="${WINEPREFIX}/drive_c/Python313/Lib/site-packages"; \
     PKGS="numpy pandas openpyxl pillow opencv-python pyyaml requests psutil \
-          pyperclip watchdog ffmpeg-python tqdm natsort"; \
+          pyperclip watchdog ffmpeg-python tqdm natsort pytest pyflakes"; \
     python3 -m pip install --upgrade pip --disable-pip-version-check -i "${PIP_INDEX}"; \
     python3 -m pip install --disable-pip-version-check -i "${PIP_INDEX}" \
         --target "${SP}" \
