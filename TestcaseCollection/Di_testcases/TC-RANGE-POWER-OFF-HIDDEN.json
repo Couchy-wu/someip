@@ -1,0 +1,40 @@
+{
+  "scenario_id": "TC-RANGE-POWER-OFF-HIDDEN",
+  "description": "Driving range text surface hidden because the HUD is not powered on (val_power==1 POWER_OFF). Without POWER_ON the range surface is not rendered; the negative label documents the hidden range text.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_socRangeShow",
+        "value": 1,
+        "desc": "SOC range show flag enabled"
+      },
+      {
+        "field": "val_socRange",
+        "value": 90,
+        "desc": "range value present"
+      },
+      {
+        "field": "val_power",
+        "value": 1,
+        "desc": "POWER_OFF, range surface not rendered"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "RANGE",
+    "location_constraint": "1000,130",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

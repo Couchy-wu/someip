@@ -1,0 +1,62 @@
+{
+  "scenario_id": "TC-ICC-EX03",
+  "description": "ICC surface is hidden and not drawn when the ICC display flag is cleared regardless of the smart UI texture switch setting.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1
+      },
+      {
+        "signal_id": "0x261",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0
+      },
+      {
+        "signal_id": "0x261",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 4
+      },
+      {
+        "signal_id": "0x29C",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0
+      }
+    ],
+    "mem": [
+      {
+        "field": "sta_iccShow",
+        "value": 0
+      },
+      {
+        "field": "val_intelUI",
+        "value": 1
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 120
+}

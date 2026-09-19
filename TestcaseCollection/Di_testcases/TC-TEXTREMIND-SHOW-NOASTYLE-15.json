@@ -1,0 +1,49 @@
+{
+    "scenario_id": "TC-TEXTREMIND-SHOW-NOASTYLE-15",
+    "description": "Text remind surface shown when NOAExitStyleS (CAN 0x1FF sub 3.4-4.1) is active with the full-bit style value 15. diTextRemindSurface SetData shows the guidance text when the NOA exit style is active and intelUI is off.",
+    "input_combination": {
+        "can": [
+            {
+                "signal_id": "0x4C1",
+                "sub_id": "",
+                "bit_range": "6.2-6.3",
+                "value": 1,
+                "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+            },
+            {
+                "signal_id": "0x1FF",
+                "sub_id": "",
+                "bit_range": "3.4-4.1",
+                "value": 15,
+                "desc": "NOAExitStyleS active exit style 15, trigger text remind display"
+            },
+            {
+                "signal_id": "0x26F",
+                "sub_id": "",
+                "bit_range": "6.4-6.7",
+                "value": 0,
+                "desc": "Shift_Mode_26F_S -> val_gear=0"
+            }
+        ],
+        "mem": [
+            {
+                "field": "dataValue.val_gear",
+                "value": 0,
+                "desc": "gear P, not suppressing text remind"
+            },
+            {
+                "field": "dataValue.val_intelUI",
+                "value": 0,
+                "desc": "intelligent HMI option off, text remind visible"
+            }
+        ],
+        "someip": []
+    },
+    "expected_output": {
+        "primary_label": "TEXT_REMIND",
+        "negative_label": "NO_TEXT_REMIND",
+        "location_constraint": "640,240",
+        "min_confidence": 0.9
+    },
+    "wait_ms": 100
+}

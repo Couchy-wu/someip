@@ -1,0 +1,44 @@
+{
+  "scenario_id": "TC-SPEEDLIMIT-NEG-DISPLAY0",
+  "description": "Speed-limit surface hidden when display mode is 0. display(0x23A sub6.4-6.6)=0 -> val_speedlimitDisplay==0, the show computation falls through to sta_speedlimitShow=SHOW_NOTHING(0); diSpeedlimitSurface hides (no ring, no value).",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "0.0",
+        "value": 1,
+        "desc": "ONLINE_0x23A_S: speedlimit frame online"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "2.0-2.7",
+        "value": 80,
+        "desc": "Traffic_Sign_Recogni_Value_23A_S: val_speedlimitValue=80 (valid but display off)"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "6.4-6.6",
+        "value": 0,
+        "desc": "Traffic_Sign_Recognition_2A6_S (frame 0x23A): val_speedlimitDisplay=0 (hidden)"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "NO_SPEEDLIMIT",
+    "location_constraint": "516,235,540,259",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

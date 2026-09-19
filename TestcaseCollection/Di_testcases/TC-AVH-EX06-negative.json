@@ -1,0 +1,54 @@
+{
+    "scenario_id": "TC-AVH-EX06",
+    "description": "AVH surface hidden when the AVH state value is zero while hand-off and display stay nominal.",
+    "input_combination": {
+        "can": [
+            {
+                "signal_id": "0x4C1",
+                "sub_id": "",
+                "bit_range": "",
+                "value": 1,
+                "desc": "ADAS fusion master switch present"
+            },
+            {
+                "signal_id": "0x122",
+                "sub_id": "",
+                "bit_range": "8.6-8.7",
+                "value": 0,
+                "desc": "AVH_CtrlStatus_S -> val_avh=0"
+            },
+            {
+                "signal_id": "0x29C",
+                "sub_id": "",
+                "bit_range": "6.0-6.2",
+                "value": 0,
+                "desc": "DNP_Take_Over_Req_S -> val_handOff=0"
+            }
+        ],
+        "mem": [
+            {
+                "field": "dataValue.val_avh",
+                "value": 0,
+                "desc": "AVH system inactive state"
+            },
+            {
+                "field": "dataValue.val_handOff",
+                "value": 0,
+                "desc": "hand-off flag not in the show set"
+            },
+            {
+                "field": "dataValue.val_display",
+                "value": 1,
+                "desc": "display mode standard"
+            }
+        ],
+        "someip": []
+    },
+    "expected_output": {
+        "primary_label": "",
+        "negative_label": "",
+        "location_constraint": "",
+        "min_confidence": 0.9
+    },
+    "wait_ms": 100
+}

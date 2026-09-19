@@ -1,0 +1,65 @@
+{
+  "scenario_id": "TC-PATTERN-DISABLE-HIDDEN",
+  "description": "Pattern surface hidden when the warp enable bit is cleared even though a pattern number is set. The gated warp driver ignores the selected number until enable is asserted, leaving the pattern idle.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: fusion master switch ON"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "0x01",
+        "bit_range": "4.4-5.0",
+        "value": 12,
+        "desc": "DistortedPictureS_2FD_01 -> warp_PatternNum=12"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "0x01",
+        "bit_range": "4.0-4.3",
+        "value": 11,
+        "desc": "AngleGearSetting_2FD_01 -> warp_angleGearSet=11"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "0x01",
+        "bit_range": "5.1-5.5",
+        "value": 0,
+        "desc": "NoDistortedPictureS_2FD_01 -> warp_Enable=0"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "",
+        "bit_range": "4.4-5.0",
+        "value": 12,
+        "desc": "NO_Distorted_Picture_S: warp_PatternNum=12"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "",
+        "bit_range": "4.0-4.3",
+        "value": 11,
+        "desc": "Angle_Gear_Setting_2FD_S: warp_angleGearSet=11"
+      }
+    ],
+    "mem": [
+      {
+        "field": "warp_Enable",
+        "value": 0,
+        "desc": "warp enable cleared"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

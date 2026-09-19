@@ -1,0 +1,65 @@
+{
+  "scenario_id": "TC-PATTERN-EX07",
+  "description": "Pattern surface remains visible when the distortion enable flag is turned on while a calibration pattern stays selected",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS gate active"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "0x01",
+        "bit_range": "4.4-5.0",
+        "value": 16,
+        "desc": "DistortedPictureS_2FD_01 -> warp_PatternNum=16"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "0x01",
+        "bit_range": "5.1-5.5",
+        "value": 1,
+        "desc": "NoDistortedPictureS_2FD_01 -> warp_Enable=1"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "0x01",
+        "bit_range": "6.0",
+        "value": 0,
+        "desc": "RecoveredS_2FD_01 -> warp_ReSet=0"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "",
+        "bit_range": "4.4-5.0",
+        "value": 16,
+        "desc": "NO_Distorted_Picture_S: warp_PatternNum=16"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "",
+        "bit_range": "6.0",
+        "value": 0,
+        "desc": "Recovered_S: warp_ReSet=0"
+      }
+    ],
+    "mem": [
+      {
+        "field": "warp_Enable",
+        "value": 1,
+        "desc": "enable warping"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "PATTERN",
+    "negative_label": "NO_PATTERN",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

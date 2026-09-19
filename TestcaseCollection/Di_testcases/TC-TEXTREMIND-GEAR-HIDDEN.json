@@ -1,0 +1,49 @@
+{
+    "scenario_id": "TC-TEXTREMIND-GEAR-HIDDEN",
+    "description": "Text remind surface hidden by gear suppression: val_gear is set to a driving gear value so diTextRemindSurface suppresses the reminder text even though the NOA exit style switch is active.",
+    "input_combination": {
+        "can": [
+            {
+                "signal_id": "0x4C1",
+                "sub_id": "",
+                "bit_range": "6.2-6.3",
+                "value": 1,
+                "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+            },
+            {
+                "signal_id": "0x1FF",
+                "sub_id": "",
+                "bit_range": "3.4-4.1",
+                "value": 12,
+                "desc": "NOAExitStyleS active, but gear suppresses the reminder"
+            },
+            {
+                "signal_id": "0x26F",
+                "sub_id": "",
+                "bit_range": "6.4-6.7",
+                "value": 1,
+                "desc": "Shift_Mode_26F_S -> val_gear=1"
+            }
+        ],
+        "mem": [
+            {
+                "field": "dataValue.val_gear",
+                "value": 1,
+                "desc": "gear set to a state that suppresses the text remind"
+            },
+            {
+                "field": "dataValue.val_intelUI",
+                "value": 0,
+                "desc": "intelUI off, not the suppressing condition here"
+            }
+        ],
+        "someip": []
+    },
+    "expected_output": {
+        "primary_label": "",
+        "negative_label": "NO_TEXT_REMIND",
+        "location_constraint": "640,240",
+        "min_confidence": 0.9
+    },
+    "wait_ms": 100
+}

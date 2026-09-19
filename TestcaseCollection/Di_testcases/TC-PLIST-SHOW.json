@@ -1,0 +1,38 @@
+{
+  "scenario_id": "TC-PLIST-SHOW",
+  "description": "Destination point-list surface drawn. The point list renders destination-related list content while the destination subsystem is active (destination status valid). Show modeled with destination status present and display enabled.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch memFromMCU.switchADASFusion=1"
+      },
+      {
+        "signal_id": "0x43F",
+        "sub_id": "0xFF",
+        "bit_range": "6.0-6.3",
+        "value": 1,
+        "desc": "Destination_StatusS_S -> val_destinationStatus=1"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "7.4-7.5",
+        "value": 1,
+        "desc": "HUD_Mode_Selection_Setting_Item_S: val_display=1"
+      }
+    ],
+    "mem": [],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "POINT_LIST",
+    "negative_label": "NO_POINT_LIST",
+    "location_constraint": "640,200",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

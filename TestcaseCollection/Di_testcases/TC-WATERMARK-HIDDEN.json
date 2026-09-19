@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-WATERMARK-HIDDEN",
+  "description": "Watermark surface hidden. With the HUD switched off (val_switchHUD=0) and power off, the projection layer and its watermark are not drawn.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON (gating signal present)"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "4.3-4.4",
+        "value": 0,
+        "desc": "HUD_Switch_Set_S: val_switchHUD=0"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_power",
+        "value": 0,
+        "desc": "power off, HUD layer and watermark not drawn"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

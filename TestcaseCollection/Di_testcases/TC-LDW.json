@@ -1,0 +1,44 @@
+{
+  "scenario_id": "TC-LDW",
+  "description": "LDW surface drawn (simplest drivable state). DI_AEC_LDW_Show gate (diAEControl.cpp) turns sta_ldwStatus=RET_SHOW when the LDW-warning condition is met; the drawing surface requires the master switch on and the inverse-vehicle-condition gate open (gear!=1 -> sta_vehicleConditionShow=RET_SHOW_NOT). One lane-departure warning signal driven active so the warning texture renders. master can frame 0x4C1 asserted.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.0",
+        "value": 1,
+        "desc": "HUD master switch frame ON"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 0,
+        "desc": "gear!=1 so sta_vehicleConditionShow=RET_SHOW_NOT, opening the LDW show gate"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "7.4-7.5",
+        "value": 1,
+        "desc": "HUD_Mode_Selection_Setting_Item_S: val_display=1"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_ldw",
+        "value": 1,
+        "desc": "LDW warning active, drives the LDW staus getter"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "LDW",
+    "negative_label": "",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

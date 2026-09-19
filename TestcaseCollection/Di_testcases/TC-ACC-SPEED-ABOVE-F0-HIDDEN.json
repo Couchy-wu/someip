@@ -1,0 +1,65 @@
+{
+  "scenario_id": "TC-ACC-SPEED-ABOVE-F0",
+  "description": "ACC hidden: val_accSpeedValue above 0xF0 upper bound fails DI_AEC_ACC_Show (diAEControl.cpp:1051 requires 0xF0 >= value). Speed value 0xF1 (241) with active status and color=4 -> sta_AccShow=RET_SHOW_NOT, surface does not render.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.0-6.1",
+        "value": 1,
+        "desc": "Safe_Driving_Assistance_Function_S: ADAS function ON"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "0.0",
+        "value": 1,
+        "desc": "ONLINE_0x23A_S: ACC frame online"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "1.0-1.7",
+        "value": 241,
+        "desc": "ACC_Cruise_Speed_Value_23A_S: val_accSpeedValue=241(0xF1) above bound -> no show"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "3.0-3.2",
+        "value": 1,
+        "desc": "ACC_Cruise_Speed_2A6_S: val_accSpeedstatus=1 any status cannot override value bounds"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "3.3-3.5",
+        "value": 4,
+        "desc": "ACC_Cruise_Speed_Color_2A6_S: val_accSpeedcolor=4"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "0.0",
+        "value": 1,
+        "desc": "ONLINE_0x294_S: belt frame online"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "3.0-3.1",
+        "value": 0,
+        "desc": "Driver_Belt_Status_S: belt free"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "ACC",
+    "location_constraint": "540,259",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

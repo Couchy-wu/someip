@@ -1,0 +1,58 @@
+{
+  "scenario_id": "TC-TRAFFICLIGHT",
+  "description": "TrafficLight surface drawn (simplest drivable state). DI_AEC_TrafficLight_Show (diAEControl.cpp L245-255) sets sta_trafficLightStatus=RET_SHOW when first_Cross_light_status_S not in {0,1}, val_display!=SIMPLE, sta_Navi==NAVI_ON, sta_vehicleConditionShow!=RET_SHOW. first_Cross_light_status_S loaded (L164) from EventSignal.FirstCrosslightstatusS (First_Cross_light_status_S CAN callback, 0x43F 2.2-2.4); feed value 2. val_display=1 (STANDARD), gear!=1 keeps the display/speed gates open. sta_Navi==NAVI_ON needs POWER_ON(val_power=3) and val_naviStatus in {2,3}; navigation channel online via someip 0x010A/0x01. Primary label asserted.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.0",
+        "value": 1,
+        "desc": "HUD master switch frame ON"
+      },
+      {
+        "signal_id": "0x43F",
+        "sub_id": "",
+        "bit_range": "2.2-2.4",
+        "value": 2,
+        "desc": "First_Cross_light_status_S frame -> first_Cross_light_status_S=2 (not 0/1)"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 0,
+        "desc": "gear!=1 keeps sta_vehicleConditionShow=RET_SHOW_NOT, opening the show gate"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "7.4-7.5",
+        "value": 1,
+        "desc": "HUD_Mode_Selection_Setting_Item_S: val_display=1"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_power",
+        "value": 3,
+        "desc": "POWER_ON required for sta_Navi==NAVI_ON"
+      }
+    ],
+    "someip": [
+      {
+        "service_id": "0x010A",
+        "instance_id": "0x01",
+        "online": 1,
+        "desc": "navigation ETH channel online so DiDcGetNavigationETH returns non-zero navigating_status"
+      }
+    ]
+  },
+  "expected_output": {
+    "primary_label": "TRAFFICLIGHT",
+    "negative_label": "",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

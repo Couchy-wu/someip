@@ -1,0 +1,47 @@
+{
+  "scenario_id": "TC-NEXTROADDIST-EX02",
+  "description": "Next road distance hidden because navi status zero. Draw gate fails so no distance rendered.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master switch enabled"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 3,
+        "desc": "powertrain power-gate state from CAN (BCMPower_Gear_12D_S)"
+      }
+    ],
+    "mem": [
+      {
+        "field": "nextRoadDist",
+        "value": 250,
+        "desc": "distance to next road in meters"
+      },
+      {
+        "field": "nextRoadDistUnit",
+        "value": "m",
+        "desc": "metric unit for distance"
+      },
+      {
+        "field": "val_naviStatus",
+        "value": 0,
+        "desc": "navi inactive so distance hidden"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "NO_NEXT_ROAD_DIST",
+    "negative_label": "NEXT_ROAD_DIST",
+    "location_constraint": "500,110",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

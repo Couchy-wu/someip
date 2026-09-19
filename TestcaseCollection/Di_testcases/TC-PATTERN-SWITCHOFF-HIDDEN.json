@@ -1,0 +1,65 @@
+{
+  "scenario_id": "TC-PATTERN-SWITCHOFF-HIDDEN",
+  "description": "Pattern surface hidden when the driving assistant fusion switch is off. The warp enable is asserted but the group master switch is cleared, so the pattern stays suppressed and no warp content is painted.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 0,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: fusion master switch OFF"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "0x01",
+        "bit_range": "4.4-5.0",
+        "value": 6,
+        "desc": "DistortedPictureS_2FD_01 -> warp_PatternNum=6"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "0x01",
+        "bit_range": "4.0-4.3",
+        "value": 1,
+        "desc": "AngleGearSetting_2FD_01 -> warp_angleGearSet=1"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "0x01",
+        "bit_range": "5.1-5.5",
+        "value": 1,
+        "desc": "NoDistortedPictureS_2FD_01 -> warp_Enable=1"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "",
+        "bit_range": "4.4-5.0",
+        "value": 6,
+        "desc": "NO_Distorted_Picture_S: warp_PatternNum=6"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "",
+        "bit_range": "4.0-4.3",
+        "value": 1,
+        "desc": "Angle_Gear_Setting_2FD_S: warp_angleGearSet=1"
+      }
+    ],
+    "mem": [
+      {
+        "field": "warp_Enable",
+        "value": 1,
+        "desc": "warp enable asserted"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

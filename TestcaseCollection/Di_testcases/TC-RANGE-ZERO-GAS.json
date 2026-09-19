@@ -1,0 +1,40 @@
+{
+  "scenario_id": "TC-RANGE-ZERO-GAS",
+  "description": "Driving range text surface hidden for the GAS segment: the gas range show flag is cleared (gasRangeShow==0), so no fuel range string is rendered even though a range value exists. Range surface stays hidden.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_gasRangeShow",
+        "value": 0,
+        "desc": "gas range segment show flag cleared, segment hidden"
+      },
+      {
+        "field": "val_gasRange",
+        "value": 320,
+        "desc": "value present but show flag off, not rendered"
+      },
+      {
+        "field": "val_power",
+        "value": 3,
+        "desc": "POWER_ON"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "RANGE",
+    "location_constraint": "1000,130",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

@@ -1,0 +1,56 @@
+{
+  "scenario_id": "TC-NEXTROADNAME-EX08",
+  "description": "Next road name hidden with navi status zero while display enabled and theme blue. Only navi gate fails.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master switch enabled"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 3,
+        "desc": "powertrain power-gate state from CAN (BCMPower_Gear_12D_S)"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "4.5-4.7",
+        "value": 2,
+        "desc": "HUD_Mode_Settings_S: val_theme=2"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "7.4-7.5",
+        "value": 1,
+        "desc": "HUD_Mode_Selection_Setting_Item_S: val_display=1"
+      }
+    ],
+    "mem": [
+      {
+        "field": "nextRoadName",
+        "value": "Wensan Road",
+        "desc": "text name of the next road"
+      },
+      {
+        "field": "val_naviStatus",
+        "value": 0,
+        "desc": "navi inactive hides name"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "NO_NEXT_ROAD_NAME",
+    "negative_label": "NEXT_ROAD_NAME",
+    "location_constraint": "500,120",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

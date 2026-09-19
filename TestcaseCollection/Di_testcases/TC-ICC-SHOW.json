@@ -1,0 +1,47 @@
+{
+    "scenario_id": "TC-ICC-SHOW",
+    "description": "diIccSurface ICC indication drawn. The ICC surface draws when sta_iccShow reflects an active ICC state and intelUI texure selection is present. Show modeled with ICC status active and intelUI off (standard UI texture).",
+    "input_combination": {
+        "can": [
+            {
+                "signal_id": "0x4C1",
+                "sub_id": "",
+                "bit_range": "6.2-6.3",
+                "value": 1,
+                "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch present"
+            },
+            {
+                "signal_id": "0x261",
+                "sub_id": "",
+                "bit_range": "5.3-5.5",
+                "value": 1,
+                "desc": "TJA_Standby_Sts_Indicator_261_S -> val_iccStatus=1"
+            }
+        ],
+        "mem": [
+            {
+                "field": "dataValue.val_iccStatus",
+                "value": 1,
+                "desc": "ICC state active, texture drawn"
+            },
+            {
+                "field": "dataValue.sta_iccShow",
+                "value": 1,
+                "desc": "iccShow true, surface drawn"
+            },
+            {
+                "field": "dataValue.val_intelUI",
+                "value": 0,
+                "desc": "standard UI texture selected"
+            }
+        ],
+        "someip": []
+    },
+    "expected_output": {
+        "primary_label": "ICC",
+        "negative_label": "NO_ICC",
+        "location_constraint": "640,240",
+        "min_confidence": 0.9
+    },
+    "wait_ms": 100
+}

@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-GEAR-VEHICLECOND-POS",
+  "description": "Gear surface switches to GEAR_1 layout when the vehicle-condition overlay is active: gear=P(1) + LF door open(2) drive vehicleConditionShow=RET_SHOW, and when sta_vehicleConditionShow==RET_SHOW (1) DI_AEC_GearShow grants sta_gearShow=RET_SHOW unconditionally. Draw() then picks GEAR_1 layout at 705,350.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 1,
+        "desc": "Shift_Mode_26F_S: val_gear=1 (P)"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "1.0-1.1",
+        "value": 2,
+        "desc": "DOORS_294 LF door open(2) -> vehicle-condition overlay active, GEAR_1 layout"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "P",
+    "negative_label": "",
+    "location_constraint": "705,350",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

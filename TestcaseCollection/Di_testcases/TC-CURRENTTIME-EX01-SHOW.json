@@ -1,0 +1,49 @@
+{
+  "scenario_id": "TC-CURRENTTIME-EX01",
+  "description": "diCurrentTimeSurface current-time text shown. CARD_CURRENTTIME resident card active and a valid time string present, so the time text is rendered; white font for non-theme-2.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch memFromMCU.switchADASFusion=1"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 3,
+        "desc": "powertrain power-gate state from CAN (BCMPower_Gear_12D_S)"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "4.5-4.7",
+        "value": 1,
+        "desc": "HUD_Mode_Settings_S: val_theme=1"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_currentTime",
+        "value": "12:30",
+        "desc": "valid time-of-day string rendered as text"
+      },
+      {
+        "field": "sta_residentCardShow",
+        "value": 1,
+        "desc": "resident card set to CARD_CURRENTTIME, draw gate satisfied"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "CURRENT_TIME",
+    "negative_label": "NO_CURRENT_TIME",
+    "location_constraint": "1000,100",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

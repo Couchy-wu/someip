@@ -1,0 +1,42 @@
+{
+  "scenario_id": "TC-INDUCTION-NAVI-OFF",
+  "description": "Induction surface not drawn: val_power=POWER_ON(3) but val_naviStatus=0 so DI_AEC_Navigation_Status returns NAVI_OFF (sta_Navi=0), failing the induction draw gate (diInductionSurface.cpp:69) even though the induction length is >0.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch memFromMCU.switchADASFusion=1"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_power",
+        "value": 3,
+        "desc": "POWER_ON"
+      },
+      {
+        "field": "val_naviStatus",
+        "value": 0,
+        "desc": "navi status 0 => sta_Navi=NAVI_OFF, induction surface hidden"
+      }
+    ],
+    "someip": [
+      {
+        "service_id": "0x010A",
+        "instance_id": "0x01",
+        "online": 0,
+        "desc": "navigation ETH channel offline -> DiDcGetNavigationETH()=0 -> sta_Navi=NAVI_OFF, gate fails"
+      }
+    ]
+  },
+  "expected_output": {
+    "primary_label": "NO_INDUCTION",
+    "negative_label": "INDUCTION",
+    "location_constraint": "500,120",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

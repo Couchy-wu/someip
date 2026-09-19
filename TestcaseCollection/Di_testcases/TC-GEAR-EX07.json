@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-GEAR-EX07",
+  "description": "Gear surface switches from D to R when val_gear changes from 4 to 2 while vehicle stays below the speed hide threshold.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 8,
+        "desc": "val_speed=8"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 2,
+        "desc": "Shift_Mode_26F_S val_gear=2"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "R",
+    "negative_label": "",
+    "location_constraint": "707,359",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

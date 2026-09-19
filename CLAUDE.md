@@ -141,6 +141,27 @@ python -m pytest tests -q        # 单元测试 + 架构规则守卫（需 pip i
 ./run.sh --check                # Linux 一键自检
 ```
 
+### Di 测试用例（can_data_tools/di_case_*，与旧链路并存）
+
+- **两套格式用开关区分**（`can_data_tools/case_format.py`，默认 `legacy`）：
+  旧格式走 `gui_handlers/can_testcase_parser.py`（**未改动**）；Di 格式走
+  `can_data_tools/di_case_parser.py` + `di_case_runner.py`；
+  开关优先级：`case_format.set_format()`（GUI）→ `HUD_TESTCASE_FORMAT` → 默认 legacy；
+- 用例在 `TestcaseCollection/Di_testcases/`（497 个，**只读基线**），格式与实测分布见
+  `docs/DI_TESTCASES.md`；
+- 三个易踩的点：
+  1. Di 的 `bit_range` 是 **0 起字节号**（`"0.0"`→`data[0]`，最大 `"46.0-46.7"`→64 字节 CANFD），
+     与项目既有 `can_core.bit_utils` 的 1 起不同 → 一律用 `can_data_tools/can_bit_writer.py`
+     并显式传 `base`（`DI_BASE=0` / `LEGACY_BASE=1`）；
+  2. 415 条 CAN 条目没有位域（只写"门控有效"）→ 记为不可编码，可用
+     `data/DI_Config/gate_frame.json` 补默认位，**不要猜**；
+  3. `mem` 字段（482 条）是 HUD 内部状态量，外部无法注入 → 执行器如实列为"需台架注入"；
+- 标贴校验：标签→参考图映射在 `data/DI_Config/label_map.json`，参考图/位置来自
+  `data/UI_Config/*.json` + `Resources/ImageUI/`，比对用 `image_testing` 的 dHash；
+  没有参考图的标签记为 `no_reference`（不算通过）；
+- 入口：`python -m scripts.run_di_cases`（体检/执行/报告）、GUI 主界面 **[Di 测试用例]** 按钮；
+- 单测：`tests/test_di_cases.py`（解析/位写入/执行/校验/开关）。
+
 ### SOME/IP 回放（someip_core / someip_gui）
 
 - 业务：`someip_core/`（models 定义表 / api ctypes 绑定 / pcap_info 解析 / config / replay 控制器），
@@ -215,6 +236,7 @@ cd docker/windows-sim && ./build.sh && ./run_verify.sh
 - `docs/STRUCTURE.md` — 项目结构说明（分层、依赖方向、设计约定、量化对比）
 - `docs/PLATFORM_GUIDE.md` — 平台化改造说明与扩展指南
 - `docs/UBUNTU_SETUP.md` — Ubuntu 22.04 部署（含 ZLG Linux 驱动安装）
+- `docs/DI_TESTCASES.md` — Di 测试用例（格式规范、格式开关、三类输入支持度、标贴校验覆盖）
 - `docs/PYTHON_COMPATIBILITY.md` — Python 3.10 ~ 3.13 兼容性矩阵与升级步骤
 - `docs/WINDOWS_VERIFICATION.md` — Windows 环境验证方法与实测结果
 - `docker/windows-sim/README.md` — Windows 验证容器使用说明

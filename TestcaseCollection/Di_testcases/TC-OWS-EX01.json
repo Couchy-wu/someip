@@ -1,0 +1,52 @@
+{
+  "scenario_id": "TC-OWS-EX01",
+  "description": "OWS surface shows blink animation on left DOW only while right side inactive, vehicle in N gear with power on.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master active"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 3,
+        "desc": "powertrain power standby"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "gear position N"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 2,
+        "desc": "left DOW blink enable"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0,
+        "desc": "right DOW inactive"
+      }
+    ],
+    "mem": [],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "OWS_LEFT_BLINK",
+    "negative_label": "NO_OWS",
+    "location_constraint": "640,240",
+    "min_confidence": 0.85
+  },
+  "wait_ms": 100
+}

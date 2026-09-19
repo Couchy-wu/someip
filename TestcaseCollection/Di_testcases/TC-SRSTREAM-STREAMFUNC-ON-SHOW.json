@@ -1,0 +1,24 @@
+{
+  "scenario_id": "TC-SRSTREAM-STREAMFUNC-ON-SHOW",
+  "description": "SR stream surface shown when the SR stream function is enabled and the shared memory attributes carry a valid stream handle. The driver binds the surface to the decoded scene and starts stream refresh.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: fusion master switch ON"
+      }
+    ],
+    "mem": [],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "SRSTREAM",
+    "negative_label": "NO_SRSTREAM",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-WATERMARK-SHOW",
+  "description": "Watermark surface shown. The HUD watermark is drawn when the head-up display is active and powered on; watermark layer is overlaid on the projected content. Inputs power on the HUD so a visible watermark is present over the display.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "4.3-4.4",
+        "value": 1,
+        "desc": "HUD_Switch_Set_S: val_switchHUD=1"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_power",
+        "value": 3,
+        "desc": "POWER_ON, HUD projection active and watermark overlaid"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "WATERMARK",
+    "negative_label": "NO_WATERMARK",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

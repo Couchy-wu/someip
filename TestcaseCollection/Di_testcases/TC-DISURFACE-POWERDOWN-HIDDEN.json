@@ -1,0 +1,30 @@
+{
+  "scenario_id": "TC-DISURFACE-POWERDOWN-HIDDEN",
+  "description": "Shared display surface hidden when the HUD power state drops and the base surface is torn down. No feature owns the surface so it is removed from the projection.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: fusion master switch ON"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_power",
+        "value": 1,
+        "desc": "HUD power state off"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

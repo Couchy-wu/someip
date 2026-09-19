@@ -1,0 +1,65 @@
+{
+  "scenario_id": "TC-ACC-CRUISING",
+  "description": "ACC surface shows cruising speed. ACC_Cruise_Speed_2A6_S status=1, ACC_Cruise_Speed_Value_23A_S value=100 (<=0xF0), ACC_Cruise_Speed_Color_2A6_S color=4, Driver_Belt_Status_S=0; ADAS ON; online frames active -> DI_AEC_ACC_Show grants sta_AccShow=RET_SHOW; display=STANDARD; vehicleConditionShow=0. Renders at ACC anchor 540,259.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.0-6.1",
+        "value": 1,
+        "desc": "Safe_Driving_Assistance_Function_S: ADAS function ON"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "0.0",
+        "value": 1,
+        "desc": "ONLINE_0x23A_S: ACC frame online"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "1.0-1.7",
+        "value": 100,
+        "desc": "ACC_Cruise_Speed_Value_23A_S: val_accSpeedValue=100 <=0xF0"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "3.0-3.2",
+        "value": 1,
+        "desc": "ACC_Cruise_Speed_2A6_S: val_accSpeedstatus=1 (active)"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "3.3-3.5",
+        "value": 4,
+        "desc": "ACC_Cruise_Speed_Color_2A6_S: val_accSpeedcolor=4"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "0.0",
+        "value": 1,
+        "desc": "ONLINE_0x294_S: doors/belt frame online"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "3.0-3.1",
+        "value": 0,
+        "desc": "Driver_Belt_Status_S: belt not blocked (value !=1)"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "ACC",
+    "negative_label": "",
+    "location_constraint": "540,259",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

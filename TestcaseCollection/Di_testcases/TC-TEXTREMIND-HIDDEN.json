@@ -1,0 +1,42 @@
+{
+    "scenario_id": "TC-TEXTREMIND-HIDDEN",
+    "description": "diTextRemindSurface text reminder not drawn. DiDcGetTextRemindStatus1() returns idle, and/or the reminder is suppressed because intelligent UI is active.",
+    "input_combination": {
+        "can": [
+            {
+                "signal_id": "0x4C1",
+                "sub_id": "",
+                "bit_range": "6.2-6.3",
+                "value": 1,
+                "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch present"
+            },
+            {
+                "signal_id": "0x26F",
+                "sub_id": "",
+                "bit_range": "6.4-6.7",
+                "value": 0,
+                "desc": "Shift_Mode_26F_S -> val_gear=0"
+            }
+        ],
+        "mem": [
+            {
+                "field": "dataValue.val_gear",
+                "value": 0,
+                "desc": "gear not P"
+            },
+            {
+                "field": "dataValue.val_intelUI",
+                "value": 1,
+                "desc": "intelligent UI active, text remind suppressed"
+            }
+        ],
+        "someip": []
+    },
+    "expected_output": {
+        "primary_label": "",
+        "negative_label": "",
+        "location_constraint": "",
+        "min_confidence": 0.9
+    },
+    "wait_ms": 100
+}

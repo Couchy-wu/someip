@@ -1,0 +1,65 @@
+{
+  "scenario_id": "TC-PATTERN-LASTPATTERN-SHOW",
+  "description": "Pattern surface shown at the last allowed pattern number. The maximum selectable warp pattern is still valid, so the driver paints the highest programmed image and keeps the loop engaged.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: fusion master switch ON"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "0x01",
+        "bit_range": "4.4-5.0",
+        "value": 38,
+        "desc": "DistortedPictureS_2FD_01 -> warp_PatternNum=38"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "0x01",
+        "bit_range": "4.0-4.3",
+        "value": 11,
+        "desc": "AngleGearSetting_2FD_01 -> warp_angleGearSet=11"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "0x01",
+        "bit_range": "5.1-5.5",
+        "value": 1,
+        "desc": "NoDistortedPictureS_2FD_01 -> warp_Enable=1"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "",
+        "bit_range": "4.4-5.0",
+        "value": 38,
+        "desc": "NO_Distorted_Picture_S: warp_PatternNum=38"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "",
+        "bit_range": "4.0-4.3",
+        "value": 11,
+        "desc": "Angle_Gear_Setting_2FD_S: warp_angleGearSet=11"
+      }
+    ],
+    "mem": [
+      {
+        "field": "warp_Enable",
+        "value": 1,
+        "desc": "warp enable asserted"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "PATTERN",
+    "negative_label": "NO_PATTERN",
+    "location_constraint": "400,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

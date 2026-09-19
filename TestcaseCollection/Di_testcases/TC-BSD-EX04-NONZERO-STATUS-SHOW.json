@@ -1,0 +1,35 @@
+{
+  "scenario_id": "TC-BSD-EX04-NONZERO-STATUS-SHOW",
+  "description": "BSD side shown for any nonzero show status. DiBsdSurface::Draw treats only 0 as hide and shows the image for any nonzero value (else branch). A non-RET nonzero status such as 3 still renders the BSD indicator.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master switch ON, context gate"
+      }
+    ],
+    "mem": [
+      {
+        "field": "dataValue.sta_bsdLeftShow",
+        "value": 3,
+        "desc": "nonzero -> Draw else branch shows left image"
+      },
+      {
+        "field": "dataValue.sta_bsdRightShow",
+        "value": 0,
+        "desc": "zero -> right image hidden"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "BSD_L",
+    "negative_label": "BSD_R",
+    "location_constraint": "246,82",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

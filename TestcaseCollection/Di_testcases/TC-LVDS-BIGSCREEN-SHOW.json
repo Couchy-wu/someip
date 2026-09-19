@@ -1,0 +1,63 @@
+{
+  "scenario_id": "TC-LVDS-BIGSCREEN-SHOW",
+  "description": "LVDS content shown through the primary HUD group frame. The lvds display value and the two show-gate inputs are all set, so sta_lvds becomes SHOW and the big-screen LVDS surface carries the fused scene.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: fusion master switch ON"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "8.5-8.7",
+        "value": 1,
+        "desc": "HUD_Navigation_Arrow_Style_Set_S: big screen arrow style enabled"
+      },
+      {
+        "signal_id": "0x1B6",
+        "sub_id": "",
+        "bit_range": "2.0-2.1",
+        "value": 2,
+        "desc": "Whether_The_Screen_Is_Displayed_S -> val_lvds=2"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 1,
+        "desc": "Shift_Mode_26F_S -> val_gear=1"
+      },
+      {
+        "signal_id": "0x301",
+        "sub_id": "",
+        "bit_range": "3.4-3.5",
+        "value": 1,
+        "desc": "HUD_Switch_Status_Feedback_301_S -> val_hudSwitchFeedBack=1"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_gear",
+        "value": 1,
+        "desc": "gear engaged"
+      },
+      {
+        "field": "val_hudSwitchFeedBack",
+        "value": 1,
+        "desc": "hud switch feedback on"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "LVDS",
+    "negative_label": "NO_LVDS",
+    "location_constraint": "320,150",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

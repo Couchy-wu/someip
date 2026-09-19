@@ -1,0 +1,56 @@
+{
+  "scenario_id": "TC-LVDS-HIDDEN",
+  "description": "LVDS surface hidden. diLvdsSurface::SetData: sta_lvds=SHOW iff val_lvds==0x2 && val_gear==0x1 && val_hudSwitchFeedBack==0x1, else SHOW_NOT. Here val_lvds=0 (stream not present) so playLvds=false and the LVDS window is not drawn.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON (gating signal present)"
+      },
+      {
+        "signal_id": "0x1B6",
+        "sub_id": "",
+        "bit_range": "2.0-2.1",
+        "value": 0,
+        "desc": "Whether_The_Screen_Is_Displayed_S -> val_lvds=0"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 1,
+        "desc": "Shift_Mode_26F_S -> val_gear=1"
+      },
+      {
+        "signal_id": "0x301",
+        "sub_id": "",
+        "bit_range": "3.4-3.5",
+        "value": 1,
+        "desc": "HUD_Switch_Status_Feedback_301_S -> val_hudSwitchFeedBack=1"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_gear",
+        "value": 1,
+        "desc": "val_gear=0x1 (D)"
+      },
+      {
+        "field": "val_hudSwitchFeedBack",
+        "value": 1,
+        "desc": "HUD switch feedback enabled"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

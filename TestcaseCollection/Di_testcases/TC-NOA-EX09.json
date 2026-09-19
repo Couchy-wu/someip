@@ -1,0 +1,50 @@
+{
+  "scenario_id": "TC-NOA-EX09",
+  "description": "NOA surface displays at the required location with the alternative UI texture while the navigation assistance reports its highest value and the NOA display flag is active.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1
+      },
+      {
+        "signal_id": "0x29C",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 7
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0
+      }
+    ],
+    "mem": [
+      {
+        "field": "sta_NoaShow",
+        "value": 1
+      },
+      {
+        "field": "val_intelUI",
+        "value": 1
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "NOA",
+    "negative_label": "NO_NOA",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 120
+}

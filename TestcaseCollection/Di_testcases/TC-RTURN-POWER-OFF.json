@@ -1,0 +1,44 @@
+{
+  "scenario_id": "TC-RTURN-POWER-OFF",
+  "description": "Vehicle power OFF, right turn arrow hidden. gate=ADAS fusion master switch(0x4C1) ON, power(0x12D)=OFF online_12D invalid, gear(0x26F) valid, Right_Turn_Indicator_144_S set=1 but power gate off, right turn surface hidden.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON (diAEControl.cpp:109)"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 0,
+        "desc": "BCMPower_Gear_12D_S: power state = OFF(0), online_12D not valid, power gate blocks render (diDataCenter.cpp:921-925; SigMgrEventListener.h:54)"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 1,
+        "desc": "Shift_Mode_26F_S: gear signal valid (diDataCenter.cpp:420-424; SigMgrEventListener.h:348)"
+      },
+      {
+        "signal_id": "0x144",
+        "sub_id": "",
+        "bit_range": "6.6-7.0",
+        "value": 1,
+        "desc": "Right_Turn_Indicator_144_S: right turn indicator set ON but power gate off, rightTurnStatus suppressed hidden"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "AR_RIGHTTURN_ARROW",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

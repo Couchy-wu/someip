@@ -1,0 +1,49 @@
+{
+    "scenario_id": "TC-TEXTREMIND-SHOW",
+    "description": "diTextRemindSurface text reminder drawn. DiDcGetTextRemindStatus1() maps an active text-remind state (e.g. NOAExitStyleS steering assist exit hint). TextRemind is suppressed when val_gear==1 or val_intelUI==1 or sta_AEBShow==RET_SHOW; show modeled with none suppressed.",
+    "input_combination": {
+        "can": [
+            {
+                "signal_id": "0x4C1",
+                "sub_id": "",
+                "bit_range": "6.2-6.3",
+                "value": 1,
+                "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON (AEB show gate)"
+            },
+            {
+                "signal_id": "0x1FF",
+                "sub_id": "",
+                "bit_range": "3.4-4.1",
+                "value": 12,
+                "desc": "NOAExitStyleS=0x0C, text remind status 2 mapped, active hint"
+            },
+            {
+                "signal_id": "0x26F",
+                "sub_id": "",
+                "bit_range": "6.4-6.7",
+                "value": 0,
+                "desc": "Shift_Mode_26F_S -> val_gear=0"
+            }
+        ],
+        "mem": [
+            {
+                "field": "dataValue.val_gear",
+                "value": 0,
+                "desc": "gear not P, text remind not suppressed by gear"
+            },
+            {
+                "field": "dataValue.val_intelUI",
+                "value": 0,
+                "desc": "intelligent UI off, text remind not suppressed"
+            }
+        ],
+        "someip": []
+    },
+    "expected_output": {
+        "primary_label": "TEXT_REMIND",
+        "negative_label": "NO_TEXT_REMIND",
+        "location_constraint": "640,240",
+        "min_confidence": 0.9
+    },
+    "wait_ms": 100
+}

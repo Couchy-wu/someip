@@ -1,0 +1,23 @@
+{
+  "scenario_id": "TC-GEAR-NEG-FUSION",
+  "description": "Gear surface hidden when the ADAS fusion master switch is OFF. can[0]=0x4C1 value 0 closes the gate, derived show flags stay clear, diGearSurface renders nothing.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 0,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch OFF -> gear gate closed"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "NO_GEAR",
+    "location_constraint": "707,359",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

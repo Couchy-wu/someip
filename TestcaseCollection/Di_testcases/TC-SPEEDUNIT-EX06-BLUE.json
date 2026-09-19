@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-SPEEDUNIT-EX06-BLUE",
+  "description": "Speed unit surface renders in blue theme: with theme mode 2 the unit text uses the blue font color while km/h remains the label.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 50,
+        "desc": "val_speed=50"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0,
+        "desc": "val_speed_unit=0"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "km/h",
+    "negative_label": "",
+    "location_constraint": "689,360",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

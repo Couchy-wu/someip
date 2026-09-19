@@ -1,0 +1,24 @@
+{
+  "scenario_id": "TC-SURFACE-EX08",
+  "description": "Discrete layer remains rendered when the attach flag is re-read as true during the same active frame window",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS gate active"
+      }
+    ],
+    "mem": [],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "DISURFACE",
+    "negative_label": "NO_DISURFACE",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

@@ -1,0 +1,54 @@
+{
+    "scenario_id": "TC-AVH-SHOW",
+    "description": "diAvhSurface AVH (around-view) image drawn. DI_AEC_AvhShow (diAEControl.cpp:363-373): sta_avhShow=RET_SHOW iff sta_handOffShow!=RET_SHOW && sta_vehicleConditionShow!=RET_SHOW && val_avh==2. Show modeled with val_avh=2 and no handOff/vehicleCondition suppression.",
+    "input_combination": {
+        "can": [
+            {
+                "signal_id": "0x4C1",
+                "sub_id": "",
+                "bit_range": "6.2-6.3",
+                "value": 1,
+                "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch present"
+            },
+            {
+                "signal_id": "0x122",
+                "sub_id": "",
+                "bit_range": "8.6-8.7",
+                "value": 2,
+                "desc": "AVH_CtrlStatus_S -> val_avh=2"
+            },
+            {
+                "signal_id": "0x29C",
+                "sub_id": "",
+                "bit_range": "6.0-6.2",
+                "value": 0,
+                "desc": "DNP_Take_Over_Req_S -> val_handOff=0"
+            }
+        ],
+        "mem": [
+            {
+                "field": "dataValue.val_avh",
+                "value": 2,
+                "desc": "AVH mode active, RET_SHOW"
+            },
+            {
+                "field": "dataValue.val_handOff",
+                "value": 0,
+                "desc": "handOff not in show set, AVH not preempted"
+            },
+            {
+                "field": "dataValue.val_display",
+                "value": 1,
+                "desc": "standard display, handOff not triggered"
+            }
+        ],
+        "someip": []
+    },
+    "expected_output": {
+        "primary_label": "AVH",
+        "negative_label": "NO_AVH",
+        "location_constraint": "640,240",
+        "min_confidence": 0.9
+    },
+    "wait_ms": 100
+}

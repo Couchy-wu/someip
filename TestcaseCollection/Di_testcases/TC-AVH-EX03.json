@@ -1,0 +1,54 @@
+{
+    "scenario_id": "TC-AVH-EX03",
+    "description": "AVH surface shown with a hand-off flag value seven which is not part of the active hand-off show set.",
+    "input_combination": {
+        "can": [
+            {
+                "signal_id": "0x4C1",
+                "sub_id": "",
+                "bit_range": "6.2-6.3",
+                "value": 1,
+                "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch present"
+            },
+            {
+                "signal_id": "0x122",
+                "sub_id": "",
+                "bit_range": "8.6-8.7",
+                "value": 2,
+                "desc": "AVH_CtrlStatus_S -> val_avh=2"
+            },
+            {
+                "signal_id": "0x29C",
+                "sub_id": "",
+                "bit_range": "6.0-6.2",
+                "value": 7,
+                "desc": "DNP_Take_Over_Req_S -> val_handOff=7"
+            }
+        ],
+        "mem": [
+            {
+                "field": "dataValue.val_avh",
+                "value": 2,
+                "desc": "AVH system active state"
+            },
+            {
+                "field": "dataValue.val_handOff",
+                "value": 7,
+                "desc": "hand-off flag outside the active show set"
+            },
+            {
+                "field": "dataValue.val_display",
+                "value": 1,
+                "desc": "display mode standard"
+            }
+        ],
+        "someip": []
+    },
+    "expected_output": {
+        "primary_label": "AVH",
+        "negative_label": "NO_AVH",
+        "location_constraint": "640,240",
+        "min_confidence": 0.9
+    },
+    "wait_ms": 100
+}

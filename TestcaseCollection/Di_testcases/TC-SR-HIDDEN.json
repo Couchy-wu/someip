@@ -1,0 +1,31 @@
+{
+  "scenario_id": "TC-SR-HIDDEN",
+  "description": "SR surface hidden. diSRSurface::Draw is gated by someIpOnline.online_000C_000C.status. When the lane-line channel 0x000C/0x000C is offline, the line/object data block is not filled and the surface is not drawn (DisableSR).",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch present"
+      }
+    ],
+    "mem": [],
+    "someip": [
+      {
+        "service_id": "0x000C",
+        "instance_id": "0x000C",
+        "online": 0,
+        "desc": "SR lane-line channel offline, SR surface not drawn"
+      }
+    ]
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

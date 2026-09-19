@@ -1,0 +1,51 @@
+{
+  "scenario_id": "TC-HANDOFF-EX04",
+  "description": "Handoff surface shows takeover event level four while the online status is present and the show gate is enabled.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master active"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "",
+        "value": 1,
+        "desc": "HANDOFF driving assistance function enabled"
+      },
+      {
+        "signal_id": "0x29C",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "handoff online status active"
+      },
+      {
+        "signal_id": "0x29C",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 4,
+        "desc": "handoff event level four"
+      }
+    ],
+    "mem": [
+      {
+        "field": "sta_handOffShow",
+        "value": 1,
+        "desc": "handoff show gate on"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "HANDOFF_EVENT_FOUR",
+    "negative_label": "NO_HANDOFF",
+    "location_constraint": "685,332",
+    "min_confidence": 0.85
+  },
+  "wait_ms": 100
+}

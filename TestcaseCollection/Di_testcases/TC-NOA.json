@@ -1,0 +1,45 @@
+{
+  "scenario_id": "TC-NOA",
+  "description": "NOA surface drawn (simplest drivable state). DI_AEC_NOA_Show gate (diAEControl.cpp L1092): (noaStatus==6 || noaStatus==0xD), val_display==1, sta_vehicleConditionShow!=RET_SHOW, beltStatusS!=1. Gear!=1 keeps sta_vehicleConditionShow=RET_SHOW_NOT. NOA status 6 driven via DNP_Stats_S CAN signal -> noaStatus=6, NOA active. Primary label asserted.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.0",
+        "value": 1,
+        "desc": "HUD master switch frame ON"
+      },
+      {
+        "signal_id": "0x29C",
+        "sub_id": "",
+        "bit_range": "4.0-4.3",
+        "value": 6,
+        "desc": "DNP_Stats_S: NOA status 6 -> noaStatus=6, NOA active"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 0,
+        "desc": "gear!=1 keeps sta_vehicleConditionShow=RET_SHOW_NOT, opening the NOA gate"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "7.4-7.5",
+        "value": 1,
+        "desc": "HUD_Mode_Selection_Setting_Item_S: val_display=1"
+      }
+    ],
+    "mem": [],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "NOA",
+    "negative_label": "",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

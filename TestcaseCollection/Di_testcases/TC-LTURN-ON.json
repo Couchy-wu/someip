@@ -1,0 +1,44 @@
+{
+  "scenario_id": "TC-LTURN-ON",
+  "description": "Left turn arrow lit. gate=ADAS fusion master switch(0x4C1) ON, power(0x12D) ON, gear(0x26F) valid, online_144(0x144) ON, Left_Turn_Indicator_144_S(0x144 bit6.0-6.2)=1, left turn surface shown.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch memFromMCU.switchADASFusion=1 (diAEControl.cpp:109; diDataCenter.cpp:248)"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 3,
+        "desc": "BCMPower_Gear_12D_S: power state = POWER_ON(3), gate online_12D valid (diDataCenter.cpp:921-925; SigMgrEventListener.h:54)"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 1,
+        "desc": "Shift_Mode_26F_S: gear signal valid, gate online_26F on (diDataCenter.cpp:420-424; SigMgrEventListener.h:348)"
+      },
+      {
+        "signal_id": "0x144",
+        "sub_id": "",
+        "bit_range": "6.0-6.2",
+        "value": 1,
+        "desc": "Left_Turn_Indicator_144_S: left turn indicator ON, online_144 valid, leftTurnStatus=1 arrow lit (diDataCenter.cpp:1107-1117; diLeftTurnSurface.cpp:39)"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "AR_LEFTTURN_ARROW",
+    "negative_label": "AR_RIGHTTURN_ARROW",
+    "location_constraint": "246,82",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

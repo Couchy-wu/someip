@@ -1,0 +1,44 @@
+{
+  "scenario_id": "TC-BSD-REAR-NONE",
+  "description": "Hidden/no-warning case: gate=ADAS fusion master switch(0x4C1) ON, online_418(0x418) ON, but no BSD or DOW warning bits set (R_BSD_Warning_Left_S/Right_S and RRadar_DOW_Warning_Left_S/Right_S all 0). No BSD/OWS icon rendered.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch memFromMCU.switchADASFusion=1 (diArSurface.cpp:~1305)"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "3.0-3.1",
+        "value": 1,
+        "desc": "ONLINE_0x418_S: online_418.status=true, BSD block online (diDataCenter.cpp:2147)"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "2.0-2.3",
+        "value": 0,
+        "desc": "R_BSD_Warning_Left_S/Right_S: both blind-spot warning bits 0, no BSD surface render (diArSurface.cpp:266,278)"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "4.0-4.3",
+        "value": 0,
+        "desc": "RRadar_DOW_Warning_Left_S/Right_S: both rear DOW bits 0, OWS surfaces hidden (diSignalApi.cpp:428,432; diOwsSurface.cpp:57,90)"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 500
+}

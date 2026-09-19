@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-SPEEDUNIT-MPH",
+  "description": "Speed-unit surface shows mph. val_speed_unit(0x151 sub2.0-2.1)=2 -> diSpeedUnitSurface renders 'mph' (any value other than km/h count; unit==2 maps to mph).",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "1.0-1.7",
+        "value": 40,
+        "desc": "Speed_Signal_151_S: 40 km/h"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "2.0-2.1",
+        "value": 2,
+        "desc": "Speed_Unit_Setting_151_S: val_speed_unit=2 (mph) -> 'mph' text"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "mph",
+    "negative_label": "km/h",
+    "location_constraint": "689,360",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

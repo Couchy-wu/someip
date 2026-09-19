@@ -1,0 +1,40 @@
+{
+  "scenario_id": "TC-BOX-SHOW",
+  "description": "diBoxSurface ADAS BOX indicator drawn. DI_AEC_BOX_Show (diAEControl.cpp:1107-1131) shows the BOX transiently (boxFlag) for TIME_BOX_SHOW after val_heightAdjust or val_angleAdjust changes. Show modeled with an angle adjustment change setting sta_boxShow=1.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch present"
+      }
+    ],
+    "mem": [
+      {
+        "field": "dataValue.val_angleAdjust",
+        "value": 3,
+        "desc": "angle adjustment changed within range 1..11, triggers boxFlag"
+      },
+      {
+        "field": "dataValue.val_heightAdjust",
+        "value": 2,
+        "desc": "height adjustment value present"
+      },
+      {
+        "field": "dataValue.sta_boxShow",
+        "value": 1,
+        "desc": "boxShow active within TIME_BOX_SHOW window"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "BOX",
+    "negative_label": "NO_BOX",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

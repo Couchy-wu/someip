@@ -1,0 +1,44 @@
+{
+  "scenario_id": "TC-SPEEDUNIT-EX08-HIDDEN",
+  "description": "Speed unit surface is not drawn when the vehicle-condition overlay is active; diSpeedUnitSurface Draw() returns when speedUnitShow is suppressed and NO_SPEEDUNIT applies.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 60,
+        "desc": "val_speed=60"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0,
+        "desc": "val_speed_unit=0"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 2,
+        "desc": "DOORS_294 value 2 triggers vehicle-condition overlay"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "SPEEDUNIT_VC_HIDDEN",
+    "location_constraint": "689,360",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

@@ -1,0 +1,45 @@
+{
+  "scenario_id": "TC-ROUTEGUIDE-SHOW",
+  "description": "Route-guidance map surface drawn. Route guidance renders on the map region while navigation is active. sta_Navi becomes NAVI_ON via DI_AEC_Navigation_Status (diAEControl.cpp:351) when val_power==POWER_ON(3) and val_naviStatus in {2,3}. Show modeled with active navigation and map/route context present.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch memFromMCU.switchADASFusion=1"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_power",
+        "value": 3,
+        "desc": "POWER_ON, required by DI_AEC_Navigation_Status for NAVI_ON"
+      }
+    ],
+    "someip": [
+      {
+        "service_id": "0x010A",
+        "instance_id": "0x01",
+        "online": 1,
+        "desc": "navigation ETH channel online"
+      },
+      {
+        "key": "hnmap_s.navigation_map",
+        "value": "MAP_DATA"
+      },
+      {
+        "key": "hrinfo_s.navigating_status",
+        "value": 2
+      }
+    ]
+  },
+  "expected_output": {
+    "primary_label": "ROUTE_GUIDE",
+    "negative_label": "NO_ROUTE_GUIDE",
+    "location_constraint": "600,160",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

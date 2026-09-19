@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-LTURN-OFF",
+  "description": "Left turn signal off, both turn arrows hidden. gate=ADAS fusion master switch(0x4C1) ON, online_144(0x144) ON, Left_Turn_Indicator_144_S(0x144 bit6.0-6.2)=0, leftTurnStatus=0 hidden.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON (diAEControl.cpp:109)"
+      },
+      {
+        "signal_id": "0x144",
+        "sub_id": "",
+        "bit_range": "6.0-6.2",
+        "value": 0,
+        "desc": "Left_Turn_Indicator_144_S: left turn indicator OFF, leftTurnStatus=0 surface hidden (diDataCenter.cpp:1110; diLeftTurnSurface.cpp:39)"
+      },
+      {
+        "signal_id": "0x144",
+        "sub_id": "",
+        "bit_range": "6.6-7.0",
+        "value": 0,
+        "desc": "Right_Turn_Indicator_144_S: right turn indicator OFF, rightTurnStatus=0 hidden (diDataCenter.cpp:1122; diRightTurnSurface.cpp:39)"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "AR_LEFTTURN_ARROW",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

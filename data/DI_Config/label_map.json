@@ -1,0 +1,115 @@
+{
+  "meta": {
+    "purpose": "Di 用例的标贴/标签（英文）→ 参考图配置键（data/UI_Config/*.json 的键）",
+    "source": "参考图在 Resources/ImageUI/SQ/，与 ui_config_SQ.json 的键一一对应（已核对 23/23 齐全）",
+    "note": "未列入的标签说明仓库内暂无对应参考图，校验会明确记为 no_reference（不视为通过）；新增参考图后在此补一条即可。数值类标签（如 60/80/120 限速数字、220 车速）依赖具体数值的参考图，当前不映射。"
+  },
+  "config": "ui_config_SQ.json",
+  "image_dir": "Resources/ImageUI/SQ",
+  "aliases": {
+    "ACC": [
+      "ACC.png"
+    ],
+    "ADS_FAULT": [
+      "Telltale_ADS 故障.png"
+    ],
+    "ADS接管": [
+      "telltale_ADS接管.png"
+    ],
+    "AEB": [
+      "警示_碰撞预警.png"
+    ],
+    "AVH": [
+      "AVH.png"
+    ],
+    "BORDER": [
+      "矢量 122 (边框) (1).png",
+      "矢量 122 (边框) (2).png",
+      "矢量 122 (边框) (3).png",
+      "矢量 122 (边框).png"
+    ],
+    "BSD_BOTH": [
+      "盲区监测.png",
+      "盲区监测 (1).png"
+    ],
+    "BSD_BOTH_LEVEL1": [
+      "盲区监测.png",
+      "盲区监测 (1).png"
+    ],
+    "BSD_L": [
+      "盲区监测.png"
+    ],
+    "BSD_LEFT": [
+      "盲区监测.png"
+    ],
+    "BSD_R": [
+      "盲区监测 (1).png"
+    ],
+    "BSD_RIGHT": [
+      "盲区监测 (1).png"
+    ],
+    "COLLISION_WARNING": [
+      "警示_碰撞预警.png"
+    ],
+    "D": [
+      "D.png"
+    ],
+    "GEAR_D": [
+      "D.png"
+    ],
+    "GEAR_N": [
+      "N.png"
+    ],
+    "GEAR_P": [
+      "P.png"
+    ],
+    "GEAR_R": [
+      "R.png"
+    ],
+    "HANDOFF": [
+      "telltale_ADS接管.png"
+    ],
+    "HANDOFF_IMMINENT": [
+      "telltale_ADS接管.png"
+    ],
+    "ICC": [
+      "ICC.png"
+    ],
+    "LANE": [
+      "车道偏离-右偏.png"
+    ],
+    "LDW": [
+      "车道偏离-右偏.png"
+    ],
+    "N": [
+      "N.png"
+    ],
+    "P": [
+      "P.png"
+    ],
+    "PHONE": [
+      "来电.png"
+    ],
+    "R": [
+      "R.png"
+    ],
+    "SPEEDLIMIT": [
+      "限速.png"
+    ],
+    "SPEEDLIMIT_OVER": [
+      "限速-大圈.png"
+    ],
+    "SPEEDUNIT": [
+      "km_h.png"
+    ],
+    "SPEED_LIMIT": [
+      "限速.png"
+    ],
+    "SPEED_OVER": [
+      "限速-大圈.png"
+    ],
+    "km/h": [
+      "km_h.png"
+    ]
+  }
+}

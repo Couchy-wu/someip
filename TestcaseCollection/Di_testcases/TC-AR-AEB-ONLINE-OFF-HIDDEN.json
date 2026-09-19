@@ -1,0 +1,44 @@
+{
+  "scenario_id": "TC-AR-AEB-ONLINE-OFF-HIDDEN",
+  "description": "AR AEB block offline, so no AEB icon is drawn. gate=ADAS fusion(0x4C1 6.2-6.3)=1, ONLINE_0x32D(0x32D 5.6)=0 forces all fcwData warning fields (Acute_Warning_S, AEB_State_S) to the offline default 0xFF, so the acute branch (acuteWaring_==0x1 && aebStates_==0x1) never matches and mAEBImage is not drawn.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x32D",
+        "sub_id": "",
+        "bit_range": "5.3",
+        "value": 1,
+        "desc": "Acute_Warning_S: acute warning set but AEB block not online, value ignored"
+      },
+      {
+        "signal_id": "0x32D",
+        "sub_id": "",
+        "bit_range": "5.4",
+        "value": 1,
+        "desc": "AEB_State_S: AEB active state set but AEB block not online, value ignored"
+      },
+      {
+        "signal_id": "0x32D",
+        "sub_id": "",
+        "bit_range": "5.6",
+        "value": 0,
+        "desc": "ONLINE_0x32D_S: AEB/FCW block offline, fcwData set to offline default so warning suppressed"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.0
+  },
+  "wait_ms": 100
+}

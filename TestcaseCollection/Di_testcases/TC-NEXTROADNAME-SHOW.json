@@ -1,0 +1,46 @@
+{
+  "scenario_id": "TC-NEXTROADNAME-SHOW",
+  "description": "Next road name text surface shown together with active map navigation; text label is the name of the upcoming road rendered in the driving-reminder region.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch memFromMCU.switchADASFusion=1"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 3,
+        "desc": "powertrain power-gate state from CAN (BCMPower_Gear_12D_S)"
+      }
+    ],
+    "mem": [],
+    "someip": [
+      {
+        "service_id": "0x010A",
+        "instance_id": "0x01",
+        "online": 1,
+        "desc": "navigation ETH channel online"
+      },
+      {
+        "key": "hrinfo_s.next_road_name",
+        "value": "1"
+      },
+      {
+        "key": "hrinfo_s.navigating_status",
+        "value": 2
+      }
+    ]
+  },
+  "expected_output": {
+    "primary_label": "NEXT_ROAD_NAME",
+    "negative_label": "NO_NEXT_ROAD_NAME",
+    "location_constraint": "500,120",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

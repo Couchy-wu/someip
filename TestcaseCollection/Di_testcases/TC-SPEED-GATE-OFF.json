@@ -1,0 +1,23 @@
+{
+  "scenario_id": "TC-SPEED-GATE-OFF",
+  "description": "Speed surface hidden when the ADAS fusion master switch is OFF. can[0] is the ADAS fusion gate 0x4C1 sub 6.2-6.3 = 0 so the Speed surface is not displayed.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 0,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch memFromMCU.switchADASFusion=0, Speed surface not rendered"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "644,239",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

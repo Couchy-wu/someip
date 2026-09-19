@@ -1,0 +1,42 @@
+{
+  "scenario_id": "TC-ARSURFACE-ON",
+  "description": "diArSurface augmented-reality content drawn. The AR surface renders navigation/AR overlay content when an AR view is active and the AR navigation switch is enabled. Show modeled with AR navigation enabled and the AR surface in active view.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch present"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 3,
+        "desc": "BCMPower_Gear_12D_S -> dataValue.val_power=3"
+      }
+    ],
+    "mem": [
+      {
+        "field": "dataValue.val_switchARNav",
+        "value": 1,
+        "desc": "AR navigation enabled, AR surface draws"
+      },
+      {
+        "field": "dataValue.val_power",
+        "value": 3,
+        "desc": "POWER_ON, AR surface can render"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "AR_SURFACE",
+    "negative_label": "NO_AR_SURFACE",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

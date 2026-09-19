@@ -1,0 +1,51 @@
+{
+  "scenario_id": "TC-SPEEDUNIT-HIDDEN-VEHICLECOND",
+  "description": "Speed-unit surface hidden when the vehicle-condition (doors) overlay is active. gear=P(1)+LF door open(2) make sta_vehicleConditionShow=RET_SHOW, so diSpeedSurface opens the overlay; diSpeedUnitSurface relies on SpeedUnitShow which requires vehicleCondition NOT_RET_SHOW, hence speedUnitShow=0 and the unit is not drawn.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "1.0-1.7",
+        "value": 0,
+        "desc": "Speed_Signal_151_S: 0 km/h"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "2.0-2.1",
+        "value": 0,
+        "desc": "Speed_Unit_Setting_151_S: val_speed_unit=0 (km/h)"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 1,
+        "desc": "Shift_Mode_26F_S: val_gear=1 (P)"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "1.0-1.1",
+        "value": 2,
+        "desc": "DOORS_294 LF door open(2) -> vehicle-condition overlay shown, SPEED_UNIT suppressed"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "SPEEDUNIT_VC_HIDDEN",
+    "location_constraint": "689,360",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

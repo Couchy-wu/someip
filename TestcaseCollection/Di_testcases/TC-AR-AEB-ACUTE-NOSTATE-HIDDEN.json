@@ -1,0 +1,44 @@
+{
+  "scenario_id": "TC-AR-AEB-ACUTE-NOSTATE-HIDDEN",
+  "description": "AR AEB acute warning fires but AEB state is not active, so no icon is drawn. gate=ADAS fusion(0x4C1 6.2-6.3)=1, ONLINE_0x32D(0x32D 5.6)=1, Acute_Warning_S(0x32D 5.3)=1 but AEB_State_S(0x32D 5.4)=0. The acute branch requires both acuteWaring_==0x1 AND aebStates_==0x1, so mAEBImage is not drawn (matches baseline TC-AEB-ACUTE only in the negative/absent-state direction).",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x32D",
+        "sub_id": "",
+        "bit_range": "5.6",
+        "value": 1,
+        "desc": "ONLINE_0x32D_S: AEB/FCW block online"
+      },
+      {
+        "signal_id": "0x32D",
+        "sub_id": "",
+        "bit_range": "5.3",
+        "value": 1,
+        "desc": "Acute_Warning_S: acute warning active"
+      },
+      {
+        "signal_id": "0x32D",
+        "sub_id": "",
+        "bit_range": "5.4",
+        "value": 0,
+        "desc": "AEB_State_S: AEB active state not set, acute branch does not match"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.0
+  },
+  "wait_ms": 100
+}

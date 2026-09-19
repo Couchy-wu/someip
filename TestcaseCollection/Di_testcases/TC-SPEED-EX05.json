@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-SPEED-EX05",
+  "description": "Speed surface keeps the last cached value when an out-of-range input arrives; val_speed=241 exceeds the maximum valid 0xF0 and is not cached, so the previously shown value is retained.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ONLINE_0x151_S status online"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 241,
+        "desc": "val_speed=241"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "120",
+    "negative_label": "",
+    "location_constraint": "644,239",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

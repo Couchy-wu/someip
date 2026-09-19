@@ -1,0 +1,52 @@
+{
+  "scenario_id": "TC-MAP-SHOW",
+  "description": "Map surface drawn. diMapSurface::Draw gate (diMapSurface.cpp:83): mapdata non-empty, display==1, vehicleConditionShow!=1, naviStatus!=0 (=sta_Navi). sta_Navi=NAVI_ON when val_power==POWER_ON(3) and val_naviStatus in {2,3}. mapPos=sta_MapPos.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch memFromMCU.switchADASFusion=1"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "7.4-7.5",
+        "value": 1,
+        "desc": "HUD_Mode_Selection_Setting_Item_S: val_display=1"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_power",
+        "value": 3,
+        "desc": "POWER_ON required for NAVI_ON"
+      }
+    ],
+    "someip": [
+      {
+        "service_id": "0x010A",
+        "instance_id": "0x01",
+        "online": 1,
+        "desc": "navigation ETH channel online"
+      },
+      {
+        "key": "hnmap_s.navigation_map",
+        "value": "MAP_DATA"
+      },
+      {
+        "key": "hrinfo_s.navigating_status",
+        "value": 3
+      }
+    ]
+  },
+  "expected_output": {
+    "primary_label": "MAP",
+    "negative_label": "NO_MAP",
+    "location_constraint": "600,160",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

@@ -1,0 +1,44 @@
+{
+  "scenario_id": "TC-SPEED-EX06-HIDDEN",
+  "description": "Speed surface is not drawn when the vehicle-condition overlay is active; diSpeedSurface Draw() returns when vehicleConditionShow is true, so no speed number is produced.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ONLINE_0x151_S status online"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 65,
+        "desc": "val_speed=65"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 2,
+        "desc": "DOORS_294 value 2 triggers vehicle-condition overlay"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "644,239",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

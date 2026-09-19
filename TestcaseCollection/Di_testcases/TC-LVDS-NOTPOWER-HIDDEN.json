@@ -1,0 +1,56 @@
+{
+  "scenario_id": "TC-LVDS-NOTPOWER-HIDDEN",
+  "description": "LVDS hidden because several show-gate inputs are simultaneously out of range. With val_lvds off and feedback off the combined lvds condition cannot become SHOW, so the LVDS player is held in the non-playing state.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: fusion master switch ON"
+      },
+      {
+        "signal_id": "0x1B6",
+        "sub_id": "",
+        "bit_range": "2.0-2.1",
+        "value": 0,
+        "desc": "Whether_The_Screen_Is_Displayed_S -> val_lvds=0"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 0,
+        "desc": "Shift_Mode_26F_S -> val_gear=0"
+      },
+      {
+        "signal_id": "0x301",
+        "sub_id": "",
+        "bit_range": "3.4-3.5",
+        "value": 0,
+        "desc": "HUD_Switch_Status_Feedback_301_S -> val_hudSwitchFeedBack=0"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_gear",
+        "value": 0,
+        "desc": "gear invalid"
+      },
+      {
+        "field": "val_hudSwitchFeedBack",
+        "value": 0,
+        "desc": "hud switch feedback off"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

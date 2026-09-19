@@ -1,0 +1,44 @@
+{
+  "scenario_id": "TC-SPEEDLIMIT-BLUE",
+  "description": "Speed-limit surface shows 60 and a speed-limit ring in blue theme. value=60 (<=0xF0), display=3 (valid), speedLimitShow=ALWAYS_ON; val_theme=2 -> blue coloring. SL_POS_1 layout (ring 516,235, value 540,259).",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "0.0",
+        "value": 1,
+        "desc": "ONLINE_0x23A_S: speedlimit frame online"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "2.0-2.7",
+        "value": 60,
+        "desc": "Traffic_Sign_Recogni_Value_23A_S: val_speedlimitValue=60 km/h"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "6.4-6.6",
+        "value": 3,
+        "desc": "Traffic_Sign_Recognition_2A6_S (frame 0x23A): val_speedlimitDisplay=3 (valid display mode)"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "60",
+    "negative_label": "",
+    "location_constraint": "516,235,540,259",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

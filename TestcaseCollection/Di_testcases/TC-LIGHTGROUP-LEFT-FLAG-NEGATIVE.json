@@ -1,0 +1,38 @@
+{
+  "scenario_id": "TC-LIGHTGROUP-LEFT-FLAG-NEGATIVE",
+  "description": "LightGroup surface not shown even when a left-light show flag is driven in the harness. The resident-card light group's visibility is ultimately gated by sta_residentCardShow, which is CARD_LIGHTGROUP(2) only when val_residentCard==CARD_LIGHTGROUP; val_residentCard is hard-coded to 1 (CARD_CURRENTTIME) under the ALWASYS_SHOW_UI else-branch at diAEControl.cpp L122 and never assigned any other value. sta_residentCardShow therefore can never equal CARD_LIGHTGROUP and the LightGroup Draw/SetData body early-returns without a texture, making the surface undrivable to a true SHOW through the can[]/mem[]/someip harness. This case drives the available light-show inputs to their active values and asserts the negative label, explicitly documenting the undrivable condition.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x1FF",
+        "sub_id": "",
+        "bit_range": "3.4-4.1",
+        "value": 10,
+        "desc": "NOA exit style active value exercised concurrently"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "7.4-7.5",
+        "value": 1,
+        "desc": "HUD_Mode_Selection_Setting_Item_S: val_display=1"
+      }
+    ],
+    "mem": [],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "NO_LIGHTGROUP",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

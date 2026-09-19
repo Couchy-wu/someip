@@ -1,0 +1,65 @@
+{
+  "scenario_id": "TC-ACC-COLOR-NONSTANDARD-NEG",
+  "description": "ACC hidden: DI_AEC_ACC_Show (diAEControl.cpp:1052) requires val_accSpeedcolor == 4. Color 3 with active status and valid speed -> sta_AccShow=RET_SHOW_NOT; surface gated off.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.0-6.1",
+        "value": 1,
+        "desc": "Safe_Driving_Assistance_Function_S: ADAS function ON"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "0.0",
+        "value": 1,
+        "desc": "ONLINE_0x23A_S: ACC frame online"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "1.0-1.7",
+        "value": 90,
+        "desc": "ACC_Cruise_Speed_Value_23A_S: val_accSpeedValue=90 valid"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "3.0-3.2",
+        "value": 1,
+        "desc": "ACC_Cruise_Speed_2A6_S: val_accSpeedstatus=1 active"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "3.3-3.5",
+        "value": 3,
+        "desc": "ACC_Cruise_Speed_Color_2A6_S: val_accSpeedcolor=3 not equal to 4 -> no show"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "0.0",
+        "value": 1,
+        "desc": "ONLINE_0x294_S: belt frame online"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "3.0-3.1",
+        "value": 0,
+        "desc": "Driver_Belt_Status_S: belt free"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "ACC",
+    "location_constraint": "540,259",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

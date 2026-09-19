@@ -1,0 +1,38 @@
+{
+  "scenario_id": "TC-MAINWINDOW-EX02",
+  "description": "Main window hidden by HUD switch off while power stays on. val_switchHUD set to 0 pulls the window off even though val_power is POWER_ON, so no main window content is shown.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 3,
+        "desc": "powertrain power-gate state from CAN (BCMPower_Gear_12D_S)"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "4.3-4.4",
+        "value": 0,
+        "desc": "HUD_Switch_Set_S: val_switchHUD=0"
+      }
+    ],
+    "mem": [],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "NO_MAIN_WINDOW",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

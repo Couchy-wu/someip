@@ -1,0 +1,44 @@
+{
+  "scenario_id": "TC-SR-EX08",
+  "description": "SR surface hidden when the power rail is off. The lane-line channel 0x000C/0x000C is online and the fusion switch is ON, but with val_power not equal to POWER_ON the SR surface does not render.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 1,
+        "desc": "BCMPower_Gear_12D_S -> dataValue.val_power=1"
+      }
+    ],
+    "mem": [
+      {
+        "field": "dataValue.val_power",
+        "value": 1,
+        "desc": "power not ON, SR surface not drawn"
+      }
+    ],
+    "someip": [
+      {
+        "service_id": "0x000C",
+        "instance_id": "0x000C",
+        "online": 1,
+        "desc": "lane-line channel online but power off, SR not drawn"
+      }
+    ]
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

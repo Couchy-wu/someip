@@ -1,0 +1,40 @@
+{
+  "scenario_id": "TC-BOX-EX02-SNOW-THEME",
+  "description": "diBoxSurface sketch mode. theme=2 (snow) swaps to the snow variant of the BOX picture; boxStatus=1 draws; angleGear=11 boundary yields max rotation angle=-2+0.4*10=2.0.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master switch ON, context gate"
+      }
+    ],
+    "mem": [
+      {
+        "field": "dataValue.sta_boxShow",
+        "value": 1,
+        "desc": "boxShow nonzero passes Draw show-gate"
+      },
+      {
+        "field": "dataValue.val_theme",
+        "value": 2,
+        "desc": "theme=2 selects snow picture variant"
+      },
+      {
+        "field": "dataValue.val_angleAdjust",
+        "value": 11,
+        "desc": "angleGear=11 upper boundary -> angle 2.0"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "BOX",
+    "negative_label": "NO_BOX",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

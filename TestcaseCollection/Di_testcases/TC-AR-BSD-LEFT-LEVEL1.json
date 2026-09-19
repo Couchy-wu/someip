@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-AR-BSD-LEFT-LEVEL1",
+  "description": "AR surface draws left BSD Level1 icon via bsdData branch. gate=ADAS fusion(0x4C1 6.2-6.3)=1, online_418(0x418 3.0-3.1)=1, R_BSD_Warning_Left_S(0x418 2.0-2.1)=0x1 sets canBsdLeftWarning so mBSDImage_L is drawn.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "3.0-3.1",
+        "value": 1,
+        "desc": "ONLINE_0x418_S: BSD block online, passes canBsdLeftWarning into bsdData"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "2.0-2.1",
+        "value": 1,
+        "desc": "R_BSD_Warning_Left_S: left blind-spot warning Level1, draws mBSDImage_L"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "BSD_L",
+    "negative_label": "",
+    "location_constraint": "246,82",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

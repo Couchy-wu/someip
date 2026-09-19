@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-REMAINTIME-EX01-NOSTATE-HIDDEN",
+  "description": "Remaining-time surface fully hidden because the whole-surface show gate fails. DiRemainTimeSurface::Draw returns immediately when remainTimeShow==0, so neither the remaining-time text nor image is updated.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master switch ON context gate"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "4.5-4.7",
+        "value": 1,
+        "desc": "HUD_Mode_Settings_S: val_theme=1"
+      }
+    ],
+    "mem": [
+      {
+        "field": "sta_remainTimeShow",
+        "value": 0,
+        "desc": "show gate zero -> Draw returns without updating"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "NO_REMAIN_TIME",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

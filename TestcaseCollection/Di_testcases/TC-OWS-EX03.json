@@ -1,0 +1,59 @@
+{
+  "scenario_id": "TC-OWS-EX03",
+  "description": "OWS surface shows blink animation on both left and right DOW simultaneously while vehicle in D gear with power on.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master active"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "",
+        "value": 1,
+        "desc": "driving assistance function armed"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 3,
+        "desc": "powertrain power standby"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 2,
+        "desc": "gear position D"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 2,
+        "desc": "left DOW blink enable"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 2,
+        "desc": "right DOW blink enable"
+      }
+    ],
+    "mem": [],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "OWS_BOTH_BLINK",
+    "negative_label": "NO_OWS",
+    "location_constraint": "640,240",
+    "min_confidence": 0.85
+  },
+  "wait_ms": 100
+}

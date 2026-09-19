@@ -1,0 +1,40 @@
+{
+  "scenario_id": "TC-BOX-EX04-HIDDEN-NOADJUST",
+  "description": "diBoxSurface hidden when no adjustment delta. DI_AEC_BOX_Show only raises boxFlag after val_heightAdjust or val_angleAdjust changes and clears it once during count reaches TIME_BOX_SHOW (sta_boxShow=0). boxStatus=0 makes Draw return before drawing, so no BOX is present on the HUD.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master switch ON, context gate"
+      }
+    ],
+    "mem": [
+      {
+        "field": "dataValue.sta_boxShow",
+        "value": 0,
+        "desc": "boxShow=0 -> Draw show-gate returns, BOX not drawn"
+      },
+      {
+        "field": "dataValue.val_angleAdjust",
+        "value": 6,
+        "desc": "angle unchanged this frame, no boxFlag retrigger"
+      },
+      {
+        "field": "dataValue.val_heightAdjust",
+        "value": 2,
+        "desc": "height unchanged this frame, no boxFlag retrigger"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "NO_BOX",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

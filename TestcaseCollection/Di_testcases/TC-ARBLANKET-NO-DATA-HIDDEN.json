@@ -1,0 +1,42 @@
+{
+  "scenario_id": "TC-ARBLANKET-NO-DATA-HIDDEN",
+  "description": "AR array blanket hidden: gate feeder signals are all valid (POWER_ON, gear in {2,4}, fusion ON) but no planning-line nav data, so PlanningLinePointCount==0 makes sta_ARBShow=RET_SHOW_NOT (diAEControl.cpp:1221-1245 PLPCount>0 fails) and the surface pre-check v_plp.size()<2 early-returns without rendering.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: val_switchADASFusion=1 ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 3,
+        "desc": "power status val_power=POWER_ON(3)"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 4,
+        "desc": "gear val_gear=4 in allowed {2,4} for blanket"
+      }
+    ],
+    "someip": [
+      {
+        "key": "PlanningLinePointCount",
+        "value": 0
+      }
+    ]
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

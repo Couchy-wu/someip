@@ -1,0 +1,42 @@
+{
+    "scenario_id": "TC-ICC-HIDDEN",
+    "description": "diIccSurface ICC indication not drawn. With ICC state inactive (sta_iccShow=false), the ICC surface is not rendered.",
+    "input_combination": {
+        "can": [
+            {
+                "signal_id": "0x4C1",
+                "sub_id": "",
+                "bit_range": "6.2-6.3",
+                "value": 1,
+                "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch present"
+            },
+            {
+                "signal_id": "0x261",
+                "sub_id": "",
+                "bit_range": "5.3-5.5",
+                "value": 0,
+                "desc": "TJA_Standby_Sts_Indicator_261_S -> val_iccStatus=0"
+            }
+        ],
+        "mem": [
+            {
+                "field": "dataValue.val_iccStatus",
+                "value": 0,
+                "desc": "ICC state inactive"
+            },
+            {
+                "field": "dataValue.sta_iccShow",
+                "value": 0,
+                "desc": "iccShow false, surface not drawn"
+            }
+        ],
+        "someip": []
+    },
+    "expected_output": {
+        "primary_label": "",
+        "negative_label": "",
+        "location_constraint": "",
+        "min_confidence": 0.9
+    },
+    "wait_ms": 100
+}

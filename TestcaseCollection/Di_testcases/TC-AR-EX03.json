@@ -1,0 +1,130 @@
+{
+  "scenario_id": "TC-AR-EX03",
+  "description": "AR navigation surface draws the straight-ahead state. The recommended direction resolves to move straight, which has no speed and distance restriction, so the surface stays active with all gates open.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch present"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "0.1-0.2",
+        "value": 0,
+        "desc": "Shift_Mode_26F_S: arEnginData.arNavData_s.canShiftMode26F=0"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "1.0-1.7",
+        "value": 60,
+        "desc": "Speed_Signal_151_S: arEnginData.arNavData_s.VehicleSpeed=60"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "0.1-0.2",
+        "value": 0,
+        "desc": "Shift_Mode_26F_S: arEnginData.arNavData_s.canShiftMode26F=0"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "1.0-1.7",
+        "value": 60,
+        "desc": "Speed_Signal_151_S: arEnginData.arNavData_s.VehicleSpeed=60"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "0.1-0.2",
+        "value": 0,
+        "desc": "Shift_Mode_26F_S: arEnginData.arNavData_s.canShiftMode26F=0"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "1.0-1.7",
+        "value": 60,
+        "desc": "Speed_Signal_151_S: arEnginData.arNavData_s.VehicleSpeed=60"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "0.1-0.2",
+        "value": 0,
+        "desc": "Shift_Mode_26F_S: arEnginData.arNavData_s.canShiftMode26F=0"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "1.0-1.7",
+        "value": 60,
+        "desc": "Speed_Signal_151_S: arEnginData.arNavData_s.VehicleSpeed=60"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "0.1-0.2",
+        "value": 0,
+        "desc": "Shift_Mode_26F_S: arEnginData.arNavData_s.canShiftMode26F=0"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "1.0-1.7",
+        "value": 60,
+        "desc": "Speed_Signal_151_S: arEnginData.arNavData_s.VehicleSpeed=60"
+      }
+    ],
+    "mem": [
+      {
+        "field": "dataValue.arEnginData.arNavData_s.canNavigationFusionSwitch",
+        "value": 2,
+        "desc": "AR navigation fusion switch enabled"
+      },
+      {
+        "field": "dataValue.arEnginData.arNavData_s.canShiftMode26F",
+        "value": 0,
+        "desc": "gear not in reverse mode"
+      },
+      {
+        "field": "dataValue.arEnginData.arNavData_s.ethHudRoadInfoNotifyOnLine",
+        "value": 1,
+        "desc": "nav road info link online"
+      },
+      {
+        "field": "dataValue.arEnginData.arNavData_s.navigating_status",
+        "value": 2,
+        "desc": "navigation actively guiding"
+      },
+      {
+        "field": "dataValue.arEnginData.arNavData_s.RecommendedDrivingDirectionsId",
+        "value": 11,
+        "desc": "recommended direction resolve to move straight"
+      },
+      {
+        "field": "dataValue.arEnginData.arNavData_s.VehicleSpeed",
+        "value": 60,
+        "desc": "average speed, straight state has no restriction"
+      },
+      {
+        "field": "dataValue.arEnginData.arNavData_s.distance_2_intersection",
+        "value": 200,
+        "desc": "distance in the middle range"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "AR_MOVE_STRAIGHT",
+    "negative_label": "NO_AR",
+    "location_constraint": "246,82,1131,82",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

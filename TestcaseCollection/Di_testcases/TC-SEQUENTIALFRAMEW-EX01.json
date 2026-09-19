@@ -1,0 +1,47 @@
+{
+  "scenario_id": "TC-SEQUENTIALFRAMEW-EX01",
+  "description": "Sequential frame shows the move-left animation. The recommended driving direction is move left within range of the intersection and every show gate is clear, so the surface is active.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      }
+    ],
+    "mem": [
+      {
+        "field": "sta_vehicleConditionShow",
+        "value": 0,
+        "desc": "vehicle condition animation not shown"
+      },
+      {
+        "field": "sta_ARBShow",
+        "value": 0,
+        "desc": "ARB animation not shown"
+      },
+      {
+        "field": "dataValue.arEnginData.arNavData_s.canNavigationFusionSwitch",
+        "value": 0,
+        "desc": "fusion switch OFF so the frame is permitted"
+      }
+    ],
+    "someip": [
+      {
+        "service_id": "0x010A",
+        "instance_id": "0x01",
+        "online": 1,
+        "desc": "nav road info online"
+      }
+    ]
+  },
+  "expected_output": {
+    "primary_label": "SEQUENTIALFRAME_W",
+    "negative_label": "NO_SEQUENTIALFRAMEW",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

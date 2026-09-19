@@ -1,0 +1,24 @@
+{
+  "scenario_id": "TC-SRSTREAM-STREAMFUNC-OFF-HIDDEN",
+  "description": "SR stream surface hidden when the SR stream function is disabled. With the stream feature cleared the driver does not attach the decoded stream, leaving the surface blank.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: fusion master switch ON"
+      }
+    ],
+    "mem": [],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

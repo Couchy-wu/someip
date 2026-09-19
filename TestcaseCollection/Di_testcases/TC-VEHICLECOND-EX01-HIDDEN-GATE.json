@@ -1,0 +1,86 @@
+{
+  "scenario_id": "TC-VEHICLECOND-EX01-HIDDEN-GATE",
+  "description": "VehicleCondition whole-surface hidden when the show gate is cleared. gear=P and ADAS fusion ON set the context, but the 0x4C1 fusion state leaves sta_vehicleConditionShow=0; diVehicleConditionSurface Draw gate 'if(vehicleConditionShow==0) return' suppresses the entire surface regardless of door states.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ONLINE_0x26F_S: gear frame online"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 1,
+        "desc": "Shift_Mode_26F_S: val_gear=1 (P) but vehicle-condition gate not driven"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ONLINE_0x294_S: doors frame online but surface gate off"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0,
+        "desc": "DOORS_294 LF door status=0 closed; surface still hidden by gate"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0,
+        "desc": "DOORS_294 RF door status=0 closed; surface still hidden by gate"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0,
+        "desc": "DOORS_294 LB door status=0 closed; surface still hidden by gate"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0,
+        "desc": "DOORS_294 RB door status=0 closed; surface still hidden by gate"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0,
+        "desc": "DOORS_294 BACK door status=0 closed; surface still hidden by gate"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0,
+        "desc": "DOORS_294 FRONT door status=0 closed; surface still hidden by gate"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "NO_VEHICLECONDITION",
+    "location_constraint": "635,170",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

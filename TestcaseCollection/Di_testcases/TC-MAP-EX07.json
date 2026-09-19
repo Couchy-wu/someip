@@ -1,0 +1,59 @@
+{
+  "scenario_id": "TC-MAP-EX07",
+  "description": "Map surface hidden after vehicle condition overlay engaged during otherwise valid navi. Draw gate fails on vehicleConditionShow only.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master switch enabled"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 3,
+        "desc": "powertrain power-gate state from CAN (BCMPower_Gear_12D_S)"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "7.4-7.5",
+        "value": 1,
+        "desc": "HUD_Mode_Selection_Setting_Item_S: val_display=1"
+      }
+    ],
+    "mem": [
+      {
+        "field": "sta_vehicleConditionShow",
+        "value": 1,
+        "desc": "vehicle condition shown hides map"
+      }
+    ],
+    "someip": [
+      {
+        "service_id": "0x010A",
+        "instance_id": "0x01",
+        "online": 1,
+        "desc": "navigation ETH channel online"
+      },
+      {
+        "key": "hnmap_s.navigation_map",
+        "value": "MAP_DATA"
+      },
+      {
+        "key": "hrinfo_s.navigating_status",
+        "value": 2
+      }
+    ]
+  },
+  "expected_output": {
+    "primary_label": "NO_MAP",
+    "negative_label": "MAP",
+    "location_constraint": "600,160",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

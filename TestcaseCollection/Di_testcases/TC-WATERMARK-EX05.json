@@ -1,0 +1,38 @@
+{
+  "scenario_id": "TC-WATERMARK-EX05",
+  "description": "Watermark texture stays drawn with power on and the HUD switch enabled while a full display is composited",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS gate active"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 3,
+        "desc": "powertrain power-gate state from CAN (BCMPower_Gear_12D_S)"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "4.3-4.4",
+        "value": 1,
+        "desc": "HUD_Switch_Set_S: val_switchHUD=1"
+      }
+    ],
+    "mem": [],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "WATERMARK",
+    "negative_label": "NO_WATERMARK",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

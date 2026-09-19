@@ -1,0 +1,45 @@
+{
+  "scenario_id": "TC-MAINWINDOW-EX05",
+  "description": "Main window shown with a non-driving gear state. val_power POWER_ON and val_switchHUD ON with val_gear outside the driving set keep the main window visible on the front layer.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 3,
+        "desc": "powertrain power-gate state from CAN (BCMPower_Gear_12D_S)"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 0,
+        "desc": "transmission shift-mode value from CAN (Shift_Mode_26F_S)"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "4.3-4.4",
+        "value": 1,
+        "desc": "HUD_Switch_Set_S: val_switchHUD=1"
+      }
+    ],
+    "mem": [],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "MAIN_WINDOW",
+    "negative_label": "NO_MAIN_WINDOW",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

@@ -1,0 +1,42 @@
+{
+    "scenario_id": "TC-VIDEO-SHOW",
+    "description": "Video surface is shown. diVideoSurface::Draw runs when decoderInitResult==VIDEO_PLAYER_OK && (playVideo || factoryMode==2). sta_showCar=SHOW iff val_showCarMode==1||==2. Show car when sta_showCar==1 && val_power==3; SetData hides when (val_factoryMode!=2 && sta_showCar==0) || val_power==1. Inputs set power ON and rear-camera show-car mode so the video layer plays.",
+    "input_combination": {
+        "can": [
+            {
+                "signal_id": "0x4C1",
+                "sub_id": "",
+                "bit_range": "6.2-6.3",
+                "value": 1,
+                "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+            },
+            {
+                "signal_id": "0x31E",
+                "sub_id": "",
+                "bit_range": "1.0-1.3",
+                "value": 1,
+                "desc": "Show_Car_Mode_31E_S -> val_showCarMode=1"
+            }
+        ],
+        "mem": [
+            {
+                "field": "val_power",
+                "value": 3,
+                "desc": "POWER_ON, video show-car condition met"
+            },
+            {
+                "field": "val_showCarMode",
+                "value": 1,
+                "desc": "val_showCarMode==1 => sta_showCar=SHOW, rear-camera video played"
+            }
+        ],
+        "someip": []
+    },
+    "expected_output": {
+        "primary_label": "VIDEO",
+        "negative_label": "NO_VIDEO",
+        "location_constraint": "640,240",
+        "min_confidence": 0.9
+    },
+    "wait_ms": 100
+}

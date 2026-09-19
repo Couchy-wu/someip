@@ -1,0 +1,40 @@
+{
+  "scenario_id": "TC-BSD-EX02-RIGHT-ONLY",
+  "description": "BSD right side shown, left side hidden. bsdRight==2 maps to sta_bsdRightShow=RET_SHOW; bsdLeft==0 maps to sta_bsdLeftShow=RET_SHOW_NOT. Draw shows only the right image, left image hidden.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master switch ON, context gate"
+      }
+    ],
+    "mem": [
+      {
+        "field": "dataValue.sta_bsdLeftShow",
+        "value": 0,
+        "desc": "bsdLeft=0 is RET_SHOW_NOT -> left BSD hidden"
+      },
+      {
+        "field": "dataValue.sta_bsdRightShow",
+        "value": 2,
+        "desc": "bsdRight=2 is RET_SHOW -> right BSD drawn"
+      },
+      {
+        "field": "dataValue.sta_vehicleConditionShow",
+        "value": 0,
+        "desc": "vehicleConditionShow != RET_SHOW, gate lets BSD pass"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "BSD_R",
+    "negative_label": "BSD_L",
+    "location_constraint": "1131,82",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

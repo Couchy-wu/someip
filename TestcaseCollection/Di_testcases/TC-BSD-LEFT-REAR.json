@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-BSD-LEFT-REAR",
+  "description": "Left rear opening-warning (OWS) surface shown: DOW left active. gate=ADAS fusion master switch(0x4C1) ON, online_418(0x418) ON, RRadar_DOW_Warning_Left_S(0x418 bit4.0-4.1)=0x1 drives sta_owsLeftShow (OWS_Left).",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch memFromMCU.switchADASFusion=1 (diArSurface.cpp:~1305)"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "3.0-3.1",
+        "value": 1,
+        "desc": "ONLINE_0x418_S: online_418.status=true, BSD block online (diDataCenter.cpp:2147)"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "4.0-4.1",
+        "value": 1,
+        "desc": "RRadar_DOW_Warning_Left_S: left rear DOW warning, maps to DiDcGetOwsLeftStatus->sta_owsLeftShow, OWS_Left surface show (diSignalApi.cpp:428; diDataCenter.cpp:1335; diOwsSurface.cpp:57)"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "OWS_L",
+    "negative_label": "",
+    "location_constraint": "0,0",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

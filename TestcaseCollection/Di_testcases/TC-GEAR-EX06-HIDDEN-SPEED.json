@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-GEAR-EX06-HIDDEN-SPEED",
+  "description": "Gear surface is not drawn when val_speed reaches 15; diGearSurface Draw() returns before drawing for speed greater than or equal to 15, so no gear label is present.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 15,
+        "desc": "val_speed=15"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 4,
+        "desc": "Shift_Mode_26F_S val_gear=4"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "NO_GEAR",
+    "location_constraint": "707,359",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

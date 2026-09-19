@@ -1,0 +1,44 @@
+{
+  "scenario_id": "TC-RTURN-EX03-GEAR-INVALID",
+  "description": "Right turn NOT shown: gear(0x26F) invalid. Indicated right turn but gear gate not cleared, right turn surface hidden, arrow absent.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 3,
+        "desc": "BCMPower_Gear_12D_S: power state = POWER_ON(3) (diDataCenter.cpp:921-925)"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 0,
+        "desc": "Shift_Mode_26F_S: gear signal invalid(N), surface hidden (diDataCenter.cpp:420-424)"
+      },
+      {
+        "signal_id": "0x144",
+        "sub_id": "",
+        "bit_range": "6.6-7.0",
+        "value": 1,
+        "desc": "Right_Turn_Indicator_144_S: right turn indicator ON but gear invalid blocks render (diRightTurnSurface.cpp:39)"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "AR_RIGHTTURN_ARROW",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

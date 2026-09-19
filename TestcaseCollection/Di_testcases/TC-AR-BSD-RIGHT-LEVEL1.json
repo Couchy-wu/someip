@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-AR-BSD-RIGHT-LEVEL1",
+  "description": "AR surface draws right BSD Level1 icon via bsdData branch. gate=ADAS fusion(0x4C1 6.2-6.3)=1, online_418(0x418 3.0-3.1)=1, R_BSD_Warning_Right_S(0x418 2.2-2.3)=0x1 sets canBsdRightWarning so mBSDImage_R is drawn.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "3.0-3.1",
+        "value": 1,
+        "desc": "ONLINE_0x418_S: BSD block online, passes canBsdRightWarning into bsdData"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "2.2-2.3",
+        "value": 1,
+        "desc": "R_BSD_Warning_Right_S: right blind-spot warning Level1, draws mBSDImage_R"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "BSD_R",
+    "negative_label": "",
+    "location_constraint": "1131,82",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

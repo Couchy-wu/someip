@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-PHONE-CALL-STATE2",
+  "description": "Phone shown for phone state=2 (outgoing/second ring). gate=ADAS fusion master switch(0x4C1) ON, Media_Mobile_State_S(0x43E bit6.5-6.7)=2, Media_Call_Num_S(0x43F bit3.0-8.7) carries caller number. diAEControl stores val_phoneNum when phoneStatus in {1,2} (lines 1183/1188), diPhoneSurface::Draw gate phoneStatus in {1,2}.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch memFromMCU.switchADASFusion=1"
+      },
+      {
+        "signal_id": "0x43E",
+        "sub_id": "",
+        "bit_range": "6.5-6.7",
+        "value": 2,
+        "desc": "Media_Mobile_State_S = MediaMobileStateS: phone state=2; diDataCenter:471 m_DiPhoneStatus -> diAEControl val_phoneStatus=2"
+      },
+      {
+        "signal_id": "0x43F",
+        "sub_id": "",
+        "bit_range": "3.0-8.7",
+        "value": 13900223344,
+        "desc": "Media_Call_Num_S: caller phone number digits for val_phoneNum"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "PHONE",
+    "negative_label": "NO_PHONE",
+    "location_constraint": "550,170",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

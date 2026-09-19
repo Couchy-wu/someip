@@ -1,0 +1,44 @@
+{
+  "scenario_id": "TC-RTURN-EX07-STATUS3-SHOW",
+  "description": "Right turn arrow lit steady (status 3): Right_Turn_Indicator_144_S(0x144 bit6.6-7.0)=3, all gates pass, rightTurnStatus=3 render branch taken, right arrow shown at base position.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 3,
+        "desc": "BCMPower_Gear_12D_S: power state = POWER_ON(3) (diDataCenter.cpp:921-925)"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 1,
+        "desc": "Shift_Mode_26F_S: gear signal valid D gear (diDataCenter.cpp:420-424)"
+      },
+      {
+        "signal_id": "0x144",
+        "sub_id": "",
+        "bit_range": "6.6-7.0",
+        "value": 3,
+        "desc": "Right_Turn_Indicator_144_S: right turn status 3 steady, rightTurnStatus==3 render branch (diRightTurnSurface.cpp:39 shows for 1 or 3)"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "AR_RIGHTTURN_ARROW",
+    "negative_label": "AR_LEFTTURN_ARROW",
+    "location_constraint": "1131,82",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

@@ -1,0 +1,24 @@
+{
+  "scenario_id": "TC-SRSTREAM-MASTERSWITCH-OFF-HIDDEN",
+  "description": "SR stream surface hidden when the fusion master switch is turned off. The stream is gated by the master control and stops being presented in the projection.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 0,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: fusion master switch OFF"
+      }
+    ],
+    "mem": [],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

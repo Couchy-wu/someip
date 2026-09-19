@@ -1,0 +1,23 @@
+{
+  "scenario_id": "TC-SPEEDLIMIT-NEG-FUSION",
+  "description": "Speed-limit surface hidden when the ADAS fusion master switch is OFF. can[0]=0x4C1 value 0 closes the fusion gate, derived show flags stay clear, diSpeedlimitSurface hides.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 0,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch OFF -> speedlimit gate closed"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "NO_SPEEDLIMIT",
+    "location_constraint": "516,235,540,259",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

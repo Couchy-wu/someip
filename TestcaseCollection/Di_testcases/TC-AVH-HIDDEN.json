@@ -1,0 +1,37 @@
+{
+    "scenario_id": "TC-AVH-HIDDEN",
+    "description": "diAvhSurface AVH (around-view) image not drawn. DI_AEC_AvhShow requires val_avh==2 with no handOff/vehicleCondition suppression. Hidden modeled with val_avh not equal to 2.",
+    "input_combination": {
+        "can": [
+            {
+                "signal_id": "0x4C1",
+                "sub_id": "",
+                "bit_range": "6.2-6.3",
+                "value": 1,
+                "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch present"
+            },
+            {
+                "signal_id": "0x122",
+                "sub_id": "",
+                "bit_range": "8.6-8.7",
+                "value": 0,
+                "desc": "AVH_CtrlStatus_S -> val_avh=0"
+            }
+        ],
+        "mem": [
+            {
+                "field": "dataValue.val_avh",
+                "value": 0,
+                "desc": "AVH mode inactive, no around-view image"
+            }
+        ],
+        "someip": []
+    },
+    "expected_output": {
+        "primary_label": "",
+        "negative_label": "",
+        "location_constraint": "",
+        "min_confidence": 0.9
+    },
+    "wait_ms": 100
+}

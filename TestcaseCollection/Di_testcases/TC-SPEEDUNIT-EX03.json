@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-SPEEDUNIT-EX03",
+  "description": "Speed unit surface displays km/h when val_speed_unit equals 1 (non-mph branch).",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 40,
+        "desc": "val_speed=40"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "val_speed_unit=1"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "km/h",
+    "negative_label": "",
+    "location_constraint": "689,360",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

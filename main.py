@@ -33,6 +33,7 @@ from gui_handlers.video_extract_frames import VideoProcessor
 from can_gui.can_send_receive_gui import CANFDGUI
 
 import someip_gui
+import gui_handlers.di_case_window
 from hudcore.platform import describe_platform, paths
 from hudcore.platform.executables import get_ffmpeg, get_office_app, get_text_editor
 from hudcore.ui import TextRedirector, Theme
@@ -56,6 +57,7 @@ class MainWindow:
         self._log_redirector = None
         self._can_window = None
         self._someip_window = None
+        self._di_window = None
         self._time_after_id = None
 
         self._init_handlers()
@@ -200,6 +202,12 @@ class MainWindow:
                                             **Theme.danger_button())
         self.image_video_button.grid(row=2, column=2, padx=20, pady=20)
 
+        # Di 测试用例：新格式（CAN + SOME/IP + 标贴校验），带格式开关
+        self.di_case_button = tk.Button(root, text="Di 测试用例",
+                                        command=self.open_di_cases,
+                                        **Theme.success_button())
+        self.di_case_button.grid(row=2, column=3, padx=20, pady=20)
+
     # ------------------------------------------------------------ 子窗口
     def open_matrix_converter(self) -> None:
         """打开"信号矩阵 转 CSV 工具"窗口"""
@@ -260,6 +268,32 @@ class MainWindow:
         self._someip_window = someip_gui.open_replay_window(
             self.root, selected_file=self.selected_file)
         self._someip_window.protocol("WM_DELETE_WINDOW", self._on_someip_window_close)
+
+    def open_di_cases(self) -> None:
+        """打开 Di 测试用例窗口（单例；关闭时恢复按钮）。"""
+        if self._di_window is not None:
+            try:
+                if self._di_window.winfo_exists():
+                    self._di_window.focus()
+                    return
+            except tk.TclError:
+                self._di_window = None
+
+        self.di_case_button.config(state=tk.DISABLED)
+        self._di_window = gui_handlers.di_case_window.open_di_case_window(self.root)
+        self._di_window.protocol("WM_DELETE_WINDOW", self._on_di_window_close)
+
+    def _on_di_window_close(self) -> None:
+        """Di 窗口关闭回调。"""
+        win = self._di_window
+        try:
+            if win is not None and win.winfo_exists():
+                win.destroy()
+        except tk.TclError:
+            pass
+        finally:
+            self._di_window = None
+            self.di_case_button.config(state=tk.NORMAL)
 
     def _on_someip_window_close(self) -> None:
         """SOME/IP 子窗口关闭回调：交给窗口自身清理（停回放/停服务/保存配置）"""

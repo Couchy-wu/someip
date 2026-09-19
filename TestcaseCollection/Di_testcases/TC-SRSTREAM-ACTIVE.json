@@ -1,0 +1,30 @@
+{
+  "scenario_id": "TC-SRSTREAM-ACTIVE",
+  "description": "SR stream surface active. diSRStreamSurface Draw runs when the play state is active and updates the stream image frame; the SR video stream plays when the SR lane-line someIP channel (online_000C_000C) is online and the play state is granted. Here the lane-line someIP channel is online so SR stream content is rendered.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      }
+    ],
+    "someip": [
+      {
+        "service_id": "0x000C",
+        "instance_id": "0x000C",
+        "online": 1,
+        "desc": "Lane line someIP channel 0x000C/0x000C online, play state granted, SR stream played"
+      }
+    ]
+  },
+  "expected_output": {
+    "primary_label": "SR_STREAM",
+    "negative_label": "NO_SR_STREAM",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

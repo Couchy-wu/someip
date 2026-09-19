@@ -1,0 +1,44 @@
+{
+  "scenario_id": "TC-LTURN-EX04-ONLINE-OFF",
+  "description": "Left turn NOT shown: CAN 0x144 online validity offline. Left_Turn_Indicator_144_S set to 1 but online_144.status==false so leftTurnStatus forced to 0, arrow hidden.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 3,
+        "desc": "BCMPower_Gear_12D_S: power state = POWER_ON(3) (diDataCenter.cpp:921-925)"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 1,
+        "desc": "Shift_Mode_26F_S: gear signal valid D gear (diDataCenter.cpp:420-424)"
+      },
+      {
+        "signal_id": "0x144",
+        "sub_id": "",
+        "bit_range": "6.0-6.2",
+        "value": 1,
+        "desc": "Left_Turn_Indicator_144_S: raw left turn indicator ON but online_144.status false -> leftTurnStatus forced 0 hidden (diDataCenter.cpp:1107-1117)"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "AR_LEFTTURN_ARROW",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

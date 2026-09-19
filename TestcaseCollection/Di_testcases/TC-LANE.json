@@ -1,0 +1,65 @@
+{
+  "scenario_id": "TC-LANE",
+  "description": "Lane surface drawn (simplest drivable state). diLaneSurface.cpp L123 Draw returns unless m_laneLen>0 && sta_Navi==NAVI_ON && sta_vehicleConditionShow!=RET_SHOW. m_laneLen/m_lane are loaded from DiDcGetLanesPicture(len) (diAEControl.cpp DI_AEC_Lane_Show L1133), driven by the lane data mem fields (len>0). sta_Navi==NAVI_ON requires POWER_ON(val_power=3) and val_naviStatus in {2,3} (diAEControl.cpp L351-361). val_naviStatus is overwritten each cycle at L152 by DiDcGetNavigationETH, so mem val_naviStatus=3 is the acceptable input driver (getter is the runtime someip path). gear!=1 keeps sta_vehicleConditionShow=RET_SHOW_NOT, satisfying the RET_SHOW != sta_vehicleConditionShow gate. One lane-detect signal active -> lane line texture rendered.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.0",
+        "value": 1,
+        "desc": "HUD master switch frame ON"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 0,
+        "desc": "Shift_Mode_26F_S -> val_gear=0"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "7.4-7.5",
+        "value": 1,
+        "desc": "HUD_Mode_Selection_Setting_Item_S: val_display=1"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_lane",
+        "value": 1,
+        "desc": "lane line picture = 1 (detected), drives DiDcGetLanesPicture"
+      },
+      {
+        "field": "val_power",
+        "value": 3,
+        "desc": "POWER_ON required for sta_Navi==NAVI_ON"
+      },
+      {
+        "field": "val_gear",
+        "value": 0,
+        "desc": "gear!=1 keeps sta_vehicleConditionShow=RET_SHOW_NOT, opening the Draw gate"
+      }
+    ],
+    "someip": [
+      {
+        "service_id": "0x010A",
+        "instance_id": "0x01",
+        "online": 1,
+        "desc": "navigation ETH channel online"
+      },
+      {
+        "key": "hrinfo_s.navigating_status",
+        "value": 3
+      }
+    ]
+  },
+  "expected_output": {
+    "primary_label": "LANE",
+    "negative_label": "",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

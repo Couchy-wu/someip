@@ -1,0 +1,130 @@
+{
+  "scenario_id": "TC-AR-EX06",
+  "description": "AR navigation surface stays hidden because the AR navigation fusion switch is off. With the fusion switch not equal to enabled and driving direction reset to zero, the surface is suppressed.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch present"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "0.1-0.2",
+        "value": 0,
+        "desc": "Shift_Mode_26F_S: arEnginData.arNavData_s.canShiftMode26F=0"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "1.0-1.7",
+        "value": 100,
+        "desc": "Speed_Signal_151_S: arEnginData.arNavData_s.VehicleSpeed=100"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "0.1-0.2",
+        "value": 0,
+        "desc": "Shift_Mode_26F_S: arEnginData.arNavData_s.canShiftMode26F=0"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "1.0-1.7",
+        "value": 100,
+        "desc": "Speed_Signal_151_S: arEnginData.arNavData_s.VehicleSpeed=100"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "0.1-0.2",
+        "value": 0,
+        "desc": "Shift_Mode_26F_S: arEnginData.arNavData_s.canShiftMode26F=0"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "1.0-1.7",
+        "value": 100,
+        "desc": "Speed_Signal_151_S: arEnginData.arNavData_s.VehicleSpeed=100"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "0.1-0.2",
+        "value": 0,
+        "desc": "Shift_Mode_26F_S: arEnginData.arNavData_s.canShiftMode26F=0"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "1.0-1.7",
+        "value": 100,
+        "desc": "Speed_Signal_151_S: arEnginData.arNavData_s.VehicleSpeed=100"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "0.1-0.2",
+        "value": 0,
+        "desc": "Shift_Mode_26F_S: arEnginData.arNavData_s.canShiftMode26F=0"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "1.0-1.7",
+        "value": 100,
+        "desc": "Speed_Signal_151_S: arEnginData.arNavData_s.VehicleSpeed=100"
+      }
+    ],
+    "mem": [
+      {
+        "field": "dataValue.arEnginData.arNavData_s.canNavigationFusionSwitch",
+        "value": 0,
+        "desc": "AR navigation fusion switch off"
+      },
+      {
+        "field": "dataValue.arEnginData.arNavData_s.canShiftMode26F",
+        "value": 0,
+        "desc": "gear not in reverse mode"
+      },
+      {
+        "field": "dataValue.arEnginData.arNavData_s.ethHudRoadInfoNotifyOnLine",
+        "value": 1,
+        "desc": "nav road info link online"
+      },
+      {
+        "field": "dataValue.arEnginData.arNavData_s.navigating_status",
+        "value": 2,
+        "desc": "navigation actively guiding"
+      },
+      {
+        "field": "dataValue.arEnginData.arNavData_s.RecommendedDrivingDirectionsId",
+        "value": 1,
+        "desc": "recommended direction value ignored when fuse off"
+      },
+      {
+        "field": "dataValue.arEnginData.arNavData_s.VehicleSpeed",
+        "value": 100,
+        "desc": "vehicle speed in the high speed band"
+      },
+      {
+        "field": "dataValue.arEnginData.arNavData_s.distance_2_intersection",
+        "value": 300,
+        "desc": "distance to intersection in range"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

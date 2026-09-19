@@ -1,0 +1,40 @@
+{
+  "scenario_id": "TC-BSD-EX03-NOSTAT-BOTH-HIDDEN",
+  "description": "BSD both sides hidden when the gate does not pass. sta_vehicleConditionShow==RET_SHOW (or adasSwitch != 1) makes DI_AEC_BSD_Show force both sta_bsdLeftShow and sta_bsdRightShow to RET_SHOW_NOT, so no BSD image is drawn on either side.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master switch ON, context gate"
+      }
+    ],
+    "mem": [
+      {
+        "field": "dataValue.sta_bsdLeftShow",
+        "value": 0,
+        "desc": "sta_bsdLeftShow=RET_SHOW_NOT -> left image hidden"
+      },
+      {
+        "field": "dataValue.sta_bsdRightShow",
+        "value": 0,
+        "desc": "sta_bsdRightShow=RET_SHOW_NOT -> right image hidden"
+      },
+      {
+        "field": "dataValue.sta_vehicleConditionShow",
+        "value": 1,
+        "desc": "vehicleConditionShow==RET_SHOW blocks BSD gate -> no status set"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "BSD_NONE",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-HANDOFF-NEG-NO-REQ",
+  "description": "HandOver surface must NOT render. ADAS Safe_Driving_Assistance_Function ON(1) but DNP_Take_Over_Req_S val=0 in 0x29C sub6.0-6.2 (no take-over request) -> DI_AEC_HandOffShow returns RET_SHOW_NOT (event 0 not in {1,2,3,4,6}).",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.0-6.1",
+        "value": 1,
+        "desc": "Safe_Driving_Assistance_Function_S: ADAS function ON"
+      },
+      {
+        "signal_id": "0x29C",
+        "sub_id": "",
+        "bit_range": "0.0",
+        "value": 1,
+        "desc": "ONLINE_0x29C_S: take-over frame online"
+      },
+      {
+        "signal_id": "0x29C",
+        "sub_id": "",
+        "bit_range": "6.0-6.2",
+        "value": 0,
+        "desc": "DNP_Take_Over_Req_S: val_handOff=0 -> no show"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "HANDOFF",
+    "location_constraint": "685,332",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

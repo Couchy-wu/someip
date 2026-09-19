@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-SPEEDUNIT-EX07-HIDDEN-OFF",
+  "description": "Speed unit surface is not drawn when the ADAS fusion master switch is off; with fusion disabled the unit surface is suppressed and no unit label appears.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0,
+        "desc": "ADAS fusion master switch OFF"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 40,
+        "desc": "val_speed=40"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0,
+        "desc": "val_speed_unit=0"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "NO_SPEEDUNIT",
+    "location_constraint": "689,360",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

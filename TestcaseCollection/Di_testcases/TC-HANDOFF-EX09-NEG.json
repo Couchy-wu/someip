@@ -1,0 +1,51 @@
+{
+  "scenario_id": "TC-HANDOFF-EX09",
+  "description": "Handoff surface stays fully hidden and unconstrained when the internal show gate is off and the master is disabled.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master active"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "",
+        "value": 0,
+        "desc": "HANDOFF driving assistance function disarmed"
+      },
+      {
+        "signal_id": "0x29C",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0,
+        "desc": "handoff online status off"
+      },
+      {
+        "signal_id": "0x29C",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0,
+        "desc": "handoff event off"
+      }
+    ],
+    "mem": [
+      {
+        "field": "sta_handOffShow",
+        "value": 0,
+        "desc": "handoff show gate off"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "NO_HANDOFF",
+    "location_constraint": "",
+    "min_confidence": 0.85
+  },
+  "wait_ms": 100
+}

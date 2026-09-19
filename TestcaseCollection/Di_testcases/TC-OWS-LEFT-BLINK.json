@@ -1,0 +1,52 @@
+{
+  "scenario_id": "TC-OWS-LEFT-BLINK",
+  "description": "OWS left blink drawn alone. DI_AEC_OWS_Show gate (diAEControl.cpp L788): val_power==3 && val_gear==1, then sta_owsLeftShow set when ows left value in {1,2}. Gear==1 makes vehicleConditionShow==RET_SHOW, which blocks all non-OWS ADAS surfaces, isolating OWS. Left value 2 (blink), right value 0.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch on"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 3,
+        "desc": "HUD Power status 3 (POWER_ON)"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 1,
+        "desc": "gear 1, OWS show-state active, blocks other ADAS via vehicleConditionShow==RET_SHOW"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "4.0-4.1",
+        "value": 2,
+        "desc": "OWS left side value 2 (blink) (online_418)"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "4.2-4.3",
+        "value": 0,
+        "desc": "OWS right side value 0 (inactive)"
+      }
+    ],
+    "mem": [],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "OWS_LEFT_BLINK",
+    "negative_label": "NO_OWS",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

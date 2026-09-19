@@ -1,0 +1,51 @@
+{
+  "scenario_id": "TC-HANDOFF-EX02",
+  "description": "Handoff surface shows takeover break event while the online status is present and the ADAS master is active.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master active"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "",
+        "value": 1,
+        "desc": "HANDOFF driving assistance function enabled"
+      },
+      {
+        "signal_id": "0x29C",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "handoff online status active"
+      },
+      {
+        "signal_id": "0x29C",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 2,
+        "desc": "handoff event break"
+      }
+    ],
+    "mem": [
+      {
+        "field": "sta_handOffShow",
+        "value": 1,
+        "desc": "handoff show gate on"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "HANDOFF_BREAK",
+    "negative_label": "NO_HANDOFF",
+    "location_constraint": "685,332",
+    "min_confidence": 0.85
+  },
+  "wait_ms": 100
+}

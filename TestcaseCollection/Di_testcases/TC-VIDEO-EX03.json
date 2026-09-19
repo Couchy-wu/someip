@@ -1,0 +1,38 @@
+{
+  "scenario_id": "TC-VIDEO-EX03",
+  "description": "Factory video surface visible in factory projection mode. The decoder initialized successfully and factory mode is active with the image power on, so diVideoSurface draws the factory test video.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: camera feed path enabled"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 3,
+        "desc": "powertrain power-gate state from CAN (BCMPower_Gear_12D_S)"
+      },
+      {
+        "signal_id": "0x6D4",
+        "sub_id": "",
+        "bit_range": "1.0-1.7",
+        "value": 2,
+        "desc": "HUD active-control / factory-mode value from CAN (HUD_Actcontrol_S)"
+      }
+    ],
+    "mem": [],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "VIDEO",
+    "negative_label": "NO_VIDEO",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

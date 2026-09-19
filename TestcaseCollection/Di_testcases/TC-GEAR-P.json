@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-GEAR-P",
+  "description": "Gear surface shows P. val_speed=0, Shift_Mode_26F_S=1 -> val_gear=1 (P), sta_gearShow granted via speed gate, vehicleConditionShow=0 -> GEAR layout (P at 707,359).",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "1.0-1.7",
+        "value": 0,
+        "desc": "Speed_Signal_151_S: val_speed=0"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 1,
+        "desc": "Shift_Mode_26F_S: val_gear=1 (P)"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "P",
+    "negative_label": "",
+    "location_constraint": "707,359",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

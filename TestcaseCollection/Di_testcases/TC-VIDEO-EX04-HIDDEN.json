@@ -1,0 +1,44 @@
+{
+  "scenario_id": "TC-VIDEO-EX04",
+  "description": "Video surface hidden because the image power is OFF. The car show mode and factory mode would not matter since the image power state blocks the render video path, so diVideoSurface does not draw any video.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: camera feed path enabled"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 1,
+        "desc": "powertrain power-gate state from CAN (BCMPower_Gear_12D_S)"
+      },
+      {
+        "signal_id": "0x31E",
+        "sub_id": "",
+        "bit_range": "1.0-1.3",
+        "value": 1,
+        "desc": "HUD car-display mode selection from CAN (Show_Car_Mode_31E_S)"
+      }
+    ],
+    "mem": [
+      {
+        "field": "sta_showCar",
+        "value": 1,
+        "desc": "car shown flag but power off suppresses video"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

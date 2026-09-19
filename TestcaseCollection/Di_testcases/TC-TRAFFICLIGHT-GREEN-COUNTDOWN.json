@@ -1,0 +1,84 @@
+{
+  "scenario_id": "TC-TRAFFICLIGHT-GREEN-COUNTDOWN",
+  "description": "GREEN countdown text with firstCrossNumS=107 upper-bound value. STA context: val_power=3 & val_naviStatus in {2,3} keep sta_Navi=NAVI_ON; val_gear=0 keeps sta_vehicleConditionShow=RET_SHOW_NOT. Primary label asserted.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.0",
+        "value": 1,
+        "desc": "HUD master switch frame ON"
+      },
+      {
+        "signal_id": "0x43F",
+        "sub_id": "",
+        "bit_range": "2.2-2.4",
+        "value": 4,
+        "desc": "First_Cross_light_status_S -> first_Cross_light_status_S=4 (not 0/1)"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 0,
+        "desc": "Shift_Mode_26F_S -> val_gear=0"
+      },
+      {
+        "signal_id": "0x43F",
+        "sub_id": "",
+        "bit_range": "3.6-4.0",
+        "value": 4,
+        "desc": "First_Cross_arrow_direction_S -> firstCrossArrowDirectionS=4"
+      },
+      {
+        "signal_id": "0x43F",
+        "sub_id": "",
+        "bit_range": "2.5-2.7",
+        "value": 1,
+        "desc": "First_Cross_light_text_S -> firstCrossLightTextS=1"
+      },
+      {
+        "signal_id": "0x43F",
+        "sub_id": "",
+        "bit_range": "6.0-6.7",
+        "value": 107,
+        "desc": "First_Cross_num_S -> firstCrossNumS=107"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "7.4-7.5",
+        "value": 1,
+        "desc": "HUD_Mode_Selection_Setting_Item_S: val_display=1"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_power",
+        "value": 3,
+        "desc": "POWER_ON required for sta_Navi==NAVI_ON"
+      },
+      {
+        "field": "val_gear",
+        "value": 0,
+        "desc": "gear!=1 keeps sta_vehicleConditionShow=RET_SHOW_NOT, opening the show gate"
+      }
+    ],
+    "someip": [
+      {
+        "service_id": "0x010A",
+        "instance_id": "0x01",
+        "online": 1,
+        "desc": "navigation ETH channel online"
+      }
+    ]
+  },
+  "expected_output": {
+    "primary_label": "TRAFFICLIGHT",
+    "negative_label": "NO_TRAFFICLIGHT",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

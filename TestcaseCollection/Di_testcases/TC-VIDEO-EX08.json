@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-VIDEO-EX08",
+  "description": "Car video surface visible when the car is shown and the image power is on. The car show state matches the on power state so playVideo is active and the decoder initializes cleanly, drawing the rear camera view.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: camera feed path enabled"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 3,
+        "desc": "powertrain power-gate state from CAN (BCMPower_Gear_12D_S)"
+      }
+    ],
+    "mem": [
+      {
+        "field": "sta_showCar",
+        "value": 1,
+        "desc": "car shown, playVideo driven active regardless of mode"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "VIDEO",
+    "negative_label": "NO_VIDEO",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

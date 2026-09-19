@@ -1,0 +1,44 @@
+{
+  "scenario_id": "TC-SPEEDLIMIT-EX01",
+  "description": "Speed limit surface shows a 2-digit value 30 in default theme. val_speedlimitDisplay=4 keeps sta_speedlimitShow visible (white theme), value 30 decoded from sub 2.0-2.7, rendered inside the top ring anchor.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ONLINE_0x23A_S: speed limit frame online"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 30,
+        "desc": "Speed_Limit_23A_S: val_speedLimitValue=30 km/h"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 4,
+        "desc": "Speed_Limit_Display_Type_23A_S: val_speedlimitDisplay=4 default white theme, visible"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "30",
+    "negative_label": "",
+    "location_constraint": "516,235,540,259",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

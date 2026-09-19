@@ -1,0 +1,51 @@
+{
+  "scenario_id": "TC-VEHICLECOND-LF",
+  "description": "VehicleCondition surface shows the left-front door open. gear=P(1) enables vehicle-condition logic; LF door status=2 in 0x294 sub1.0-1.1 -> sta_lfDoorShow=RET_SHOW -> sta_vehicleConditionShow=RET_SHOW(1). LF door icon renders at LFDOOR anchor 635,170.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "0.0",
+        "value": 1,
+        "desc": "ONLINE_0x26F_S: gear frame online"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 1,
+        "desc": "Shift_Mode_26F_S: val_gear=1 (P) -> vehicle-condition gate"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "0.0",
+        "value": 1,
+        "desc": "ONLINE_0x294_S: doors frame online"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "1.0-1.1",
+        "value": 2,
+        "desc": "DOORS_294 LF door status=2 open -> sta_lfDoorShow=RET_SHOW"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "DOOR_LF",
+    "negative_label": "",
+    "location_constraint": "635,170",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

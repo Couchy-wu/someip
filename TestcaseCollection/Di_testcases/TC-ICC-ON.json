@@ -1,0 +1,73 @@
+{
+  "scenario_id": "TC-ICC-ON",
+  "description": "ICC surface drawn alone. DI_AEC_ICC_Show gate evaluated first: iccStatus not in {0,2}, iccColor==4, val_display==1, beltStatusS!=1. Gear!=1 so vehicleConditionShow==RET_SHOW_NOT(0). iccStatus 1, iccColor 4. ACC suppressed with accSpeedstatus=0; LDW naturally blocked by ICC-inverse clause (iccStatus=1, iccColor=4); noaStatus=0 keeps NOA hidden.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch on"
+      },
+      {
+        "signal_id": "0x261",
+        "sub_id": "",
+        "bit_range": "5.3-5.5",
+        "value": 1,
+        "desc": "TJA_Standby_Sts_Indicator_261_S: ICC status active (online_261)"
+      },
+      {
+        "signal_id": "0x261",
+        "sub_id": "",
+        "bit_range": "5.6-6.0",
+        "value": 4,
+        "desc": "TJA_Standby_Sts_Lamp_Color_261_S: ICC lamp color 4"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "3.0-3.2",
+        "value": 0,
+        "desc": "ACC_Cruise_Speed_2A6_S: acc speed status 0, ACC gate not satisfied"
+      },
+      {
+        "signal_id": "0x29C",
+        "sub_id": "",
+        "bit_range": "4.0-4.3",
+        "value": 0,
+        "desc": "DNP_Stats_S: noa status 0, NOA gate not satisfied"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "3.0-3.1",
+        "value": 0,
+        "desc": "Driver_Belt_Status_S: driver belt status not 1"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 0,
+        "desc": "gear not 1, vehicleConditionShow stays RET_SHOW_NOT"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "7.4-7.5",
+        "value": 1,
+        "desc": "HUD_Mode_Selection_Setting_Item_S: val_display=1"
+      }
+    ],
+    "mem": [],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "ICC",
+    "negative_label": "NO_ICC",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

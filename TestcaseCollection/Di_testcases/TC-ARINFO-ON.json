@@ -1,0 +1,44 @@
+{
+  "scenario_id": "TC-ARINFO-ON",
+  "description": "ArInfo text-remind surface lit. gate=ADAS fusion master switch(0x4C1) ON, power(0x12D) ON, gear(0x26F)=Drive(4) (early-exit val_gear==1 not taken), online_1FF02(0x1FF) ON, NOAExitStyleS(0x1FF sub0x02 bit3.4-4.1)=0x0C -> textRemindStatus1==2 -> textRemindShow=2, text-remind surface shown.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch memFromMCU.switchADASFusion=1 (diAEControl.cpp:109; diDataCenter.cpp:248)"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 3,
+        "desc": "BCMPower_Gear_12D_S: power state = POWER_ON(3), gate online_12D valid (diDataCenter.cpp:921-925; SigMgrEventListener.h:54)"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 4,
+        "desc": "Shift_Mode_26F_S: gear=Drive(4) so val_gear!=1, text-remind early-exit not taken (diDataCenter.cpp:420-424; diAEControl.cpp:402-464)"
+      },
+      {
+        "signal_id": "0x1FF",
+        "sub_id": "",
+        "bit_range": "3.4-4.1",
+        "value": 12,
+        "desc": "NOAExitStyleS(0x1FF sub0x02 bit3.4-4.1)=0x0C -> DiDcGetTextRemindStatus1()==2 triggers, textRemindShow=2 (diDataCenter.cpp:1542-1584)"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "ARINFO_TEXT_REMIND",
+    "negative_label": "",
+    "location_constraint": "140,107",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

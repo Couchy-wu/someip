@@ -1,0 +1,31 @@
+{
+  "scenario_id": "TC-SRSTREAM-EX02",
+  "description": "SR stream surface hidden when the lane-line channel is offline. The SR stream function is enabled but the play head never starts because online_000C_000C.status is clear, so diSRStreamSurface does not draw.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      }
+    ],
+    "mem": [],
+    "someip": [
+      {
+        "service_id": "0x000C",
+        "instance_id": "0x000C",
+        "online": 0,
+        "desc": "SR lane-line channel offline, stream surface not drawn"
+      }
+    ]
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

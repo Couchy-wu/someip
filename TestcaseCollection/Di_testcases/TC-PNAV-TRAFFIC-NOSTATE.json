@@ -1,0 +1,56 @@
+{
+  "scenario_id": "TC-PNAV-TRAFFIC-NOSTATE",
+  "description": "Navigation traffic-light surface hidden. With navigation inactive or no cross-light data, no traffic-light content is rendered.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch memFromMCU.switchADASFusion=1"
+      },
+      {
+        "signal_id": "0x43F",
+        "sub_id": "",
+        "bit_range": "2.2-2.4",
+        "value": 0,
+        "desc": "First_Cross_light_status_S -> first_Cross_light_status_S=0"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "7.4-7.5",
+        "value": 1,
+        "desc": "HUD_Mode_Selection_Setting_Item_S: val_display=1"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_power",
+        "value": 3,
+        "desc": "POWER_ON but navigation inactive"
+      },
+      {
+        "field": "val_naviStatus",
+        "value": 0,
+        "desc": "navi status 0 => sta_Navi=NAVI_OFF, traffic guidance suppressed"
+      }
+    ],
+    "someip": [
+      {
+        "service_id": "0x010A",
+        "instance_id": "0x01",
+        "online": 0,
+        "desc": "navigation ETH channel offline -> DiDcGetNavigationETH()=0 -> sta_Navi=NAVI_OFF, gate fails"
+      }
+    ]
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "NO_NAV_TRAFFIC",
+    "location_constraint": "500,110",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

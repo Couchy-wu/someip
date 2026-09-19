@@ -1,0 +1,86 @@
+{
+  "scenario_id": "TC-VEHICLECOND-NEG-ALLCLOSED",
+  "description": "VehicleCondition surface hidden when all doors are closed. gear=P(1) enables the logic but every door status=0 -> each sta_*DoorShow=RET_SHOW_NOT -> sta_vehicleConditionShow stays RET_SHOW_NOT(0); diVehicleConditionSurface Draw returns early.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "0.0",
+        "value": 1,
+        "desc": "ONLINE_0x26F_S: gear frame online"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 1,
+        "desc": "Shift_Mode_26F_S: val_gear=1 (P) -> vehicle-condition gate, but all doors closed"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "0.0",
+        "value": 1,
+        "desc": "ONLINE_0x294_S: doors frame online"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "1.0-1.1",
+        "value": 0,
+        "desc": "DOORS_294 LF door status=0 closed"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "1.2-1.3",
+        "value": 0,
+        "desc": "DOORS_294 RF door status=0 closed"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "1.4-1.5",
+        "value": 0,
+        "desc": "DOORS_294 LB door status=0 closed"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "1.6-1.7",
+        "value": 0,
+        "desc": "DOORS_294 RB door status=0 closed"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "3.2-3.3",
+        "value": 0,
+        "desc": "DOORS_294 BACK door status=0 closed"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "3.4-3.5",
+        "value": 0,
+        "desc": "DOORS_294 FRONT door status=0 closed"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "NO_VEHICLECONDITION",
+    "location_constraint": "635,170",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

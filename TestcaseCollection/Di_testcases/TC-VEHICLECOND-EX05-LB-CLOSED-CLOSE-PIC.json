@@ -1,0 +1,86 @@
+{
+  "scenario_id": "TC-VEHICLECOND-EX05-LB-CLOSED-CLOSE-PIC",
+  "description": "VehicleCondition left-rear door closed boundary: surface stays shown because LF is open, and lbDoorShow==0 renders the LB door with CLOSE_PIC (the ==0 branch, opposite of the OPEN_PIC branch). sta_lfDoorShow keeps sta_vehicleConditionShow=1 so the whole surface draws.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ONLINE_0x26F_S: gear frame online"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 1,
+        "desc": "Shift_Mode_26F_S: val_gear=1 (P) -> vehicle-condition gate"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ONLINE_0x294_S: doors frame online"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 2,
+        "desc": "DOORS_294 LF door status=2 open -> sta_lfDoorShow keeps sta_vehicleConditionShow=1, surface drawn"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0,
+        "desc": "DOORS_294 RF door status=0 closed -> CLOSE_PIC"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0,
+        "desc": "DOORS_294 LB door status=0 closed -> lbDoorShow==0 -> CLOSE_PIC at LB anchor"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0,
+        "desc": "DOORS_294 RB door status=0 closed -> CLOSE_PIC"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0,
+        "desc": "DOORS_294 BACK door status=0 closed"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0,
+        "desc": "DOORS_294 FRONT door status=0 closed"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "DOOR_LB",
+    "negative_label": "",
+    "location_constraint": "635,315",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

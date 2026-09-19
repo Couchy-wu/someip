@@ -1,0 +1,44 @@
+{
+  "scenario_id": "TC-SPEEDLIMIT-EX02",
+  "description": "Speed limit surface shows value 50 in blue theme. val_speedlimitDisplay=3 maps to theme 2 (blue), value 50 from sub 2.0-2.7, rendered with a short leading space before the value per the negative-ring scale.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ONLINE_0x23A_S: speed limit frame online"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 50,
+        "desc": "Speed_Limit_23A_S: val_speedLimitValue=50 km/h"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 3,
+        "desc": "Speed_Limit_Display_Type_23A_S: val_speedlimitDisplay=3 -> theme 2 blue"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "50",
+    "negative_label": "",
+    "location_constraint": "516,235,540,259",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

@@ -1,0 +1,59 @@
+{
+  "scenario_id": "TC-OWS-EX05",
+  "description": "OWS surface shows a dimmed steady DOW warning on the left side only while right side stays hidden, vehicle in N gear and no driving function armed.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master active"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "",
+        "value": 0,
+        "desc": "driving assistance function disarmed"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 3,
+        "desc": "powertrain power standby"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "gear position N"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "left DOW solid enable dim"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 0,
+        "desc": "right DOW inactive"
+      }
+    ],
+    "mem": [],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "OWS_LEFT_REGULAR",
+    "negative_label": "NO_OWS",
+    "location_constraint": "640,240",
+    "min_confidence": 0.85
+  },
+  "wait_ms": 100
+}

@@ -1,0 +1,40 @@
+{
+  "scenario_id": "TC-BOX-EX01-NOMINAL",
+  "description": "diBoxSurface ADAS BOX shows at center. Draw show-gate boxStatus!=0 keeps it drawn; sta_boxShow=1 with theme normal(1) renders the normal BOX picture, angleGear=6 yields angle=-2+0.4*(6-1)=0.0 (no rotation).",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master switch ON, context gate"
+      }
+    ],
+    "mem": [
+      {
+        "field": "dataValue.sta_boxShow",
+        "value": 1,
+        "desc": "boxShow=1 nonzero passes Draw show-gate"
+      },
+      {
+        "field": "dataValue.val_theme",
+        "value": 1,
+        "desc": "theme=1 normal picture"
+      },
+      {
+        "field": "dataValue.val_angleAdjust",
+        "value": 6,
+        "desc": "angleGear=6 in 1..11 -> angle 0.0 no rotation"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "BOX",
+    "negative_label": "NO_BOX",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

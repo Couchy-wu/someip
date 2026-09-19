@@ -1,0 +1,44 @@
+{
+  "scenario_id": "TC-BSD-BOTH",
+  "description": "Both BSD icons lit simultaneously at Level1 (left/right judged independently, no mutual exclusion). gate=ADAS fusion master switch(0x4C1) ON, online_418(0x418) ON, R_BSD_Warning_Left_S(0x418 bit2.0-2.1)=0x1 and R_BSD_Warning_Right_S(0x418 bit2.2-2.3)=0x1.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch memFromMCU.switchADASFusion=1 (diArSurface.cpp:~1305)"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "3.0-3.1",
+        "value": 1,
+        "desc": "ONLINE_0x418_S: online_418.status=true, BSD block online (diDataCenter.cpp:2147)"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "2.0-2.1",
+        "value": 1,
+        "desc": "R_BSD_Warning_Left_S: left blind-spot warning Level1 (diNavData.h:195; diArSurface.cpp:266)"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "2.2-2.3",
+        "value": 1,
+        "desc": "R_BSD_Warning_Right_S: right blind-spot warning Level1 (diNavData.h:196; diArSurface.cpp:278)"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "BSD_L,BSD_R",
+    "negative_label": "",
+    "location_constraint": "246,82,1131,82",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

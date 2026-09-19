@@ -1,0 +1,40 @@
+{
+  "scenario_id": "TC-RANGE-STALE-FUSION-OFF",
+  "description": "Driving range text surface hidden while the ADAS fusion master switch is off (switchADASFusion=0). With the fusion gate not satisfied the range surface is not driven to its shown state; the negative label documents the range text as not rendered.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 0,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch OFF"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_socRangeShow",
+        "value": 1,
+        "desc": "SOC range show flag set but master switch off"
+      },
+      {
+        "field": "val_socRange",
+        "value": 120,
+        "desc": "range value present but gate not satisfied"
+      },
+      {
+        "field": "val_power",
+        "value": 3,
+        "desc": "POWER_ON"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "RANGE",
+    "location_constraint": "1000,130",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

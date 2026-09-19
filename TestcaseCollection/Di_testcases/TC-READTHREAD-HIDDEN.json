@@ -1,0 +1,30 @@
+{
+  "scenario_id": "TC-READTHREAD-HIDDEN",
+  "description": "readThread receive thread idle. With power off the readThread stops dispatching incoming frame data to the HUD surfaces.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON (gating signal present)"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_power",
+        "value": 0,
+        "desc": "power off, readThread idle, no frame dispatch"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

@@ -1,0 +1,42 @@
+{
+  "scenario_id": "TC-NEXTROADNAME-HIDDEN",
+  "description": "Next road name text surface hidden: navigation not active, upcoming road name string withheld.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch memFromMCU.switchADASFusion=1"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 3,
+        "desc": "powertrain power-gate state from CAN (BCMPower_Gear_12D_S)"
+      }
+    ],
+    "mem": [
+      {
+        "field": "nextRoadName",
+        "value": 1,
+        "desc": "road name available but suppressed without navigation"
+      },
+      {
+        "field": "val_naviStatus",
+        "value": 0,
+        "desc": "navi status 0 => next road name surface hidden"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "NEXT_ROAD_NAME",
+    "location_constraint": "500,120",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

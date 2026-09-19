@@ -1,0 +1,42 @@
+{
+  "scenario_id": "TC-ARBLANKET-SHOW",
+  "description": "AR array blanket shown. DI_AEC_ARB_Show gate (diAEControl.cpp:~1221): val_power==3(POWER_ON), val_gear in {2,4}, val_switchADASFusion==1, val_noaStatus in {6,0xd}, and PlanningLinePointCount>0 (someIP nav). Default vehicleConditionShow!=RET_SHOW.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: val_switchADASFusion=1 ADAS fusion master switch"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 3,
+        "desc": "power status val_power=POWER_ON(3) from chip power line"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 4,
+        "desc": "gear val_gear=4 (drive) in allowed {2,4} for blanket"
+      }
+    ],
+    "someip": [
+      {
+        "key": "PlanningLinePointCount",
+        "value": 12
+      }
+    ]
+  },
+  "expected_output": {
+    "primary_label": "ARBLANKET",
+    "negative_label": "NO_ARBLANKET",
+    "location_constraint": "500,180",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

@@ -1,0 +1,40 @@
+{
+  "scenario_id": "TC-BOX-EX03-ANGLE-TILT",
+  "description": "diBoxSurface tilted BOX. boxStatus=1 shows; angleGear=1 lower boundary returns angle=-2+0.4*0=-2.0, Rotate applies a negative tilt; theme normal(1).",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master switch ON, context gate"
+      }
+    ],
+    "mem": [
+      {
+        "field": "dataValue.sta_boxShow",
+        "value": 1,
+        "desc": "boxShow=1 draws BOX"
+      },
+      {
+        "field": "dataValue.val_theme",
+        "value": 1,
+        "desc": "theme=1 normal picture"
+      },
+      {
+        "field": "dataValue.val_angleAdjust",
+        "value": 1,
+        "desc": "angleGear=1 lower boundary -> angle -2.0"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "BOX",
+    "negative_label": "NO_BOX",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

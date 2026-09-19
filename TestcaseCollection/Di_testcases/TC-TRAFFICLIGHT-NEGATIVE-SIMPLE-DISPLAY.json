@@ -1,0 +1,51 @@
+{
+  "scenario_id": "TC-TRAFFICLIGHT-NEGATIVE-SIMPLE-DISPLAY",
+  "description": "val_display=SIMPLE(2) fails the val_display!=SIMPLE gate -> NO_TRAFFICLIGHT. Filename carries negative token; expected NO_TRAFFICLIGHT. can[0] retained.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.0",
+        "value": 1,
+        "desc": "HUD master switch frame ON"
+      },
+      {
+        "signal_id": "0x43F",
+        "sub_id": "",
+        "bit_range": "2.2-2.4",
+        "value": 3,
+        "desc": "First_Cross_light_status_S=3"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "7.4-7.5",
+        "value": 2,
+        "desc": "HUD_Mode_Selection_Setting_Item_S: val_display=2"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_power",
+        "value": 3,
+        "desc": "POWER_ON"
+      }
+    ],
+    "someip": [
+      {
+        "service_id": "0x010A",
+        "instance_id": "0x01",
+        "online": 1,
+        "desc": "navigation ETH channel online"
+      }
+    ]
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "NO_TRAFFICLIGHT",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

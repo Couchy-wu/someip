@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-PHONE-CALL-ACTIVE",
+  "description": "Phone number + incoming-call icon shown. gate=ADAS fusion master switch(0x4C1) ON, Media_Mobile_State_S(0x43E bit6.5-6.7)=1 active call, Media_Call_Num_S(0x43F bit3.0-8.7) carries the caller number. val_phoneStatus=1 and val_phoneNum are populated together in diAEControl DI_AEC_Get* (lines 1183/1188), diPhoneSurface::Draw shows when phoneStatus in {1,2}.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch memFromMCU.switchADASFusion=1 (diArSurface.cpp:~1305)"
+      },
+      {
+        "signal_id": "0x43E",
+        "sub_id": "",
+        "bit_range": "6.5-6.7",
+        "value": 1,
+        "desc": "Media_Mobile_State_S = MediaMobileStateS: phone state=1 active call; diDataCenter:471 m_DiPhoneStatus=CycleSignal.MediaMobileStateS -> DiDcGetPhoneStatus, diAEControl val_phoneStatus=1"
+      },
+      {
+        "signal_id": "0x43F",
+        "sub_id": "",
+        "bit_range": "3.0-8.7",
+        "value": 13812345678,
+        "desc": "Media_Call_Num_S: caller phone number digits carried on this bitfield, used to build val_phoneNum (DiDcGetPhoneNumber strings)"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "PHONE",
+    "negative_label": "NO_PHONE",
+    "location_constraint": "550,170",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

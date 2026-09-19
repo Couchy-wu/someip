@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-GEAR-EX02",
+  "description": "Gear surface displays letter R for val_gear=2 at low speed; diGearSurface Draw() maps gear value 2 to R.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 5,
+        "desc": "val_speed=5"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 2,
+        "desc": "Shift_Mode_26F_S val_gear=2"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "R",
+    "negative_label": "",
+    "location_constraint": "707,359",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

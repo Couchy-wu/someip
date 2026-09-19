@@ -1,0 +1,22 @@
+{
+  "scenario_id": "TC-HANDOFF-NEG-ADAS-OFF",
+  "description": "HandOver surface must NOT render. Safe_Driving_Assistance_Function_S=0 (ADAS function OFF) gates the whole show path -> DI_AEC_HandOffShow returns RET_SHOW_NOT regardless of take-over request.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "6.0-6.1",
+        "value": 0,
+        "desc": "Safe_Driving_Assistance_Function_S: ADAS function OFF"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "HANDOFF",
+    "location_constraint": "685,332",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

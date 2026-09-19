@@ -1,0 +1,66 @@
+{
+  "scenario_id": "TC-NOA-ON",
+  "description": "NOA surface drawn alone. DI_AEC_NOA_Show gate (diAEControl.cpp L1092): (noaStatus==6 || noaStatus==0xD), val_display==1, sta_vehicleConditionShow!=RET_SHOW, beltStatusS!=1. Gear!=1 so vehicleConditionShow==RET_SHOW_NOT(0). noaStatus 6. ACC suppressed with accSpeedstatus=0; iccStatus=0 keeps ICC hidden; iccStatus=0 also satisfies LDW inverse clause but ldwStatus=0 keeps LDW hidden.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch on"
+      },
+      {
+        "signal_id": "0x29C",
+        "sub_id": "",
+        "bit_range": "4.0-4.3",
+        "value": 6,
+        "desc": "DNP_Stats_S: NOA status 6, NOA active"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "3.0-3.2",
+        "value": 0,
+        "desc": "ACC_Cruise_Speed_2A6_S: acc speed status 0, ACC gate not satisfied"
+      },
+      {
+        "signal_id": "0x261",
+        "sub_id": "",
+        "bit_range": "5.3-5.5",
+        "value": 0,
+        "desc": "TJA_Standby_Sts_Indicator_261_S: ICC status 0, ICC gate not satisfied"
+      },
+      {
+        "signal_id": "0x294",
+        "sub_id": "",
+        "bit_range": "3.0-3.1",
+        "value": 0,
+        "desc": "Driver_Belt_Status_S: driver belt status not 1"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 0,
+        "desc": "gear not 1, vehicleConditionShow stays RET_SHOW_NOT"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "7.4-7.5",
+        "value": 1,
+        "desc": "HUD_Mode_Selection_Setting_Item_S: val_display=1"
+      }
+    ],
+    "mem": [],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "NOA",
+    "negative_label": "NO_NOA",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

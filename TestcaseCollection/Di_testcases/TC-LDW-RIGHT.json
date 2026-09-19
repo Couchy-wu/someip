@@ -1,0 +1,80 @@
+{
+  "scenario_id": "TC-LDW-RIGHT",
+  "description": "LDW surface draws right deviation alone. DI_AEC_LDW_Show gate (diAEControl.cpp L1065): ldwStatus==1, val_display==1, noaStatus not in {6,0xD}, sta_vehicleConditionShow!=RET_SHOW, ICC-inverse clause (iccStatus==0||iccStatus==2||iccColor!=4). Output RIGHT_DEVIATION when rightLane==4 && leftLane!=4. Gear!=1 so vehicleConditionShow==RET_SHOW_NOT(0).",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch on"
+      },
+      {
+        "signal_id": "0x235",
+        "sub_id": "",
+        "bit_range": "1.0-1.1",
+        "value": 1,
+        "desc": "ADAS_Working_Interface_235_S: LDW status active (online_235)"
+      },
+      {
+        "signal_id": "0x235",
+        "sub_id": "",
+        "bit_range": "3.0-3.3",
+        "value": 0,
+        "desc": "Left_Side_Line_235_S: left lane line not deviated"
+      },
+      {
+        "signal_id": "0x235",
+        "sub_id": "",
+        "bit_range": "3.4-3.7",
+        "value": 4,
+        "desc": "Right_Side_Line_235_S: right lane line deviated"
+      },
+      {
+        "signal_id": "0x29C",
+        "sub_id": "",
+        "bit_range": "4.0-4.3",
+        "value": 0,
+        "desc": "DNP_Stats_S: NOA status 0, not 6/0xD"
+      },
+      {
+        "signal_id": "0x23A",
+        "sub_id": "",
+        "bit_range": "3.0-3.2",
+        "value": 0,
+        "desc": "ACC_Cruise_Speed_2A6_S: acc speed status 0, ACC gate not satisfied"
+      },
+      {
+        "signal_id": "0x261",
+        "sub_id": "",
+        "bit_range": "5.3-5.5",
+        "value": 0,
+        "desc": "TJA_Standby_Sts_Indicator_261_S: ICC status 0, ICC hidden and inverse clause satisfied"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 0,
+        "desc": "gear not 1, vehicleConditionShow stays RET_SHOW_NOT"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "7.4-7.5",
+        "value": 1,
+        "desc": "HUD_Mode_Selection_Setting_Item_S: val_display=1"
+      }
+    ],
+    "mem": [],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "LDW_RIGHT",
+    "negative_label": "NO_LDW",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

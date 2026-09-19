@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-SPEED-NOMINAL",
+  "description": "Speed surface shows nominal 65 km/h in white. gate=ADAS fusion master switch(0x4C1) ON, online_151(0x151) ON, Speed_Signal_151_S(0x151 bit1.0-1.7)=0x41.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch memFromMCU.switchADASFusion=1 (diArSurface.cpp:~1305)"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "0.0",
+        "value": 1,
+        "desc": "ONLINE_0x151_S (BODYWORK_ONLINE_HAS_0x015100): online_151.status=true, speed block online (diSignalThread.cpp:229)"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "1.0-1.7",
+        "value": 65,
+        "desc": "Speed_Signal_151_S: vehicle speed 65 km/h (diDataCenter.cpp:~345 DiDcGetSpeed)"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "65",
+    "negative_label": "",
+    "location_constraint": "644,239",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

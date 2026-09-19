@@ -1,0 +1,79 @@
+{
+  "scenario_id": "TC-PATTERN-RESET-CLEAR-HIDDEN",
+  "description": "Pattern surface hidden when the warp reset reaches its cleared state after the last pattern cycle. The reset bit drops and the driver falls back to the idle background instead of a warp image.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: fusion master switch ON"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "0x01",
+        "bit_range": "4.4-5.0",
+        "value": 24,
+        "desc": "DistortedPictureS_2FD_01 -> warp_PatternNum=24"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "0x01",
+        "bit_range": "4.0-4.3",
+        "value": 5,
+        "desc": "AngleGearSetting_2FD_01 -> warp_angleGearSet=5"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "0x01",
+        "bit_range": "5.1-5.5",
+        "value": 1,
+        "desc": "NoDistortedPictureS_2FD_01 -> warp_Enable=1"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "0x01",
+        "bit_range": "6.0",
+        "value": 0,
+        "desc": "RecoveredS_2FD_01 -> warp_ReSet=0"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "",
+        "bit_range": "4.4-5.0",
+        "value": 24,
+        "desc": "NO_Distorted_Picture_S: warp_PatternNum=24"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "",
+        "bit_range": "4.0-4.3",
+        "value": 5,
+        "desc": "Angle_Gear_Setting_2FD_S: warp_angleGearSet=5"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "",
+        "bit_range": "6.0",
+        "value": 0,
+        "desc": "Recovered_S: warp_ReSet=0"
+      }
+    ],
+    "mem": [
+      {
+        "field": "warp_Enable",
+        "value": 1,
+        "desc": "warp enable asserted"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

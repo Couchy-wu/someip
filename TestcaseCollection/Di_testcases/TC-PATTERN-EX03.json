@@ -1,0 +1,52 @@
+{
+  "scenario_id": "TC-PATTERN-EX03",
+  "description": "Pattern surface keeps previous frame because pattern number beyond range is ignored by the draw gate",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS gate active"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "0x01",
+        "bit_range": "4.4-5.0",
+        "value": 40,
+        "desc": "DistortedPictureS_2FD_01 -> warp_PatternNum=40"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "0x01",
+        "bit_range": "6.0",
+        "value": 0,
+        "desc": "RecoveredS_2FD_01 -> warp_ReSet=0"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "",
+        "bit_range": "4.4-5.0",
+        "value": 40,
+        "desc": "NO_Distorted_Picture_S: warp_PatternNum=40"
+      },
+      {
+        "signal_id": "0x2FD",
+        "sub_id": "",
+        "bit_range": "6.0",
+        "value": 0,
+        "desc": "Recovered_S: warp_ReSet=0"
+      }
+    ],
+    "mem": [],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "PATTERN",
+    "negative_label": "NO_PATTERN",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

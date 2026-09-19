@@ -1,0 +1,30 @@
+{
+  "scenario_id": "TC-DISURFACE-NOSTATE",
+  "description": "diSurface is the pure infrastructure base surface of diUIRender. It holds only the render API and status value; it has no Draw() implementation and reads no CAN or shared-memory signal, so it never renders any layer on its own and yields no visible state.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON (gating signal present, nothing rendered)"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_power",
+        "value": 3,
+        "desc": "power on; base surface still renders nothing because it has no drawable content"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

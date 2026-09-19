@@ -1,0 +1,31 @@
+{
+  "scenario_id": "TC-LIGHTGROUP-HIDDEN",
+  "description": "LightGroup surface hidden (gate-off, honest undrivable case). The resident-card light group is driven by sta_residentCardShow, set to CARD_LIGHTGROUP(2) only when val_residentCard==CARD_LIGHTGROUP. But val_residentCard is hard-coded to 1 (CARD_CURRENTTIME) under the ALWASYS_SHOW_UI else-branch at diAEControl.cpp L122 and never assigned any other value, so sta_residentCardShow can never equal CARD_LIGHTGROUP and the LightGroup Draw/SetData body early-returns without producing a texture. The surface therefore cannot be shown through the can[]/mem[]/someip harness. This case drives the master frame and asserts the negative label, documenting LightGroup as undrivable until the val_residentCard origin is re-based.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.0",
+        "value": 1,
+        "desc": "HUD master switch frame ON"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "7.4-7.5",
+        "value": 1,
+        "desc": "HUD_Mode_Selection_Setting_Item_S: val_display=1"
+      }
+    ],
+    "mem": [],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "NO_LIGHTGROUP",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

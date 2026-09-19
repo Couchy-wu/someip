@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-GEAR-D",
+  "description": "Gear surface shows D. val_speed=0 (<15) so DI_AEC_GearShow grants sta_gearShow=RET_SHOW via the speed gate; Shift_Mode_26F_S(val 4)=D; vehicleConditionShow=0 so GEAR layout at 707,359.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "1.0-1.7",
+        "value": 0,
+        "desc": "Speed_Signal_151_S: val_speed=0 (<15, gear show allowed)"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 4,
+        "desc": "Shift_Mode_26F_S: val_gear=4 (D)"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "D",
+    "negative_label": "",
+    "location_constraint": "707,359",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

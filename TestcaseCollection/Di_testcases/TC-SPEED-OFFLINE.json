@@ -1,0 +1,30 @@
+{
+  "scenario_id": "TC-SPEED-OFFLINE",
+  "description": "Speed surface hidden when the 0x151 block goes offline (online_151.status=false). can[0] is the ADAS fusion master switch ON, but SPEED_ONLINE_0x151=0 leaves the block offline.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch memFromMCU.switchADASFusion=1 (diArSurface.cpp:~1305)"
+      },
+      {
+        "signal_id": "0x151",
+        "sub_id": "",
+        "bit_range": "0.0",
+        "value": 0,
+        "desc": "ONLINE_0x151_S (BODYWORK_ONLINE_HAS_0x015100): online_151.status=false, speed block offline, surface not rendered"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "644,239",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

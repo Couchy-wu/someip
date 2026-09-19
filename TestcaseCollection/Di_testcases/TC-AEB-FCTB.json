@@ -1,0 +1,37 @@
+{
+  "scenario_id": "TC-AEB-FCTB",
+  "description": "AEB icon lit via Front_Radar_FCTB_Warning single-path (non-zero is enough). gate=ADAS fusion master switch(0x4C1) ON, online_32D(0x32D) ON, Front_Radar_FCTB_Warning_S(0x32D bit6.1-6.3)=0x1.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch memFromMCU.switchADASFusion=1 (diArSurface.cpp:~1305)"
+      },
+      {
+        "signal_id": "0x32D",
+        "sub_id": "",
+        "bit_range": "5.6",
+        "value": 1,
+        "desc": "ONLINE_0x32D_S: online_32D.status=true, AEB/FCW block online"
+      },
+      {
+        "signal_id": "0x32D",
+        "sub_id": "",
+        "bit_range": "6.1-6.3",
+        "value": 1,
+        "desc": "Front_Radar_FCTB_Warning_S: FCTB warning, single-path OR, non-zero triggers AEB (diArSurface.cpp:280-292)"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "AEB",
+    "negative_label": "",
+    "location_constraint": "665,142",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

@@ -1,0 +1,59 @@
+{
+  "scenario_id": "TC-NEXTROADDIST-EX05",
+  "description": "Next road distance shown with blue color theme two. Draw gate satisfied and theme set to blue variant.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "",
+        "value": 1,
+        "desc": "ADAS fusion master switch enabled"
+      },
+      {
+        "signal_id": "0x12D",
+        "sub_id": "",
+        "bit_range": "5.2-5.4",
+        "value": 3,
+        "desc": "powertrain power-gate state from CAN (BCMPower_Gear_12D_S)"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "4.5-4.7",
+        "value": 2,
+        "desc": "HUD_Mode_Settings_S: val_theme=2"
+      }
+    ],
+    "mem": [
+      {
+        "field": "nextRoadDistUnit",
+        "value": "m",
+        "desc": "metric unit for distance"
+      }
+    ],
+    "someip": [
+      {
+        "service_id": "0x010A",
+        "instance_id": "0x01",
+        "online": 1,
+        "desc": "navigation ETH channel online"
+      },
+      {
+        "key": "hrinfo_s.distance_2_intersection",
+        "value": 300
+      },
+      {
+        "key": "hrinfo_s.navigating_status",
+        "value": 3
+      }
+    ]
+  },
+  "expected_output": {
+    "primary_label": "NEXT_ROAD_DIST",
+    "negative_label": "NO_NEXT_ROAD_DIST",
+    "location_constraint": "500,110",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

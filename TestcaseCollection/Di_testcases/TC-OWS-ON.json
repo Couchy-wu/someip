@@ -1,0 +1,70 @@
+{
+  "scenario_id": "TC-OWS-ON",
+  "description": "OWS surface drawn. OWS Show gate (diAEControl.cpp L788): sta_owsLeft/owsRight = RET_SHOW only when val_power==3 and val_gear==1 and DiDcGetOwsLeftStatus/DiDcGetOwsRightStatus result in {1,2}. OWS getters read CycleSignal.RRadarDOWWarningLeftS (0x418/4.0-4.1) and RRadarDOWWarningRightS (0x418/4.2-4.3) gated by ETH_Status and online_418 companion frame. DOW warning values 1 and 2 set both sides visible. diOwsSurface SetData (diOwsSurface.cpp L130) then draws the left/right OWS anchor images at their designated canvas positions.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master on, ETH status asserted"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "0.0",
+        "value": 1,
+        "desc": "online companion frame 0x418: enables DiDCgetter for OWS RRadar DOW signals"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "4.0-4.1",
+        "value": 1,
+        "desc": "RRadar_DOW_Warning_Left_S = 1 -> DiDcGetOwsLeftStatus in {1,2}, left OWS shown"
+      },
+      {
+        "signal_id": "0x418",
+        "sub_id": "",
+        "bit_range": "4.2-4.3",
+        "value": 2,
+        "desc": "RRadar_DOW_WarningRight_S = 2 -> DiDcGetOwsRightStatus in {1,2}, right OWS shown"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 1,
+        "desc": "Shift_Mode_26F_S -> val_gear=1"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "7.4-7.5",
+        "value": 1,
+        "desc": "HUD_Mode_Selection_Setting_Item_S: val_display=1"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_power",
+        "value": 3,
+        "desc": "POWER_ON required by OWS Show gate"
+      },
+      {
+        "field": "val_gear",
+        "value": 1,
+        "desc": "gear==1 required by OWS Show gate to enable OWS status output"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "Ows",
+    "negative_label": "NO_Ows",
+    "location_constraint": "640,240",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

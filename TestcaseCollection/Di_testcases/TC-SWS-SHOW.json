@@ -1,0 +1,35 @@
+{
+  "scenario_id": "TC-SWS-SHOW",
+  "description": "Speed warning surface shown. Speed warning state asserted from speed-related signal while ADAS fusion master switch is ON.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch memFromMCU.switchADASFusion=1"
+      }
+    ],
+    "mem": [
+      {
+        "field": "swsActive",
+        "value": 1,
+        "desc": "speed warning active, surface shown"
+      },
+      {
+        "field": "val_power",
+        "value": 3,
+        "desc": "POWER_ON"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "SPEED_WARNING",
+    "negative_label": "NO_SPEED_WARNING",
+    "location_constraint": "800,160",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

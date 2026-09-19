@@ -1,0 +1,47 @@
+{
+  "scenario_id": "TC-RANGE-BLUE-FONT-THEME2",
+  "description": "Driving range text surface shown with the blue font variant (theme==2). diRangeSurface uses FONT_COLOR_BLUE_NEW for the range string when theme==2, otherwise FONT_COLOR_WHITE.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch ON"
+      },
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "0x0E",
+        "bit_range": "4.5-4.7",
+        "value": 2,
+        "desc": "HUD_Mode_Settings_S: val_theme=2"
+      }
+    ],
+    "mem": [
+      {
+        "field": "val_gasRangeShow",
+        "value": 1,
+        "desc": "gas range segment show flag enabled"
+      },
+      {
+        "field": "val_gasRange",
+        "value": 660,
+        "desc": "positive fuel range-to-empty value"
+      },
+      {
+        "field": "val_power",
+        "value": 3,
+        "desc": "POWER_ON"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "RANGE",
+    "negative_label": "NO_RANGE",
+    "location_constraint": "1000,130",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

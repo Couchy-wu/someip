@@ -1,0 +1,24 @@
+{
+  "scenario_id": "TC-DISURFACE-STANDBY-HIDDEN",
+  "description": "Shared display surface hidden while the owning feature holds it in standby. The lifecycle is neither active nor torn down so the base surface stays out of the projection.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: fusion master switch ON"
+      }
+    ],
+    "mem": [],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

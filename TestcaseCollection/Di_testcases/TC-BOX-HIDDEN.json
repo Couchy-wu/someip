@@ -1,0 +1,40 @@
+{
+  "scenario_id": "TC-BOX-HIDDEN",
+  "description": "diBoxSurface ADAS BOX indicator not drawn. With no height/angle adjustment change within TIME_BOX_SHOW window, boxFlag is clear and sta_boxShow=0, so the BOX is not rendered.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch present"
+      }
+    ],
+    "mem": [
+      {
+        "field": "dataValue.val_angleAdjust",
+        "value": 0,
+        "desc": "no angle adjustment change since expiry"
+      },
+      {
+        "field": "dataValue.val_heightAdjust",
+        "value": 0,
+        "desc": "no height adjustment change since expiry"
+      },
+      {
+        "field": "dataValue.sta_boxShow",
+        "value": 0,
+        "desc": "boxFlag cleared after TIME_BOX_SHOW window"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

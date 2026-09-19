@@ -1,0 +1,51 @@
+{
+  "scenario_id": "TC-DESANIMA-EX05-HIDDEN-GEAR.json",
+  "description": "diDesAnimaSurface destination animation suppressed because the gear state equals 0x1. A rising destination edge occurs but the gear condition forces the animation to be hidden.",
+  "input_combination": {
+    "can": [
+      {
+        "signal_id": "0x4C1",
+        "sub_id": "",
+        "bit_range": "6.2-6.3",
+        "value": 1,
+        "desc": "HUD_Safe_Driving_Assistant_Fusion_Switch_Settings_S: ADAS fusion master switch present"
+      },
+      {
+        "signal_id": "0x26F",
+        "sub_id": "",
+        "bit_range": "6.4-6.7",
+        "value": 1,
+        "desc": "transmission shift-mode value from CAN (Shift_Mode_26F_S)"
+      },
+      {
+        "signal_id": "0x43F",
+        "sub_id": "0xFF",
+        "bit_range": "6.0-6.3",
+        "value": 1,
+        "desc": "Destination_StatusS_S -> val_destinationStatus=1"
+      },
+      {
+        "signal_id": "0x3E3",
+        "sub_id": "",
+        "bit_range": "6.0",
+        "value": 1,
+        "desc": "ACB_Set_Restore_Default_Logo_S: val_switchARNav=1"
+      }
+    ],
+    "mem": [
+      {
+        "field": "sta_AEBShow",
+        "value": 0,
+        "desc": "AEB show not set"
+      }
+    ],
+    "someip": []
+  },
+  "expected_output": {
+    "primary_label": "",
+    "negative_label": "",
+    "location_constraint": "",
+    "min_confidence": 0.9
+  },
+  "wait_ms": 100
+}

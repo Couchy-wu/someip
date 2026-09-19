@@ -7,3 +7,6 @@
           本包不反向依赖界面层（保持可测试、可复用）。
 说明：本文件只声明包边界与职责，不在导入时引入重依赖（无副作用）。
 """
+
+# Di 测试用例窗口（新格式；旧格式解析仍在 can_testcase_parser.py，互不影响）
+from . import di_case_window  # noqa: E402,F401
