@@ -3,6 +3,8 @@
 
 覆盖：
   · 窗口能被创建，布局要素齐全（事件表 23 行、状态栏、动作按钮）
+  · **布局回退后的结构**：工具栏单行 pack 摆放（顺序 / pack_info / 状态栏同处 `bar`）、
+    ③ 的回放按钮与计数标签回到 `btns` 行、④ 的「发送该事件」与其它控件同一行最右
   · **整窗无 grid 格子冲突**（hudcore.ui.layout.audit_widget_tree）
   · **按钮规则表 + 状态流转**：库不可用全灰 → 打开后可启动 → 启动后可停止/关闭 →
     回放中"开始灰/停止亮" → 关闭后回到未打开态；busy 期间相关按钮置灰
@@ -187,6 +189,104 @@ def test_window_layout_and_event_table(window):
     for btn in (app.btn_open, app.btn_start, app.btn_stop, app.btn_close,
                 app.btn_replay_start, app.btn_replay_stop, app.btn_send):
         assert btn.winfo_exists()
+
+
+def _text_of(widget) -> str:
+    """控件文本（分隔线等没有 text 选项的返回空串）。"""
+    try:
+        return str(widget.cget("text"))
+    except tk.TclError:
+        return ""
+
+
+def _packed(frame) -> list:
+    """frame 内由 pack 管理的子控件（按 pack 顺序）。"""
+    return list(frame.pack_slaves())
+
+
+def test_toolbar_restored_to_single_row_pack(window):
+    """布局回退：工具栏回到**单行 pack** 摆放（对齐提交 7219d2d 的摆放）。
+
+    断言的是"改动前的位置"，而不是界面优化版的"三组 ActionBar + 状态栏独占第二行"：
+      · 按钮是原生 ``ttk.Button``（不再走 ActionBar/Theme 配色）；
+      · 顺序 = 打开/启动/停止/关闭 → 竖分隔线 → 重新检测库/导出服务表；
+      · 保存配置与状态栏都在同一个工具栏 frame 内、靠右（状态栏不是第二行）。
+    """
+    win, _warns = window
+    app = win.someip_app
+
+    bar = app.lbl_status.master
+    assert app.btn_save_config.master is bar, "保存配置应在工具栏内"
+    for btn in (app.btn_open, app.btn_start, app.btn_stop, app.btn_close,
+                app.btn_recheck, app.btn_export):
+        assert btn.master is bar, f"{btn.cget('text')} 应在工具栏内"
+    assert bar.winfo_manager() == "pack", "工具栏自身仍由 pack 放在窗口顶部"
+
+    slaves = _packed(bar)
+    assert [w.winfo_class() for w in slaves] == (
+        ["TButton"] * 4 + ["TSeparator"] + ["TButton"] * 3 + ["TLabel"]), \
+        "工具栏子控件必须全是 ttk 原生控件（回到改动前的 ttk.Button）"
+    assert [_text_of(w) for w in slaves[:8]] == [
+        "打开服务", "启动服务", "停止服务", "关闭服务",
+        "", "重新检测库", "导出服务表", "保存配置"]
+    assert slaves[-1] is app.lbl_status, "状态栏在工具栏内、且是最后一个 pack 的控件"
+
+    # 一行之内：全部 pack；左右两侧与间距与改动前一致
+    assert {w.winfo_manager() for w in slaves} == {"pack"}, "工具栏内不允许再用 grid"
+    assert [str(w.pack_info()["side"]) for w in slaves] == (
+        ["left"] * 7 + ["right", "right"]), "左半边依次排开，保存配置与状态栏靠右"
+    assert int(app.btn_open.pack_info()["padx"]) == 0
+    assert [int(w.pack_info()["padx"]) for w in slaves[1:4]] == [4, 4, 4]
+    assert int(slaves[4].pack_info()["padx"]) == 8
+    assert str(slaves[4].pack_info()["fill"]) == "y"
+    assert int(app.btn_export.pack_info()["padx"]) == 4
+    assert int(app.lbl_status.pack_info()["padx"]) == 10
+    # 宽度定义也与改动前一致（t tk.Button 的 width 以字符计）
+    assert [int(w.cget("width")) for w in slaves[:4]] == [10, 10, 10, 10]
+    assert [int(w.cget("width")) for w in slaves[5:8]] == [11, 11, 9]
+    # 状态栏文本从左起显示：单行工具栏放不下时优先保住"结论"（库不可用+原因）
+    assert str(app.lbl_status.cget("anchor")) == "w"
+
+
+def test_control_panel_rows_restored(window):
+    """③④⑤ 回到改动前的行内摆放（回放按钮在 `btns` 行、发送按钮与字段控件同行最右）。"""
+    win, _warns = window
+    app = win.someip_app
+
+    # ---- ③ 回放控制：两个按钮与计数标签同在 btns 行 ----
+    btns = app.btn_replay_start.master
+    assert app.btn_replay_stop.master is btns and app.lbl_replay_stat.master is btns
+    info = btns.grid_info()
+    assert (int(info["row"]), int(info["column"]), int(info["columnspan"])) == (2, 1, 3)
+    assert str(info["sticky"]) == "w"
+    assert [w.winfo_class() for w in _packed(btns)] == ["TButton", "TButton", "TLabel"]
+    assert [_text_of(w) for w in _packed(btns)][:2] == ["开始回放", "停止回放"]
+    assert [int(w.cget("width")) for w in _packed(btns)[:2]] == [11, 11]
+    assert [int(w.pack_info()["padx"]) for w in _packed(btns)] == [0, 6, 12]
+    assert all(str(w.pack_info()["side"]) == "left" for w in _packed(btns))
+
+    # ---- ④ 单条发送：主操作与类型下拉/辅助按钮**同一行**、靠最右 ----
+    bar = app.btn_send.master
+    assert str(bar.grid_info()["sticky"]) == "ew"
+    assert (int(bar.grid_info()["row"]), int(bar.grid_info()["column"])) == (0, 0)
+    row = _packed(bar)
+    assert [w.winfo_class() for w in row] == (
+        ["TLabel", "TCombobox", "TButton", "TButton", "TButton"])
+    assert _text_of(row[0]) == "数据类型" and _text_of(row[2]) == "载入示例值"
+    assert _text_of(row[3]) == "清零字段" and row[4] is app.btn_send
+    assert str(app.btn_send.pack_info()["side"]) == "right", "发送按钮在同一行的最右"
+    assert int(row[1].cget("width")) == 16, "类型下拉宽度与改动前一致"
+    assert [int(w.cget("width")) for w in (row[2], row[3], app.btn_send)] == [11, 9, 12]
+    # 字段表紧接其后、目标提示在最后（字段表行可伸展）
+    assert int(app.field_table.grid_info()["row"]) == 1
+    assert int(app.lbl_target.grid_info()["row"]) == 2
+    assert int(bar.master.grid_rowconfigure(1)["weight"]) == 1
+
+    # ---- ⑤ 日志：三个按钮仍在一行内左排 ----
+    log_bar = app.log_text.master.grid_slaves(row=0, column=0)[0]
+    assert [w.winfo_class() for w in _packed(log_bar)] == ["TButton"] * 3
+    assert [_text_of(w) for w in _packed(log_bar)] == ["清空", "导出日志", "打开数据目录"]
+    assert all(str(w.pack_info()["side"]) == "left" for w in _packed(log_bar))
 
 
 def test_field_table_generated_from_structs(window):

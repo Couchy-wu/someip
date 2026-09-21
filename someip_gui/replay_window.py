@@ -4,9 +4,8 @@
 窗口布局（1120×780，左右两大分区 + ①~⑤ 编号区块）：
 
     ┌──────────────────────────────────────────────────────────────────────────────┐
-    │ 工具栏（三组）：[打开服务][启动服务][停止服务][关闭服务] │ [重新检测库][导出服务表] │
-    │                  服务生命周期                            库与导出              │
-    │                              状态：库就绪｜阶段：已启动｜…        [保存配置]   │
+    │ 工具栏（单行）：[打开服务][启动服务][停止服务][关闭服务] │ [重新检测库][导出服务表] │
+    │                    状态：库就绪｜阶段：已启动｜…      [保存配置]                │
     ├───────────────────────────────┬──────────────────────────────────────────────┤
     │ ① 网络与 SD 配置               │ ③ pcap 回放控制                               │
     │ ② 服务 / 事件（勾选=注册）      │ ④ 单条发送（结构化字段）                       │
@@ -33,7 +32,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from hudcore.someip import describe_library_status, is_library_available
-from hudcore.ui import ActionBar, Theme, UiState
+from hudcore.ui import Theme, UiState
 from hudcore.ui.state import BUSY_NONE, ButtonGroup
 
 from someip_core import (
@@ -86,56 +85,60 @@ class SomeipReplayWindow(ConfigPanelMixin, ControlPanelMixin):
 
     # ---------------------------------------------------------------- 布局
     def _build_toolbar(self) -> None:
-        """工具栏：按用途分三组（服务生命周期 / 库与导出 / 配置保存），样式走 Theme。
+        """工具栏：**单行 pack 布局**（与界面优化前一致，用户明确要求回退）。
 
-        分组之间用竖分隔线隔开，主操作 primary、危险操作 danger、次要操作 neutral；
-        按钮位置由 :class:`ActionBar` 自动分配（不手写 grid 坐标 → 不会撞格）。
+        摆放顺序（全部 ``pack``，因此工具栏内部不存在 grid 格子冲突）：
+            左：打开服务 / 启动服务 / 停止服务 / 关闭服务 → 竖分隔线 → 重新检测库 / 导出服务表
+            右：保存配置 、 状态栏
+
+        与界面优化版的区别：不再用 :class:`ActionBar` 与 Theme 配色，按钮恢复为原生
+        ``ttk.Button``；但**可用性仍然只由规则表决定** —— 每个按钮都登记进窗口的
+        ``self.buttons``（``ButtonGroup``），刷新仍是 ``_apply_ui_state()`` 一个入口。
         """
         bar = ttk.Frame(self.window)
         bar.pack(side="top", fill="x", padx=6, pady=(6, 2))
 
-        # 第 1 组：服务生命周期（打开 → 启动 → 停止 → 关闭）
-        lifecycle = ActionBar(bar, row=0, column=0, columns=4, group=self.buttons)
-        self.btn_open = lifecycle.add(
-            rules.KEY_OPEN, "打开服务", self.on_open, kind="primary", width=10, height=1,
-            enabled_when=rules.RULES[rules.KEY_OPEN],
-            tooltip="创建服务端实例并按②的勾选注册服务/事件")
-        self.btn_start = lifecycle.add(
-            rules.KEY_START, "启动服务", self.on_start, kind="primary", width=10, height=1,
-            enabled_when=rules.RULES[rules.KEY_START], tooltip="offer + SD 应答（需先打开服务）")
-        self.btn_stop = lifecycle.add(
-            rules.KEY_STOP, "停止服务", self.on_stop, kind="danger", width=10, height=1,
-            enabled_when=rules.RULES[rules.KEY_STOP], tooltip="停止 offer/SD，不销毁实例")
-        self.btn_close = lifecycle.add(
-            rules.KEY_CLOSE, "关闭服务", self.on_close_session, kind="danger", width=10,
-            height=1, enabled_when=rules.RULES[rules.KEY_CLOSE],
-            tooltip="停回放并销毁实例（释放 vsomeip 资源）")
+        self.btn_open = ttk.Button(bar, text="打开服务", width=10, command=self.on_open)
+        self.btn_open.pack(side="left")
+        self.btn_start = ttk.Button(bar, text="启动服务", width=10, command=self.on_start)
+        self.btn_start.pack(side="left", padx=4)
+        self.btn_stop = ttk.Button(bar, text="停止服务", width=10, command=self.on_stop)
+        self.btn_stop.pack(side="left", padx=4)
+        self.btn_close = ttk.Button(bar, text="关闭服务", width=10, command=self.on_close_session)
+        self.btn_close.pack(side="left", padx=4)
 
-        ttk.Separator(bar, orient="vertical").grid(row=0, column=4, sticky="ns", padx=8, pady=3)
+        ttk.Separator(bar, orient="vertical").pack(side="left", fill="y", padx=8)
 
-        # 第 2 组：库与导出（不依赖库是否可用，见 ui_rules 模块头部说明 3）
-        tools = ActionBar(bar, row=0, column=5, columns=2, group=self.buttons)
-        self.btn_recheck = tools.add(
-            rules.KEY_RECHECK, "重新检测库", self.on_recheck_library, kind="info", width=11,
-            height=1, enabled_when=rules.RULES[rules.KEY_RECHECK],
-            tooltip="重新按环境变量/项目目录探测 SOME/IP 库")
-        self.btn_export = tools.add(
-            rules.KEY_EXPORT, "导出服务表", self.on_export_table, kind="neutral", width=11,
-            height=1, enabled_when=rules.RULES[rules.KEY_EXPORT],
-            tooltip="把当前代的服务/事件表导出为 json")
+        self.btn_recheck = ttk.Button(bar, text="重新检测库", width=11,
+                                      command=self.on_recheck_library)
+        self.btn_recheck.pack(side="left")
+        self.btn_export = ttk.Button(bar, text="导出服务表", width=11,
+                                     command=self.on_export_table)
+        self.btn_export.pack(side="left", padx=4)
 
-        # 状态栏：独占工具栏第二行。库不可用时的"红字 + 原因"约 820px，
-        # 与按钮挤在同一行会被窗口裁掉（实测），单独一行才能完整显示。
+        self.btn_save_config = ttk.Button(bar, text="保存配置", width=9,
+                                          command=self.on_save_config)
+        self.btn_save_config.pack(side="right")
+
+        # 状态栏（与按钮同一行的右端）。单行工具栏里位置由 pack 固定，
+        # 但状态栏文本（compose_status 合成，库不可用时更长）在 1120px 宽的窗口下
+        # 会被裁掉一截 —— 这里只把 `anchor` 设为 "w"，保证**从头开始**显示
+        # （先看到"库不可用 + 原因"这个结论；尾部重复的阶段/计数优先被裁掉）。
+        # 位置、尺寸、pack 顺序都与界面优化前一致，完整提示始终在⑤日志区。
         self.lbl_status = ttk.Label(bar, text="", foreground=Theme.PRIMARY, anchor="w")
-        self.lbl_status.grid(row=1, column=0, columnspan=9, sticky="ew", padx=4, pady=(2, 0))
-        bar.grid_columnconfigure(7, weight=1)        # 中间留白：把「保存配置」推到最右
+        self.lbl_status.pack(side="right", padx=10)
 
-        # 第 3 组：配置保存
-        save = ActionBar(bar, row=0, column=8, columns=1, group=self.buttons)
-        self.btn_save_config = save.add(
-            rules.KEY_SAVE_CONFIG, "保存配置", self.on_save_config, kind="success", width=9,
-            height=1, enabled_when=rules.RULES[rules.KEY_SAVE_CONFIG],
-            tooltip="把①③④的界面设置写入 data/someip/replay_config.json")
+        # 全部按钮登记进同一个状态机（位置用 pack 固定，可用性仍由规则表统一决定）
+        for key, widget in (
+            (rules.KEY_OPEN, self.btn_open),
+            (rules.KEY_START, self.btn_start),
+            (rules.KEY_STOP, self.btn_stop),
+            (rules.KEY_CLOSE, self.btn_close),
+            (rules.KEY_RECHECK, self.btn_recheck),
+            (rules.KEY_EXPORT, self.btn_export),
+            (rules.KEY_SAVE_CONFIG, self.btn_save_config),
+        ):
+            self.buttons.add(key, widget, rules.RULES[key])
 
     def _build_body(self) -> None:
         body = ttk.Frame(self.window)

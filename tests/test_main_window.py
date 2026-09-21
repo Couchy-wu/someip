@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
-"""tests/test_main_window.py —— 主窗口「布局分组 + 单例子窗口」验收
+"""tests/test_main_window.py —— 主窗口「布局回退 + 单例子窗口」验收
 =====================================================================
-本次界面重构（main.py）要自证的三件事，全部可无头运行（xvfb-run），
-**不需要**真实 CAN 设备 / 相机：
+布局已**回退**到改动前（7219d2d）的平铺网格，逻辑改进（按钮状态机 + 单例子窗口）
+保留。本模块要自证的三件事，全部可无头运行（xvfb-run），**不需要**真实 CAN 设备 / 相机：
 
-  1. **布局**：整窗 `hudcore.ui.layout.audit_widget_tree()` 零格子冲突 ——
-     左侧功能区（`left_frame`）在 column 0、右侧日志面板（`log_main_frame`）在 column 1，
-     区块/按钮的行列由 `SectionStack` + `ActionBar` 自动分配；
+  1. **布局**：按钮平铺在 row 0~2 / column 0~4（`padx=pady=20`，行号即功能分组）、
+     右侧日志面板在 `row=0, column=5, rowspan=GRID_ROWS`；不再有 `left_frame`、
+     区块标题（LabelFrame）或按钮条；整窗 `hudcore.ui.layout.audit_widget_tree()`
+     仍为零格子冲突；
   2. **单例**：三个入口（`open_can_gui` / `open_someip_replay` / `open_di_cases`）
      连续调用两次不会建出第二个窗口，已打开期间入口按钮 `disabled`；
   3. **恢复**：窗口关闭（WM_DELETE_WINDOW 统一回调）**或**被直接 `destroy()` 之后，
@@ -42,18 +43,45 @@ SINGLETONS = [
      "di_case_button", "_di_window", "di_window_open"),
 ]
 
-#: 重构要求保留的按钮属性名（已有测试/文档会引用）
+#: 布局回退要求保留的按钮属性名（已有测试/文档会引用）
 BUTTON_ATTRS = [
     "upload_button", "delete_button", "view_button", "inspect_button",
     "convert_matrix_button", "hex_button", "can_control_button", "someip_button",
     "image_button", "read_video_button", "image_video_button", "di_case_button",
 ]
 
+#: 改动前（7219d2d）的**原始格子坐标**：(按钮属性名, row, column)。
+#: (0, 2) 是用例下拉框 `self.file_menu`，单独断言。
+BUTTON_GRID = [
+    ("upload_button", 0, 0),
+    ("delete_button", 0, 1),
+    ("view_button", 0, 3),
+    ("inspect_button", 0, 4),
+    ("convert_matrix_button", 1, 0),
+    ("hex_button", 1, 1),
+    ("can_control_button", 1, 2),
+    ("someip_button", 1, 3),
+    ("image_button", 2, 0),
+    ("read_video_button", 2, 1),
+    ("image_video_button", 2, 2),
+    ("di_case_button", 2, 3),
+]
 
-def _section_titles(win) -> list[str]:
-    """左侧功能区里的区块标题（自上而下的顺序）。"""
-    return [w.cget("text") for w in win.left_frame.winfo_children()
-            if isinstance(w, ttk.LabelFrame)]
+#: 平铺布局下"同一行 = 同一功能分组"（分组语义由行号表达，不再有区块标题）
+ROW_MEMBERS = {
+    0: ("upload_button", "delete_button", "view_button", "inspect_button"),
+    1: ("convert_matrix_button", "hex_button", "can_control_button", "someip_button"),
+    2: ("image_button", "read_video_button", "image_video_button", "di_case_button"),
+}
+
+#: 原始日志面板位置：column = GRID_ROWS（=5），并跨全部 5 行
+LOG_ROW, LOG_COLUMN, LOG_ROWSPAN = 0, 5, 5
+
+
+def _cell(widget) -> tuple[int, int]:
+    """控件的 grid 格子坐标 (row, column)。"""
+    info = widget.grid_info()
+    return int(info["row"]), int(info["column"])
 
 
 def _state_of(widget) -> str:
@@ -89,49 +117,96 @@ def win():
 
 # ---------------------------------------------------------------- ① 布局
 def test_no_grid_collisions_in_whole_window(win):
-    """整窗（含各区块、按钮条、日志面板）不得有两控件占同一 (row, column)。"""
+    """整窗（含 12 个按钮、下拉框、日志面板）不得有两控件占同一 (row, column)。"""
     collisions = audit_widget_tree(win.root)
     sys.__stdout__.write("[布局审计] " + describe_collisions(collisions) + "\n")
     sys.__stdout__.flush()
     assert collisions == [], describe_collisions(collisions)
 
 
-def test_left_sections_and_right_log_panel_are_separate_columns(win):
-    """左侧功能区与右侧日志面板分列（不共用列，也不会互相盖住）。"""
-    assert int(win.left_frame.grid_info()["column"]) == win.LEFT_COLUMN == 0
-    assert int(win.log_main_frame.grid_info()["column"]) == win.LOG_COLUMN == 1
-    # 两列都只占第 0 行（左侧区块在 left_frame 内部自上而下排，不再手写整窗 row）
-    assert int(win.left_frame.grid_info()["row"]) == 0
-    assert int(win.log_main_frame.grid_info()["row"]) == 0
-    # 日志面板仍是 self.log_text + ttk.Scrollbar + self.time_label
+def test_buttons_keep_original_flat_grid_coordinates(win):
+    """12 个按钮平铺在 row 0~2 / column 0~4，坐标与改动前逐一对齐（不分组、无区块）。"""
+    for attr, row, column in BUTTON_GRID:
+        assert hasattr(win, attr), f"缺少按钮属性 {attr}（对外可见名不能改）"
+        button = getattr(win, attr)
+        assert button.winfo_manager() == "grid", f"{attr} 应由 grid 管理"
+        assert _cell(button) == (row, column), \
+            f"{attr} 应回到原始格子 (row={row}, column={column})，实际 {_cell(button)}"
+        info = button.grid_info()
+        assert (int(info["padx"]), int(info["pady"])) == (20, 20), \
+            f"{attr} 的内边距应沿用原始的 padx=pady=20"
+        # 平铺：不带跨行/跨列
+        assert int(info.get("rowspan", 1)) == 1 and int(info.get("columnspan", 1)) == 1
+
+    # 用例下拉框仍在原始的 (0, 2)
+    assert isinstance(win.file_menu, ttk.OptionMenu)
+    assert _cell(win.file_menu) == (0, 2)
+    assert win.selected_file.get(), "下拉框应已由 FileUpdater 初始化出「当前用例」"
+
+
+def test_no_sections_or_button_bars_left(win):
+    """布局回退：不应再有 left_frame / 区块标题（LabelFrame）/ 声明式按钮条。"""
+    assert not hasattr(win, "left_frame"), "left_frame 应随布局回退一并去掉"
+
+    def label_frames(widget):
+        out = []
+        for child in widget.winfo_children():
+            if isinstance(child, ttk.LabelFrame) or isinstance(child, tk.LabelFrame):
+                out.append(child)
+            out.extend(label_frames(child))
+        return out
+
+    assert label_frames(win.root) == [], "不应再有带标题的区块（LabelFrame）"
+
+    # 整窗直接子控件 = 12 个按钮 + 1 个下拉框 + 日志面板，且各自占一格
+    cells = [_cell(c) for c in win.root.winfo_children()]
+    assert len(cells) == 14, f"根窗口直接子控件应为 14 个，实际 {len(cells)}"
+    assert len(set(cells)) == len(cells), f"根窗口存在同格控件：{sorted(cells)}"
+    assert sorted(cells) == sorted(
+        [(row, column) for _, row, column in BUTTON_GRID] + [(0, 2), (LOG_ROW, LOG_COLUMN)])
+
+
+def test_log_panel_keeps_original_cell_and_children(win):
+    """右侧日志面板回到 `row=0, column=5, rowspan=5`（padx=pady=10），内部结构不变。"""
+    info = win.log_main_frame.grid_info()
+    assert _cell(win.log_main_frame) == (LOG_ROW, LOG_COLUMN)
+    assert int(info["rowspan"]) == LOG_ROWSPAN == main_module.MainWindow.GRID_ROWS
+    assert (int(info["padx"]), int(info["pady"])) == (10, 10)
+    assert set(str(info["sticky"])) == set("nsew"), "日志面板应四向填满（Tk 会重排字母序）"
+
     assert win.log_text.winfo_manager() == "grid"
     assert win.time_label.winfo_manager() == "grid"
     scrollbars = [c for frame in win.log_main_frame.winfo_children()
                   for c in frame.winfo_children() if isinstance(c, ttk.Scrollbar)]
     assert len(scrollbars) == 1, "日志面板应仍有一个滚动条"
 
-
-def test_sections_group_buttons_by_purpose(win):
-    """四个带标题的区块按语义分组，且按钮属性名与历史一致。"""
-    assert _section_titles(win) == ["① 测试用例管理", "② 数据与通信工具",
-                                    "③ 图像与视频", "④ 测试用例执行"]
-    for attr in BUTTON_ATTRS:
-        assert hasattr(win, attr), f"缺少按钮属性 {attr}（对外可见名不能改）"
-
-    # 用例下拉框保留 FileUpdater 的绑定：self.file_menu / self.selected_file
-    assert isinstance(win.file_menu, ttk.OptionMenu)
-    assert win.selected_file.get(), "下拉框应已由 FileUpdater 初始化出「当前用例」"
-    assert win.file_menu.winfo_manager() == "grid"
+    # 原始拉伸行为：row 0~4 与 column 5 都配了 weight
+    for row in range(main_module.MainWindow.GRID_ROWS):
+        assert win.root.grid_rowconfigure(row)["weight"] == 1
+    assert win.root.grid_columnconfigure(LOG_COLUMN)["weight"] == 1
 
 
-def test_button_colors_come_from_theme(win):
-    """按钮配色走 Theme（用例管理=primary，数据通信=success，图像视频=danger）。"""
+def test_rows_express_the_original_grouping(win):
+    """分组语义：同一行的按钮属于同一功能组，配色沿用该组的语义色。"""
     from hudcore.ui import Theme
 
-    assert str(win.upload_button["bg"]) == Theme.PRIMARY
-    assert str(win.can_control_button["bg"]) == Theme.SUCCESS
-    assert str(win.someip_button["bg"]) == Theme.SUCCESS
-    assert str(win.image_button["bg"]) == Theme.DANGER
+    for row, members in ROW_MEMBERS.items():
+        for attr in members:
+            assert _cell(getattr(win, attr))[0] == row, f"{attr} 应属于第 {row} 行分组"
+
+    # 平铺布局只用 row 0~2；第 4 列之后的格子留给日志面板
+    used = {_cell(getattr(win, a)) for a in BUTTON_ATTRS}
+    assert {row for row, _ in used} == set(ROW_MEMBERS)
+    assert {column for _, column in used} == {0, 1, 2, 3, 4}
+
+    # row 0 = 用例管理(primary)、row 1 = 数据与通信(success)、
+    # row 2 = 图像与视频(danger) + Di 执行(success)
+    for attr in ROW_MEMBERS[0]:
+        assert str(getattr(win, attr)["bg"]) == Theme.PRIMARY
+    for attr in ROW_MEMBERS[1]:
+        assert str(getattr(win, attr)["bg"]) == Theme.SUCCESS
+    for attr in ("image_button", "read_video_button", "image_video_button"):
+        assert str(getattr(win, attr)["bg"]) == Theme.DANGER
     assert str(win.di_case_button["bg"]) == Theme.SUCCESS
 
 

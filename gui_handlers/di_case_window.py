@@ -1,17 +1,22 @@
 # -*- coding: utf-8 -*-
 """gui_handlers.di_case_window —— Di 测试用例窗口（扫描/执行/停止/报告/导出）
 
-界面结构（SectionStack 顺序排布，行号自动分配；按钮位置由 ActionBar 自动排布）：
+界面结构（**pack 自上而下堆叠**，即"界面优化"之前的那套摆放）：
 
-    ┌ ① 用例格式开关：( ) legacy  (•) di  ( ) auto   + 环境变量说明
-    ├ ② 用例目录：[TestcaseCollection/Di_testcases        ] [浏览…]
-    │            [扫描统计] [执行（需 CAN 设备）] [停止执行] [只跑可全自动用例]
-    │            说明：随状态变化的一行提示（为什么可点 / 为什么不可点）
-    ├ ③ 报告导出与汇总：[导出报告（Markdown + JSON）] [清空]
-    │            汇总：用例 497 个｜支持度 auto 170 / partial 327｜…
-    └ ④ 输出（Notebook）：执行日志 / 报告预览（Markdown，执行完自动切到该页签）
+    ┌ LabelFrame「用例格式开关（旧链路保持不变，仅切换解析入口）」
+    │   ( ) legacy —— …   (•) di —— …   ( ) auto —— …
+    │   环境变量 HUD_TESTCASE_FORMAT 也可指定；当前：…
+    ├ 目录行（tk.Frame）：用例目录: [TestcaseCollection/Di_testcases   ] [浏览…]
+    ├ 动作行（tk.Frame）：[扫描统计] [执行（需 CAN 设备）] [停止执行]
+    │                     [只跑可全自动用例] [导出报告（Markdown + JSON）] [清空]
+    │                     说明：随状态变化的一行提示（为什么可点 / 为什么不可点）
+    ├ 汇总行：用例 497 个｜支持度 auto 170 / partial 327｜…
+    └ 输出区（tk.Frame + Notebook）：执行日志 / 报告预览（Markdown，执行完自动切到该页签）
 
-三条贯穿全窗口的约定（本次重构的核心）：
+布局约定：本窗口全部用 ``pack``（**没有 grid**），因此不存在"两个控件占同一格"的问题；
+`tests/test_di_gui.py` 会断言整窗 ``audit_widget_tree(root) == []``。
+
+三条贯穿全窗口的约定（本次重构的核心逻辑，**布局回退后原样保留**）：
 
 1. **状态机**：`self.state`（`hudcore.ui.state.UiState`）是界面可用性的**唯一**来源。
    所有按钮/勾选框/输入框都登记在 `self.buttons`（`ButtonGroup`）里，规则是模块级的
@@ -52,7 +57,6 @@ from tkinter import filedialog, messagebox, ttk
 
 from hudcore import logging_setup
 from hudcore.platform.paths import paths
-from hudcore.ui.action_bar import ActionBar, SectionStack
 from hudcore.ui.state import (
     BUSY_EXECUTE,
     BUSY_NONE,
@@ -206,101 +210,108 @@ class DiCaseWindow:
 
     # ------------------------------------------------------------ 界面
     def _build_ui(self) -> None:
-        """按 SectionStack 顺序排 ①②③④ 四个区块。
+        """按 pack 顺序往下堆：格式开关 → 目录行/动作行 → 汇总行 → 输出区。
 
-        行号由 SectionStack 分配、按钮位置由 ActionBar 分配，因此整窗不会出现
-        "两个控件占同一个 (row, column)"（断言见 ``hudcore.ui.layout.audit_widget_tree``）。
-        注意：一条 ActionBar 的控件数必须 ≤ 它的 ``columns``，否则换行会与下一个区块撞格。
+        布局是**回退后**的形态：控件一律 `pack`，没有 SectionStack/ActionBar、
+        也没有带标题的区块。因此整窗不存在 grid 格子，`audit_widget_tree` 必然为空
+        （断言见 `tests/test_di_gui.py::test_layout_has_no_grid_collisions`）。
         """
-        root = self.root
-        root.columnconfigure(0, weight=1)
-        # use_ttk=False：按钮用 tk.Button + Theme 的配色/字体（ttk 会忽略按钮配色种类）
-        self.stack = SectionStack(root, use_ttk=False)
+        self._build_switch()
+        self._build_toolbar()
+        self._build_output()
 
-        self._build_format(self.stack.section(
-            "① 用例格式开关（旧链路保持不变，本窗口只跑 Di 格式）"))
-        self._build_cases(self.stack.section(
-            "② 用例目录与执行（扫描不碰设备；执行需 CAN 设备，无设备退回体检）"))
-        self._build_report(self.stack.section("③ 报告导出与汇总"))
+    def _build_switch(self) -> None:
+        """用例格式开关：LabelFrame + Radiobutton 逐项 + 环境变量说明。"""
+        box = tk.LabelFrame(self.root, text="用例格式开关（旧链路保持不变，仅切换解析入口）")
+        box.pack(fill=tk.X, padx=8, pady=6)
+        self.frame_format = box                    # 供测试/排障定位（不参与业务）
 
-        output_row = self.stack.next_row
-        output = self.stack.section("④ 输出（执行日志 / 报告预览）", sticky="nsew")
-        output.rowconfigure(0, weight=1)
-        output.columnconfigure(0, weight=1)
-        root.rowconfigure(output_row, weight=1)   # 输出区吃掉多余高度
-        self._build_output(output)
-
-    def _build_format(self, box) -> None:
-        """① 格式开关：Radiobutton + 环境变量说明。"""
         formats = case_format.available_formats()
         self.var_format = tk.StringVar(value=case_format.active_format())
-        for column, (value, desc) in enumerate(formats.items()):
+        for value, desc in formats.items():
             radio = tk.Radiobutton(box, text=f"{value} —— {desc}", value=value,
                                    variable=self.var_format, command=self._on_switch,
                                    **Theme.check_button())
-            radio.grid(row=0, column=column, sticky="w", padx=6, pady=1)
+            radio.pack(anchor=tk.W, padx=6, pady=1)
             self.buttons.add(f"format:{value}", radio, BUTTON_RULES["format"])
         self.var_format_note = tk.StringVar(value=_format_note())
         tk.Label(box, textvariable=self.var_format_note,
-                 **Theme.hint_label()).grid(row=1, column=0, columnspan=max(1, len(formats)),
-                                            sticky="w", padx=6, pady=(2, 4))
+                 **Theme.hint_label()).pack(anchor=tk.W, padx=6, pady=(2, 4))
 
-    def _build_cases(self, box) -> None:
-        """② 用例目录 + 扫描/执行/停止/只跑自动（按钮条自动排布）。"""
-        box.columnconfigure(1, weight=1)          # 目录输入框可横向拉伸
-        tk.Label(box, text="用例目录:", **Theme.field_label()).grid(
-            row=0, column=0, sticky="w", padx=6, pady=2)
+    def _build_toolbar(self) -> None:
+        """目录行 + 动作行（扫描/执行/停止/只跑自动/导出/清空）+ 汇总行。"""
+        bar = tk.Frame(self.root)
+        bar.pack(fill=tk.X, padx=8)
+        self.frame_dir = bar                       # 供测试/排障定位（不参与业务）
+
+        tk.Label(bar, text="用例目录:", **Theme.field_label()).pack(side=tk.LEFT)
         self.var_dir = tk.StringVar(value=str(paths.project_root / parser.DEFAULT_CASE_DIR))
-        self.entry_dir = tk.Entry(box, textvariable=self.var_dir, font=Theme.font_tuple(10))
-        self.entry_dir.grid(row=0, column=1, columnspan=2, sticky="ew", padx=4, pady=2)
+        self.entry_dir = tk.Entry(bar, textvariable=self.var_dir, width=58,
+                                  font=Theme.font_tuple(10))
+        self.entry_dir.pack(side=tk.LEFT, padx=4)
         self.buttons.add("dir", self.entry_dir, BUTTON_RULES["dir"])
 
-        self.btn_browse = tk.Button(box, text="浏览…", command=self._choose_dir,
+        self.btn_browse = tk.Button(bar, text="浏览…", command=self._choose_dir,
                                     **Theme.info_button(width=10, height=1))
-        self.btn_browse.grid(row=0, column=3, sticky="w", padx=4, pady=2)
+        self.btn_browse.pack(side=tk.LEFT)
         self.buttons.add("browse", self.btn_browse, BUTTON_RULES["browse"])
 
-        # 按钮条：4 个控件 ≤ columns=4 → 只占一行，不会与下面区块撞格
-        bar = ActionBar(box, row=1, column=0, columns=4, sticky="w", group=self.buttons)
-        self.btn_scan = bar.add("scan", "扫描统计", self.scan, kind="info", width=12,
-                                enabled_when=BUTTON_RULES["scan"],
-                                tooltip="解析用例目录并统计支持度（不碰设备）")
-        self.btn_execute = bar.add("execute", "执行（需 CAN 设备）", self.execute, kind="primary",
-                                   width=22, enabled_when=BUTTON_RULES["execute"],
-                                   tooltip="逐条下发 CAN / SOME/IP 输入并校验画面；无设备时退回体检")
-        self.btn_stop = bar.add("stop", "停止执行", self.stop_execution, kind="danger", width=12,
-                                enabled_when=BUTTON_RULES["stop"],
-                                tooltip="在用例之间中止：当前用例跑完即退出，剩余用例不再执行")
+        actions = tk.Frame(self.root)
+        actions.pack(fill=tk.X, padx=8, pady=4)
+        self.frame_actions = actions               # 供测试断言按钮的摆放顺序
+
+        # 状态说明行：先按 BOTTOM 占位，后面的按钮才留在同一行里。
+        # （pack 的 side=LEFT 不会自动换行：顺序反了，说明会挤到按钮右边而不是下面。）
+        self.var_execute_hint = tk.StringVar(value=execute_hint(self.state))
+        tk.Label(actions, textvariable=self.var_execute_hint, wraplength=1040,
+                 **Theme.hint_label()).pack(side=tk.BOTTOM, fill=tk.X, padx=2, pady=(2, 0))
+
+        self.btn_scan = tk.Button(actions, text="扫描统计", command=self.scan,
+                                  **Theme.info_button(width=12, height=1))
+        self.btn_scan.pack(side=tk.LEFT, padx=2)
+        self.buttons.add("scan", self.btn_scan, BUTTON_RULES["scan"])
+
+        self.btn_execute = tk.Button(actions, text="执行（需 CAN 设备）", command=self.execute,
+                                     **Theme.primary_button(width=22, height=1))
+        self.btn_execute.pack(side=tk.LEFT, padx=2)
+        self.buttons.add("execute", self.btn_execute, BUTTON_RULES["execute"])
+
+        # 「停止执行」紧跟「执行」之后（真正的停止：事件 → 执行器在用例之间退出）
+        self.btn_stop = tk.Button(actions, text="停止执行", command=self.stop_execution,
+                                  **Theme.danger_button(width=12, height=1))
+        self.btn_stop.pack(side=tk.LEFT, padx=2)
+        self.buttons.add("stop", self.btn_stop, BUTTON_RULES["stop"])
+
         self.var_only_auto = tk.BooleanVar(value=False)
-        self.chk_only_auto = tk.Checkbutton(box, text="只跑可全自动用例",
+        self.chk_only_auto = tk.Checkbutton(actions, text="只跑可全自动用例",
                                             variable=self.var_only_auto,
                                             **Theme.check_button())
-        bar.add_widget("only_auto", self.chk_only_auto, enabled_when=BUTTON_RULES["only_auto"])
+        self.chk_only_auto.pack(side=tk.LEFT, padx=8)
+        self.buttons.add("only_auto", self.chk_only_auto, BUTTON_RULES["only_auto"])
 
-        self.var_execute_hint = tk.StringVar(value=execute_hint(self.state))
-        tk.Label(box, textvariable=self.var_execute_hint, wraplength=1040,
-                 **Theme.hint_label()).grid(row=2, column=0, columnspan=4,
-                                            sticky="w", padx=6, pady=(2, 4))
+        self.btn_export = tk.Button(actions, text="导出报告（Markdown + JSON）",
+                                    command=self.export_report,
+                                    **Theme.success_button(width=26, height=1))
+        self.btn_export.pack(side=tk.LEFT, padx=2)
+        self.buttons.add("export", self.btn_export, BUTTON_RULES["export"])
 
-    def _build_report(self, box) -> None:
-        """③ 导出/清空 + 汇总信息（`self.var_summary` 属性名保持不变）。"""
-        bar = ActionBar(box, row=0, column=0, columns=2, sticky="w", group=self.buttons)
-        self.btn_export = bar.add("export", "导出报告（Markdown + JSON）", self.export_report,
-                                  kind="success", width=26, enabled_when=BUTTON_RULES["export"],
-                                  tooltip="把执行报告写成 .md 与同名 .json（需先执行）")
-        self.btn_clear = bar.add("clear", "清空", self._clear_output, kind="neutral", width=10,
-                                 enabled_when=BUTTON_RULES["clear"],
-                                 tooltip="清空执行日志与报告预览")
+        self.btn_clear = tk.Button(actions, text="清空", command=self._clear_output,
+                                   **Theme.neutral_button(width=10, height=1))
+        self.btn_clear.pack(side=tk.LEFT, padx=2)
+        self.buttons.add("clear", self.btn_clear, BUTTON_RULES["clear"])
 
         self.var_summary = tk.StringVar(value="（尚未扫描）")
-        tk.Label(box, textvariable=self.var_summary, justify=tk.LEFT, anchor=tk.W,
-                 font=Theme.font_tuple(10), wraplength=1040).grid(
-            row=1, column=0, columnspan=3, sticky="ew", padx=6, pady=(2, 4))
+        tk.Label(self.root, textvariable=self.var_summary, anchor=tk.W, justify=tk.LEFT,
+                 font=Theme.font_tuple(10)).pack(fill=tk.X, padx=8)
 
-    def _build_output(self, box) -> None:
-        """④ 输出区：执行日志 + 报告预览（Markdown，执行完自动切页签）。"""
-        self.notebook = ttk.Notebook(box)
-        self.notebook.grid(row=0, column=0, sticky="nsew")
+    def _build_output(self) -> None:
+        """输出区：执行日志 + 报告预览（Markdown，执行完自动切页签）。"""
+        frame = tk.Frame(self.root)
+        frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=6)
+        self.frame_output = frame                  # 供测试/排障定位（不参与业务）
+
+        self.notebook = ttk.Notebook(frame)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
 
         log_tab = tk.Frame(self.notebook)
         self.notebook.add(log_tab, text="执行日志")

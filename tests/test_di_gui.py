@@ -6,6 +6,12 @@
 **按钮状态机**（规则表纯函数 + 状态→控件可用性 + 扫描/执行期间的真实置灰）
 与**中止链路**（停止事件 → `should_stop` → 报告 `aborted`；legacy 格式禁用执行）。
 不需要 CAN 设备（无设备时自动退回体检模式）。
+
+布局约定（本次"布局回退"后固化，见 `test_layout_*` 系列）：
+界面是**改动前的那套 pack 摆放** —— 格式开关 LabelFrame + 目录行 + 动作行 +
+汇总行 + 输出区，没有 SectionStack/ActionBar、也没有带标题的区块；
+全部控件走 `pack`（**没有 grid**），因此整窗 `audit_widget_tree` 必须为空。
+「停止执行」是动作行里「执行」之后的新增按钮（状态机的逻辑保留）。
 """
 from __future__ import annotations
 
@@ -15,6 +21,7 @@ from pathlib import Path
 import pytest
 
 tk = pytest.importorskip("tkinter")                     # 无显示环境（无 tkinter）时跳过
+from tkinter import ttk                                 # noqa: E402
 
 from gui_handlers import di_case_window as win_mod      # noqa: E402
 
@@ -22,6 +29,7 @@ from tests import gui_support                     # noqa: E402
 
 gui_support.require_display()                     # 无图形环境整模块跳过（Windows 本机不跳）
 from can_data_tools import case_format                  # noqa: E402
+from hudcore.ui.layout import audit_widget_tree, describe_collisions  # noqa: E402
 from hudcore.ui.state import BUSY_EXECUTE, BUSY_NONE, BUSY_SCAN  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -93,6 +101,155 @@ def _pump(win, app, predicate, timeout_s: float = 90.0):
             return True
         time.sleep(0.05)
     return False
+
+
+def _packed(parent, kinds=(tk.Button, tk.Checkbutton)):
+    """按 **实际 pack 顺序**取容器里的按钮类控件（`pack_slaves` 顺序即摆放顺序）。"""
+    return [w for w in parent.pack_slaves() if isinstance(w, kinds)]
+
+
+def _texts(parent, kinds=(tk.Button, tk.Checkbutton)) -> list[str]:
+    return [str(w.cget("text")) for w in _packed(parent, kinds)]
+
+
+# ---------------------------------------------------------------- 布局（pack 回退后）
+def test_layout_has_no_grid_collisions(window):
+    """回退后的布局一律 pack：整窗不存在 grid 格子，审计必然为空。"""
+    win, _calls = window
+    win.update_idletasks()
+
+    collisions = audit_widget_tree(win)
+    assert collisions == [], describe_collisions(collisions)
+
+    # 真·零 grid：任何一层控件都不该由 grid 管理（有 grid 才谈得上"格子冲突"）
+    grid_managed = []
+
+    def walk(widget):
+        for child in widget.winfo_children():
+            if child.winfo_manager() == "grid":
+                grid_managed.append(type(child).__name__)
+            walk(child)
+
+    walk(win)
+    assert grid_managed == [], f"这些控件仍在用 grid：{grid_managed}"
+
+
+def test_layout_format_switch_labelframe(window):
+    """格式开关仍是带标题的 LabelFrame，Radiobutton 逐项 pack 并登记进状态机。"""
+    win, _calls = window
+    app = win.di_app
+    win.update_idletasks()
+
+    box = app.frame_format
+    assert isinstance(box, tk.LabelFrame), "格式开关必须是 LabelFrame（改动前的容器）"
+    assert box.master is win
+    assert str(box.cget("text")) == "用例格式开关（旧链路保持不变，仅切换解析入口）"
+    assert box.pack_info()["fill"] == "x", "格式开关应横向填满"
+
+    radios = [w for w in box.pack_slaves() if isinstance(w, tk.Radiobutton)]
+    assert len(radios) == len(case_format.available_formats())
+    for radio in radios:
+        assert radio.pack_info()["anchor"] == "w", "Radiobutton 逐项靠左 pack"
+    # 环境变量说明行也在 LabelFrame 内
+    notes = [w for w in box.pack_slaves() if isinstance(w, tk.Label)]
+    assert notes and str(notes[0].cget("textvariable")) == str(app.var_format_note)
+
+
+def test_layout_dir_row(window):
+    """目录行：标签 + 宽度 58 的输入框 + 「浏览…」，全部 pack(side=LEFT)。"""
+    win, _calls = window
+    app = win.di_app
+    win.update_idletasks()
+
+    row = app.frame_dir
+    assert row.pack_info()["fill"] == "x"
+
+    labels = [w for w in row.pack_slaves() if isinstance(w, tk.Label)]
+    assert [str(w.cget("text")) for w in labels] == ["用例目录:"]
+
+    widgets = row.pack_slaves()
+    assert widgets[1] is app.entry_dir and str(app.entry_dir.cget("width")) == "58"
+    assert widgets[2] is app.btn_browse and str(app.btn_browse.cget("text")) == "浏览…"
+    for widget in widgets:
+        assert widget.pack_info()["side"] == "left", "目录行所有控件都靠左 pack"
+
+
+def test_layout_action_row_order_and_texts(window):
+    """动作行顺序与文案（「停止执行」紧跟「执行」之后），全部一行内靠左 pack。"""
+    win, _calls = window
+    app = win.di_app
+    win.update_idletasks()
+
+    row = app.frame_actions
+    assert _texts(row) == ["扫描统计", "执行（需 CAN 设备）", "停止执行",
+                           "只跑可全自动用例", "导出报告（Markdown + JSON）", "清空"]
+    for widget in _packed(row):
+        assert widget.pack_info()["side"] == "left"
+
+    # 控件对象与状态机登记的一致（按钮不是"另建了一套"）
+    assert _packed(row) == [app.btn_scan, app.btn_execute, app.btn_stop,
+                            app.chk_only_auto, app.btn_export, app.btn_clear]
+    texts = _texts(row)
+    assert texts.index("停止执行") == texts.index("执行（需 CAN 设备）") + 1, \
+        "「停止执行」必须紧跟「执行」之后"
+    assert sorted(app.buttons.keys()) == sorted(
+        ["format:legacy", "format:di", "format:auto", "dir", "browse", "scan",
+         "execute", "stop", "only_auto", "export", "clear"]), \
+        f"状态机登记的控件集合变了：{sorted(app.buttons.keys())}"
+
+
+def test_layout_action_row_is_one_line_with_hint_below(window):
+    """动作行的 6 个按钮在同一行，状态说明行在它们下面。
+
+    **只断言结构（pack 语义），不断言像素**：`side="left"` 的控件在同一个 Frame 里
+    永远不会换行，`side="bottom"` 的说明行必定占在它们下方 —— 这正是设计意图。
+    早先这里用 `winfo_y()`/`winfo_height()` 断言"同一行"，在 Wine（Windows 字体
+    度量不同）下会误报失败，属字体/DPI 相关的脆弱断言，已去掉。
+    """
+    win, _calls = window
+    app = win.di_app
+
+    row = app.frame_actions
+    names = [str(w) for w in row.pack_slaves()]
+    buttons = [w for w in row.pack_slaves() if isinstance(w, tk.Button)]
+    hints = [w for w in row.pack_slaves() if isinstance(w, tk.Label) and
+             str(w.cget("textvariable")) == str(app.var_execute_hint)]
+    assert len(hints) == 1, "说明行必须存在（状态机要能说明为什么可点/不可点）"
+    hint = hints[0]
+
+    texts = [str(b.cget("text")) for b in buttons]
+    assert "停止执行" in texts and texts.index("停止执行") == texts.index("执行（需 CAN 设备）") + 1, \
+        f"「停止执行」应紧跟「执行（需 CAN 设备）」：{texts}"
+    assert all(str(b.pack_info()["side"]) == "left" for b in buttons), \
+        "动作行里的按钮都必须 side=left，否则会换行"
+    assert str(hint.pack_info()["side"]) == "bottom", \
+        "说明行按 BOTTOM 占位（先占位再放按钮，按钮才留在同一行）"
+    assert names.index(str(hint)) < names.index(str(buttons[0])), \
+        "说明行应比按钮先 pack（否则会把按钮挤到下一行）"
+def test_layout_summary_and_output_area(window):
+    """汇总行直接挂根窗口并横向填满；输出区是 expand 的 Notebook（两个页签）。"""
+    win, _calls = window
+    app = win.di_app
+    win.update_idletasks()
+
+    summary = [w for w in win.pack_slaves() if isinstance(w, tk.Label) and
+               str(w.cget("textvariable")) == str(app.var_summary)]
+    assert len(summary) == 1, "汇总行应直接挂在根窗口上（改动前的摆放）"
+    assert summary[0].pack_info()["fill"] == "x"
+
+    notebook = app.notebook
+    assert isinstance(notebook, ttk.Notebook)
+    assert notebook.pack_info()["fill"] == "both" and str(notebook.pack_info()["expand"]) == "1"
+    assert notebook.master is app.frame_output
+
+    tabs = [notebook.tab(i, "text") for i in range(notebook.index("end"))]
+    assert tabs == ["执行日志", "报告预览（Markdown）"]
+
+    # 日志/预览各带一个右侧滚动条，且预览有初始文案
+    for tab in notebook.winfo_children():
+        kinds = [type(w).__name__ for w in tab.pack_slaves()]
+        assert kinds == ["Scrollbar", "Text"], f"页签内应是 滚动条 + 文本：{kinds}"
+    assert app.preview.get("1.0", "end-1c").startswith("（执行后这里显示 Markdown 报告")
 
 
 def test_window_has_two_tabs_and_switch(window):

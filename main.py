@@ -4,32 +4,33 @@ HudAutoTest 主程序入口
 ======================
 GUI 主窗口：测试用例管理 / CAN 测试 / SOME/IP 回放 / 图像视频处理 / Di 用例执行。
 
-界面结构（v3 重构：左侧功能区**分组** + 右侧日志面板）：
+界面结构（**平铺网格 = 改动前的原始布局**）::
 
-    ┌ 左列：功能区（SectionStack 自动发行号）──────────────┐ ┌ 右列：日志面板 ─┐
-    │ ① 测试用例管理   上传 / 删除 / 查看用例 / 查看解析     │ │ 当前时间        │
-    │     当前用例 ▾（ttk.OptionMenu，选择"当前用例"）      │ │ 日志文本框      │
-    │ ② 数据与通信工具 转换信号矩阵 / can数据生成器 /        │ │ + 滚动条        │
-    │                 can测试 / SOME/IP 回放              │ │                 │
-    │ ③ 图像与视频     打开图片 / 提取视频帧 / 播放图片视频   │ │                 │
-    │ ④ 测试用例执行   Di 测试用例                        │ │                 │
-    └────────────────────────────────────────────────────┘ └─────────────────┘
+    ┌ 主窗口 1300x600（GRID_ROWS = 5）────────────────────────────────────┐ ┌ 日志面板 ─┐
+    │ row 0  上传测试用例 ｜ 删除测试用例 ｜ [当前用例 ▾] ｜ 查看用例 ｜ 查看解析 │ │ 当前时间  │
+    │ row 1  转换信号矩阵 ｜ can数据生成器 ｜ can测试 ｜ SOME/IP 回放          │ │ 日志文本  │
+    │ row 2  打开图片 ｜ 提取视频帧 ｜ 播放图片视频 ｜ Di 测试用例              │ │ +滚动条   │
+    │ row 3~4（空行：仅参与 weight 拉伸，不放控件）                            │ │ column 5  │
+    └────────────────────────────────────────────────────────────────────┘ └──────────┘
 
-本次重构解决的三个问题：
-  1. **布局**：原来 13 个按钮手写 ``grid`` 到 row 0~2 / column 0~4（``GRID_ROWS = 5``
-     里还有 2 行是空的却照样参与 weight 拉伸），语义上看不出"哪几个按钮是一类"。
-     现在左侧用 :class:`~hudcore.ui.action_bar.SectionStack` 自上而下放带标题的区块、
-     区块内用 :class:`~hudcore.ui.action_bar.ActionBar` 排按钮（超出自动换行），
-     右列只放日志面板 —— 全窗没有任何手写 ``row=``，也就不会出现两个控件占同一格
-     （用 ``hudcore.ui.layout.audit_widget_tree()`` 可断言为零冲突）。
-  2. **子窗口逻辑**：三个子窗口（CAN 测试 / SOME/IP 回放 / Di 测试用例）原来各写了一份
-     "单例 + 按钮置灰/恢复 + 关闭回调"，写法还不一致（有的判断 ``winfo_exists``、
-     有的把清理写在窗口自身、Di 的清理写在 main 里），于是会出现"窗口已关但按钮还是灰的"。
-     现在收敛成一张声明表 :class:`_WindowSpec` + :meth:`MainWindow._open_singleton` /
-     :meth:`MainWindow._close_singleton`：已打开则聚焦、打开时置灰、关闭（含
-     ``WM_DELETE_WINDOW`` 与用户直接 ``destroy()``）后恢复。
-  3. **样式**：字体/配色一律走 :class:`~hudcore.ui.theme.Theme`，不再硬编码字体名与颜色；
-     按钮配色按语义分组（用例管理=primary、数据通信=success、图像视频=danger、Di=success）。
+布局说明（**已按用户要求回退**，不再使用 `SectionStack` / `ActionBar` / 区块标题）：
+  · 13 个控件直接 ``grid`` 到固定格子：按钮在 row 0~2 / column 0~4（``padx=pady=20``，
+    行号即"功能分组"：row 0 用例管理、row 1 数据与通信、row 2 图像视频 + Di 执行）；
+  · 用例下拉框 ``ttk.OptionMenu`` 在 row 0 / column 2（由 ``FileUpdater`` 初始化）；
+  · 右侧日志面板 ``log_main_frame`` 占 ``row=0, column=5, rowspan=GRID_ROWS``
+    （``padx=pady=10``），内部仍是 ``time_label`` + ``log_text`` + ``ttk.Scrollbar``；
+  · ``_configure_grid()`` 给 row 0~4 与 column 5 配 ``weight=1``（窗口可拉伸）；
+  · 全窗仍然没有两个控件抢同一格 —— ``hudcore.ui.layout.audit_widget_tree()`` 可断言。
+
+本次**保留**的逻辑改进（与布局无关，不要跟着布局一起退掉）：
+  1. **单例子窗口**：三个子窗口（CAN 测试 / SOME/IP 回放 / Di 测试用例）收敛成一张声明表
+     :class:`_WindowSpec` + :meth:`MainWindow._open_singleton` / :meth:`MainWindow._close_singleton`：
+     已打开则聚焦、打开时按钮置灰、关闭（含 ``WM_DELETE_WINDOW`` 与用户直接 ``destroy()``）后恢复，
+     开窗失败回滚按钮（不会出现"按钮永久灰掉"）；
+  2. **按钮状态机**：可用性由 :class:`hudcore.ui.state.UiState` + :class:`ButtonGroup`
+     规则表（:func:`_enable_when_window_closed`）统一决定，回调里不再各写 ``config(state=…)``；
+  3. **样式**：字体/配色一律走 :class:`~hudcore.ui.theme.Theme`，不硬编码字体名与颜色；
+     按钮配色按语义（用例管理=primary、数据通信=success、图像视频=danger、Di=success）。
 
 运行：
     python main.py
@@ -58,7 +59,7 @@ import someip_gui
 import gui_handlers.di_case_window
 from hudcore.platform import describe_platform, paths
 from hudcore.platform.executables import get_ffmpeg, get_office_app, get_text_editor
-from hudcore.ui import ActionBar, ButtonGroup, SectionStack, TextRedirector, Theme, UiState
+from hudcore.ui import ButtonGroup, TextRedirector, Theme, UiState
 from hudcore.ui.state import Rule
 
 # 兼容别名：原 main.py 在此定义了 TextRedirector，保留导入路径
@@ -118,11 +119,10 @@ class MainWindow:
 
     WINDOW_TITLE = "主窗口"
     WINDOW_GEOMETRY = "1300x600"
-
-    #: 列分工：0 = 左侧功能区（可拉伸），1 = 右侧日志面板（固定最小宽度）
-    LEFT_COLUMN = 0
-    LOG_COLUMN = 1
-    LOG_MIN_WIDTH = 340
+    #: 参与拉伸的行数：row 0~2 放控件、row 3~4 留空但照样拉伸（与原实现一致）；
+    #: 日志面板占 ``column=GRID_ROWS``（=5）并跨全部 5 行。
+    GRID_ROWS = 5
+    LOG_COLUMN = GRID_ROWS           # 右侧日志面板所在列（= 5，与原实现一致）
 
     def __init__(self):
         self.root = tk.Tk()
@@ -202,11 +202,14 @@ class MainWindow:
 
     # ------------------------------------------------------------ 日志面板
     def _build_log_panel(self) -> None:
-        """右侧日志面板：时间标签 + 文本框 + 滚动条（整块占右列，与左列不同 column）"""
+        """右侧日志面板：时间标签 + 文本框 + 滚动条。
+
+        位置与原实现一致：``row=0, column=5, rowspan=GRID_ROWS, padx=pady=10``。
+        """
         root = self.root
         self.log_main_frame = tk.Frame(root)
-        self.log_main_frame.grid(row=0, column=self.LOG_COLUMN, sticky="nsew",
-                                 padx=(4, 10), pady=10)
+        self.log_main_frame.grid(row=0, column=self.LOG_COLUMN, rowspan=self.GRID_ROWS,
+                                 padx=10, pady=10, sticky="nsew")
         self.log_main_frame.grid_rowconfigure(1, weight=1)
         self.log_main_frame.grid_columnconfigure(0, weight=1)
 
@@ -242,131 +245,96 @@ class MainWindow:
 
     # ---------------------------------------------------------------- 布局
     def _configure_grid(self) -> None:
-        """只给真正用到的行列配权重（原 ``GRID_ROWS = 5`` 有 2 行是空的却仍参与拉伸）。"""
-        root = self.root
-        root.grid_rowconfigure(0, weight=1)                        # 只有一行：左功能区 + 右日志
-        root.grid_columnconfigure(self.LEFT_COLUMN, weight=1)      # 左列可拉伸
-        root.grid_columnconfigure(self.LOG_COLUMN, weight=0,       # 右列日志面板宽度稳定
-                                  minsize=self.LOG_MIN_WIDTH)
+        """给 row 0~4 与 column 5 配权重（恢复原实现的拉伸行为）。"""
+        for i in range(self.GRID_ROWS):
+            self.root.grid_rowconfigure(i, weight=1)
+        self.root.grid_columnconfigure(self.LOG_COLUMN, weight=1)
 
     # ---------------------------------------------------------------- 按钮
     def _build_buttons(self) -> None:
-        """构建左侧功能区：四个带标题的区块 + 区块内声明式按钮条。
+        """平铺主界面按钮与用例下拉框（**坐标与原实现一致**：row 0~2 / column 0~4）。
 
-        行号由 :class:`SectionStack` / :class:`ActionBar` 自动分配，这里不出现手写
-        ``row=``/``column=``，因此不可能与别的控件抢格子。
+        布局已回退成"每个控件自己 grid 到固定格子"（``padx=pady=20``），行号即功能分组：
+        row 0 用例管理、row 1 数据与通信、row 2 图像视频 + Di 执行；不再有
+        ``left_frame`` / 区块标题 / 按钮条。
+
+        保留的逻辑改进：按钮的**可用性**仍由 ``self._buttons``（ButtonGroup）+ 规则表
+        统一决定 —— 回调里不再各写 ``config(state=…)``；三个单例入口按钮登记
+        :func:`_enable_when_window_closed` 规则，对应窗口打开期间自动置灰。
         """
         root = self.root
 
-        self.left_frame = tk.Frame(root)
-        self.left_frame.grid(row=0, column=self.LEFT_COLUMN, sticky="nsew",
-                             padx=(8, 4), pady=8)
-        self.left_frame.grid_columnconfigure(0, weight=1)
+        def place(key: str, button, row: int, column: int, rule=None):
+            """按原始坐标 grid 并把控件登记进按钮状态机（返回控件本身）。"""
+            button.grid(row=row, column=column, padx=20, pady=20)
+            self._buttons.add(key, button, rule)
+            return button
 
-        stack = SectionStack(self.left_frame, column=0, padx=4, pady=4,
-                             use_ttk=False, sticky="ew")
+        # ---------------- row 0：测试用例管理 ----------------
+        self.upload_button = place("upload", tk.Button(
+            root, text="上传测试用例",
+            command=lambda: self.testcase_menu.on_upload(self.selected_file, self.file_menu),
+            **Theme.primary_button()), 0, 0)
 
-        self._build_testcase_section(stack)     # ① 测试用例管理
-        self._build_tools_section(stack)        # ② 数据与通信工具
-        self._build_media_section(stack)        # ③ 图像与视频
-        self._build_execute_section(stack)      # ④ 测试用例执行
+        self.delete_button = place("delete", tk.Button(
+            root, text="删除测试用例",
+            command=lambda: self.testcase_menu.on_delete(self.selected_file, self.file_menu),
+            **Theme.primary_button()), 0, 1)
 
-        # 末尾留一行空白填充：窗口变高时区块保持自上而下紧凑排列，多余高度落到最下面
-        self.left_frame.grid_rowconfigure(stack.next_row, weight=1)
-
-        self._apply_ui_state()                  # 建立按钮状态快照（规则表首轮生效）
-
-    # ---------------- ① 测试用例管理 ----------------
-    def _build_testcase_section(self, stack: SectionStack) -> None:
-        """① 测试用例管理：上传 / 删除 / 查看用例 / 查看解析 + 用例下拉框。
-
-        按钮配色 = primary（蓝，用例读写是主操作）。
-        """
-        section = stack.section("① 测试用例管理")
-
-        # 用例下拉框放区块第二行：仍交给 ActionBar 排布（不手写 row/column）
-        picker = ActionBar(section, row=1, column=0, columns=4, group=self._buttons)
-        picker.add_widget("case_label",
-                          tk.Label(section, text="当前用例：", **Theme.field_label()))
-        self.file_menu = ttk.OptionMenu(section, self.selected_file, *[])
-        picker.add_widget("file_menu", self.file_menu)
-        # 下拉框内容仍由 FileUpdater 维护（绑定行为不变）
+        # 用例下拉框（内容由 FileUpdater 维护，绑定行为不变）
+        self.file_menu = ttk.OptionMenu(root, self.selected_file, *[])
+        place("file_menu", self.file_menu, 0, 2)
         self.testcase_menu.initialize_menu(self.selected_file, self.file_menu)
 
-        bar = ActionBar(section, row=0, column=0, columns=4, group=self._buttons)
-        self.upload_button = bar.add(
-            "upload", "上传测试用例",
-            lambda: self.testcase_menu.on_upload(self.selected_file, self.file_menu),
-            kind="primary")
-        self.delete_button = bar.add(
-            "delete", "删除测试用例",
-            lambda: self.testcase_menu.on_delete(self.selected_file, self.file_menu),
-            kind="primary")
-        self.view_button = bar.add("view", "查看用例",
-                                   self.testcase_open_table.open_selected_file,
-                                   kind="primary")
-        self.inspect_button = bar.add("inspect", "查看解析", self.log_viewer.view_log,
-                                     kind="primary")
+        self.view_button = place("view", tk.Button(
+            root, text="查看用例",
+            command=self.testcase_open_table.open_selected_file,
+            **Theme.primary_button()), 0, 3)
 
-        hint = ActionBar(section, row=2, column=0, columns=1, group=self._buttons)
-        hint.add_widget("case_hint", tk.Label(
-            section, text="下拉框选择「当前用例」；上传/删除后列表会自动刷新。",
-            **Theme.hint_label()))
+        self.inspect_button = place("inspect", tk.Button(
+            root, text="查看解析", command=self.log_viewer.view_log,
+            **Theme.primary_button()), 0, 4)
 
-    # ---------------- ② 数据与通信工具 ----------------
-    def _build_tools_section(self, stack: SectionStack) -> None:
-        """② 数据与通信工具：转换信号矩阵 / can数据生成器 / can测试 / SOME/IP 回放。
+        # ---------------- row 1：数据与通信工具 ----------------
+        self.convert_matrix_button = place("convert_matrix", tk.Button(
+            root, text="转换信号矩阵", command=self.open_matrix_converter,
+            **Theme.success_button()), 1, 0)
 
-        按钮配色 = success（绿，数据处理与通信类工具）；
-        can测试、SOME/IP 回放是**单例窗口**，窗口打开期间由规则表置灰。
-        """
-        section = stack.section("② 数据与通信工具")
-        bar = ActionBar(section, row=0, column=0, columns=4, group=self._buttons)
+        self.hex_button = place("hex", tk.Button(
+            root, text="can数据生成器",
+            command=lambda: gui_handlers.can_data_generator.open_binhex_converter(root),
+            **Theme.success_button()), 1, 1)
 
-        self.convert_matrix_button = bar.add("convert_matrix", "转换信号矩阵",
-                                             self.open_matrix_converter, kind="success")
-        self.hex_button = bar.add(
-            "hex", "can数据生成器",
-            lambda: gui_handlers.can_data_generator.open_binhex_converter(self.root),
-            kind="success")
-        self.can_control_button = bar.add(
-            "can_gui", "can测试", self.open_can_gui, kind="success",
-            enabled_when=_enable_when_window_closed("can_window_open"))
-        self.someip_button = bar.add(
-            "someip", "SOME/IP 回放", self.open_someip_replay, kind="success",
-            enabled_when=_enable_when_window_closed("someip_window_open"))
+        self.can_control_button = place("can_gui", tk.Button(
+            root, text="can测试", command=self.open_can_gui,
+            **Theme.success_button()), 1, 2,
+            _enable_when_window_closed("can_window_open"))
 
-    # ---------------- ③ 图像与视频 ----------------
-    def _build_media_section(self, stack: SectionStack) -> None:
-        """③ 图像与视频：打开图片 / 提取视频帧 / 播放图片视频。
+        self.someip_button = place("someip", tk.Button(
+            root, text="SOME/IP 回放", command=self.open_someip_replay,
+            **Theme.success_button()), 1, 3,
+            _enable_when_window_closed("someip_window_open"))
 
-        按钮配色 = danger（红，沿用原实现里图像类按钮的语义色）。
-        """
-        section = stack.section("③ 图像与视频")
-        bar = ActionBar(section, row=0, column=0, columns=3, group=self._buttons)
+        # ---------------- row 2：图像与视频 + Di 执行 ----------------
+        self.image_button = place("image", tk.Button(
+            root, text="打开图片", command=self.image_open.open_image,
+            **Theme.danger_button()), 2, 0)
 
-        self.image_button = bar.add("image", "打开图片", self.image_open.open_image,
-                                    kind="danger")
-        self.read_video_button = bar.add("read_video", "提取视频帧",
-                                         self.video_extract_frames.process_video,
-                                         kind="danger")
-        self.image_video_button = bar.add(
-            "image_video", "播放图片视频",
-            gui_handlers.image_sequence_player.play_image_sequence, kind="danger")
+        self.read_video_button = place("read_video", tk.Button(
+            root, text="提取视频帧", command=self.video_extract_frames.process_video,
+            **Theme.danger_button()), 2, 1)
 
-    # ---------------- ④ 测试用例执行 ----------------
-    def _build_execute_section(self, stack: SectionStack) -> None:
-        """④ 测试用例执行：Di 测试用例（新格式：CAN + SOME/IP + 标贴校验）。
+        self.image_video_button = place("image_video", tk.Button(
+            root, text="播放图片视频",
+            command=gui_handlers.image_sequence_player.play_image_sequence,
+            **Theme.danger_button()), 2, 2)
 
-        按钮配色 = success（绿，与"执行测试"的成功语义一致）；
-        Di 窗口也是单例窗口，打开期间置灰。
-        """
-        section = stack.section("④ 测试用例执行")
-        bar = ActionBar(section, row=0, column=0, columns=4, group=self._buttons)
+        self.di_case_button = place("di_case", tk.Button(
+            root, text="Di 测试用例", command=self.open_di_cases,
+            **Theme.success_button()), 2, 3,
+            _enable_when_window_closed("di_window_open"))
 
-        self.di_case_button = bar.add(
-            "di_case", "Di 测试用例", self.open_di_cases, kind="success",
-            enabled_when=_enable_when_window_closed("di_window_open"))
+        self._apply_ui_state()                  # 建立按钮状态快照（规则表首轮生效）
 
     def open_matrix_converter(self) -> None:
         """打开"信号矩阵 转 CSV 工具"窗口（一次性工具窗，可同时开多个）"""

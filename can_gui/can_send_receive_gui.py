@@ -11,7 +11,7 @@
 组装顺序（也是阅读顺序）：
     1. 建窗口、记录传入的用例选择器；
     2. ``_init_ui_state()`` 建立界面状态变量（不碰设备、不起线程）；
-    3. ``_build_ui()`` 建界面（布局由 SectionStack/ActionBar 自动排布，无手写 row）；
+    3. ``_build_ui()`` 建界面（控件坐标沿用改造前的既有摆放，见 gui_layout 模块文档）；
     4. 启动两个常驻后台线程（相机采集、图标校验）；
     5. 拦截窗口关闭（必须先关闭设备，避免 CAN 资源泄漏）。
 
@@ -40,7 +40,7 @@ class CANFDGUI(LayoutMixin, CameraMixin, TestFlowMixin, ConfigMixin):
     def __init__(self, root, selected_file=None):
         self.root = root
         self.root.title("CANFD 设备控制")
-        self.root.geometry("1520x820")
+        self.root.geometry("1500x800")     # 与改造前一致
 
         # 用例选择器：被 main.py 调用时复用主窗口的 StringVar，独立运行时自建
         self.selected_file = (tk.StringVar(value="无文件") if selected_file is None
