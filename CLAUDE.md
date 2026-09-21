@@ -116,6 +116,9 @@ ZLG 在不同平台给出**两套形态**的库，业务层只按 Windows 的 **
 - `hudcore/platform/fonts.py` — Tk 字体回退链 + PIL 中文字体文件探测（`load_pil_font`）
 - `hudcore/can/backend.py` — CAN 驱动库探测与加载（Windows `WinDLL` / Linux `CDLL`）
 - `hudcore/ui/theme.py` — 配色与控件样式工厂（字体走跨平台回退）
+- `hudcore/ui/state.py` — 界面**按钮状态机**（`UiState` 不可变状态 + `ButtonGroup` 规则表驱动）
+- `hudcore/ui/action_bar.py` — **声明式**按钮条 `ActionBar` 与顺序布局 `SectionStack`（行号自动分配）
+- `hudcore/ui/layout.py` — 布局工具 + **grid 格子冲突审计**（`audit_widget_tree`）
 - `hudcore/ui/text_redirector.py` — print→Tk Text 线程安全重定向（tkinter 软依赖）
 
 ### 开发约定
@@ -133,6 +136,36 @@ ZLG 在不同平台给出**两套形态**的库，业务层只按 Windows 的 **
 10. 移动/拆分模块后**必须**跑 `python tools/check_static.py` —— 容器验证覆盖不到
     硬件与界面路径，`undefined name` 这类问题只能靠静态检查拦住。
 
+### 界面统一写法（hudcore/ui：按钮状态机 + 声明式布局）
+
+界面优化（v2.1）后的硬性约定，新代码请照此写：
+
+1. **按钮位置**用 `SectionStack`（往下依次放区块，行号自动分配）+ `ActionBar`
+   （一行内自动换行）声明，**不要**手写 `grid(row=…, column=…)` —— 原 CAN 界面就出现过
+   「平台」标签与「检测设备」按钮、曝光下拉框与摄像头画面各占同一格（Tk 不报错，
+   只是互相盖住，肉眼很难定位）；
+2. **按钮可用性**用 `hudcore.ui.state.UiState`（不可变状态：`busy` + 业务标志）+
+   模块级**规则表**（如 `can_gui.gui_layout.RULES`）+ `ButtonGroup.apply(state)` 统一刷新；
+   动作里只改状态（`_set_busy()` / `_set_testing()` / `_set_flag()`），
+   **不要**在各回调里各写 `btn.config(state=…)`（原实现散在 6 处，规则互相打架：
+   例如设备已关闭时"测试结束"仍会把「开始测试」点亮）；
+3. `busy` 用 `BUSY_*` 常量表达"当前占用的串行动作"，天然保证"同一时刻只做一件事"；
+4. 样式（字体/配色）一律走 `Theme`，**不要**硬编码字体名（Ubuntu 上没有「微软雅黑」）；
+5. 新增/改动界面后跑
+   `xvfb-run -a python -m pytest tests/test_ui_layout.py tests/test_can_gui_layout.py -q`
+   —— 其中 `audit_widget_tree()` 会断言**整窗零格子冲突**，源码里硬编码字体名也会被拦下；
+6. 需要"只建界面"的测试（不起相机/校验线程、不碰设备）用
+   `CANFDGUI._build_layout_only(root)`，避免把硬件依赖带进 CI。
+
+已落地的四处参考实现（改界面前先看它们，别另起炉灶）：
+
+| 窗口 | 布局 | 按钮规则表 | 界面测试 |
+|------|------|-----------|----------|
+| 主窗口 `main.py` | `SectionStack` 四个区块 + `ActionBar` | `_enable_when_window_closed()`（单例子窗口） | `tests/test_main_window.py` |
+| CAN 收发 `can_gui/` | `can_gui/gui_layout.py` 五个区块 + 右侧画面 | `can_gui/gui_layout.RULES` | `tests/test_can_gui_layout.py` |
+| Di 用例 `gui_handlers/di_case_window.py` | 三个区块 + Notebook 输出区 | `di_case_window.BUTTON_RULES` | `tests/test_di_gui.py` |
+| SOME/IP 回放 `someip_gui/` | 工具栏三组 + 左配置/右控制 | `someip_gui/ui_rules.RULES` | `tests/test_someip_gui.py` |
+
 ### 自检与自测
 
 ```bash
@@ -141,6 +174,8 @@ python tools/selftest.py        # hudcore 回归自测（跨平台可跑）
 python tools/check_imports.py   # 项目内部导入静态校验（重构改名后兜底）
 python tools/check_static.py     # 静态检查（pyflakes：undefined name 等，需 pip install pyflakes）
 python -m pytest tests -q        # 单元测试 + 架构规则守卫（需 pip install pytest）
+xvfb-run -a python -m pytest tests -q   # 含界面测试（无显示器时 GUI 用例自动跳过；
+                                        # 覆盖按钮状态机、布局零冲突、探测链路等）
 ./run.sh --check                # Linux 一键自检
 ```
 
@@ -169,7 +204,15 @@ Markdown + JSON（自动判断运行环境标签、记录逐项耗时、列出�
 - **值超出位域**的用例（报告里的 `error`）用 `python -m tools.di_range_fix` 生成修复建议
   （CSV + `--md` 一页说明给用例作者）：按"保持起始位、刚好放下取值"给出最小位域，
   并提示是否与同报文其它信号重叠；
-- GUI **[Di 测试用例]** 窗口执行完会在"报告预览（Markdown）"页签直接显示报告原文；
+- GUI **[Di 测试用例]** 窗口：
+  · 按钮可用性同样由 `UiState` + 规则表（`di_case_window.BUTTON_RULES`）统一驱动，
+    没有第二处 `config(state=…)`；
+  · **「停止执行」是真停**：窗口的 `threading.Event` → `run_cases(should_stop=…)`
+    在每条用例之间检查，剩余用例记为 `aborted`（**不计入失败**，verdict 不受影响），
+    报告里会写明"剩余 N 条未执行"；中止 run 的回归对比会把未执行用例列为 removed，
+    已加 `diff["aborted"]` 提示，不要误判成"用例被删了"；
+  · `RunReport.summary` 新增键：`aborted`（布尔）、`aborted_cases`（条数），旧键与 schema 不变；
+  · 执行完会在"报告预览（Markdown）"页签直接显示报告原文；
 - 入口：`python -m scripts.run_di_cases`（体检/执行/报告）、GUI 主界面 **[Di 测试用例]** 按钮；
 - **报告**：`RunReport.render_markdown()/write_reports()` 产出 Markdown+JSON（复用
   `tools/verify_report.py` 的转义与对比工具）；含结论统计/环境块/失败与错误归类（按原因）/
@@ -195,7 +238,7 @@ Markdown + JSON（自动判断运行环境标签、记录逐项耗时、列出�
   **不依赖界面**；库探测在 `hudcore/someip/backend.py`（环境变量 → `drivers/someip/<平台>/` → 系统路径）
 - 界面：`someip_gui/`（独立窗口；左侧配置、右侧回放/发送/日志；字段表由 ctypes 结构体自动生成）
 - 约定：库**惰性加载**（不在 import 时 dlopen）；Windows DLL 暂缺时窗口照常打开、动作置灰并给提示
-- 文档：`docs/SOMEIP_REPLAY.md`（含实测结果与排障）
+- 文档：`docs/SOMEIP_REPLAY.md`（含按钮状态机 §1.1、实测结果与排障）
 
 ### 单元测试与架构规则守卫
 

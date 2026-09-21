@@ -32,8 +32,11 @@ echo "== 项目: ${PROJECT} → 容器 /work（Wine: Z:\\work）=="
 TTY_FLAG=""
 if [ -t 0 ] && [ -t 1 ]; then TTY_FLAG="-it"; fi
 
+# 入口脚本用仓库里的版本覆盖镜像内的副本：这样改 entrypoint.sh（虚拟显示参数、桩库准备等）
+# 立即生效，不必重建镜像（Xvfb 的 MIT-SHM 开关就是这么修的）。
 exec docker run --rm ${TTY_FLAG} \
     --platform linux/amd64 \
     -v "${PROJECT}:/work" \
+    -v "${HERE}/entrypoint.sh:/usr/local/bin/entrypoint.sh:ro" \
     -w /work \
     "${IMAGE}" "$@"

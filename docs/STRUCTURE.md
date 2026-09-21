@@ -16,7 +16,7 @@ HudAutoTest/
 │   ├── platform/              OS 探测、统一路径、外部程序探测、字体
 │   ├── can/                   CAN 驱动库探测与加载（DLL / .so）
 │   ├── logging_setup.py       统一日志初始化
-│   └── ui/                    主题样式、stdout→Text 重定向
+│   └── ui/                    主题样式、按钮状态机、声明式布局、stdout→Text 重定向
 ├── can_core/                  ★ CAN 设备能力层
 │   ├── driver.py              ZLG 驱动 Python 绑定（结构体/常量/库加载）
 │   ├── can_state.py           共享状态单例（线程开关/接收缓存/锁/驱动实例/句柄）
@@ -32,7 +32,7 @@ HudAutoTest/
 │   └── auto_labeling/         自动标注（预处理 + template_matching 子包）
 ├── 界面包（依赖业务包与 hudcore）
 │   ├── gui_handlers/          主界面各功能事件处理器
-│   └── can_gui/               CAN 收发界面（相机图像 / 测试流程 / 配置 三个 Mixin）
+│   └── can_gui/               CAN 收发界面（布局与按钮状态 / 相机图像 / 测试流程 / 配置 四个 Mixin）
 ├── scripts/                   面向使用者的独立脚本（OCR 图标测试、YOLO 训练）
 ├── data/                      ★ 业务数据与运行期状态（与代码分离）
 ├── tests/                     ★ 单元测试 + 架构规则守卫
@@ -127,12 +127,16 @@ HudAutoTest/
 
 ## 6. 仍需持续改进的点
 
-1. **`can_gui/can_send_receive_gui.py` 的 `__init__` 仍是 367 行的界面构建方法** ——
-   建议按 `_build_*` 分解；因缺少界面交互自动化测试，本轮未冒险改动。
+1. ~~`can_gui/can_send_receive_gui.py` 的 `__init__` 仍是 367 行的界面构建方法~~
+   **已解决（v2.1 界面优化）**：界面构建拆到 `can_gui/gui_layout.py`（`LayoutMixin`），
+   主类缩到 70 行的"组装 + 起线程"；按钮可用性收敛为 `UiState` + `RULES` 规则表，
+   布局改用 `SectionStack`/`ActionBar` 自动排布，并补了 headless 交互测试
+   （`tests/test_ui_layout.py`、`tests/test_can_gui_layout.py`：零格子冲突 + 状态流转）。
 2. **`auto_labeling/draw_boxes.py` / `draw_boxes_v2.py` 仍是两套独立实现**（747 / 1387 行）——
    二者仅 `ensure_dir` 等少数函数逐字相同，其余逻辑不同，合并需先确认业务口径。
 3. **`camera_tools/perspective_calibration.py`(806) / `image_enhancement.py`(632) /
    `gui_handlers/can_testcase_parser.py`(563)** 仍超过 500 行，可按同样方式继续拆分。
-4. **界面逻辑缺少自动化测试** —— 当前容器验证只覆盖"能导入 + 能创建窗口 + 核心算法"，
-   建议后续为关键界面补充 headless 交互测试（Tk 可在 Xvfb 下驱动）。
+4. **界面逻辑的自动化测试** —— v2.1 已补齐"按钮状态机 + 布局零冲突 + 探测链路"三类
+   （`tests/test_ui_state.py` / `test_ui_layout.py` / `test_can_gui_layout.py`，
+   Tk 在 Xvfb 下驱动）；仍缺真实点击流程（含相机画面）的端到端用例。
 5. **`tools/selftest.py` 与 `tests/` 存在功能重叠**，可考虑把前者收敛为后者的一部分。

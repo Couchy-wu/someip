@@ -60,11 +60,20 @@ WINE_TIMEOUT="${WINE_TIMEOUT:-900}"
 DISPLAY_NUM="${DISPLAY_NUM:-:99}"
 
 # 自起 Xvfb（不用 xvfb-run：实测在本环境的模拟层下会自动选号卡住）
+#
+# ⚠ 必须带 -extension MIT-SHM：本镜像在 Apple Silicon 上以 --platform linux/amd64 运行，
+#   Linux 版 Xvfb 由 Rosetta 模拟，而 Rosetta 的共享内存记账在客户端大量使用 MIT-SHM 时会
+#   断言失败并让 Xvfb 直接 SIGTRAP：
+#       assertion failed [rem_idx != -1]: Unable to find existing allocation for
+#       shared memory segment to unmap (VMAllocationTracker.cpp:745 remove_shared_mem)
+#   实测（整套 pytest 跑到约 65% 时中招）：Xvfb 一崩，同进程的 X 连接立刻 XIO fatal，
+#   后续 GUI 项与报告都写不出来。关掉 MIT-SHM 后 Xvfb 全程存活、pytest rc=0。
+#   代价：客户端打印 `Xlib: extension "MIT-SHM" missing`（Wine 自动回退到非共享内存路径）。
 ensure_display() {
     export DISPLAY="${DISPLAY_NUM}"
     if [ -S "/tmp/.X11-unix/X${DISPLAY_NUM#:}" ]; then return 0; fi
     rm -f "/tmp/.X${DISPLAY_NUM#:}-lock" 2>/dev/null || true
-    Xvfb "${DISPLAY_NUM}" -screen 0 1280x800x24 >/tmp/xvfb.log 2>&1 &
+    Xvfb "${DISPLAY_NUM}" -screen 0 1280x800x24 -extension MIT-SHM >/tmp/xvfb.log 2>&1 &
     for _ in $(seq 1 30); do
         [ -S "/tmp/.X11-unix/X${DISPLAY_NUM#:}" ] && return 0
         sleep 0.5

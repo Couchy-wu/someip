@@ -104,6 +104,7 @@ docker/windows-sim/
 | **不在 Wine 里跑 pip**，改用容器内 Linux pip 交叉安装 | Wine 6 下 OpenSSL 无法创建 SSL 上下文（`[SSL] unknown error (_ssl.c:3138)`），pip 任何网络操作都失败；Linux pip 用 `--platform win_amd64` 直接解包 Windows wheel，效果等价 |
 | 装入**原生 UCRT** | Wine 6 内置 UCRT 缺 `fetestexcept`，导入 numpy 会直接崩溃 |
 | **自起 Xvfb**，不用 `xvfb-run -a` | 实测该环境下 `xvfb-run -a` 会挂起（自动选号 + 残留锁） |
+| Xvfb 必须 `-extension MIT-SHM` | Apple Silicon 上以 `--platform linux/amd64` 运行时，Linux 版 Xvfb 由 Rosetta 模拟，Rosetta 的共享内存记账在客户端大量用 MIT-SHM 时会断言失败并让 Xvfb **SIGTRAP**（`VMAllocationTracker.cpp:745 remove_shared_mem`）。实测整套 pytest 跑到约 65% 中招 → 验证进程的 X 连接一起断（XIO fatal）、第 19 项与报告都写不出来。关掉 MIT-SHM 后 Xvfb 全程存活、`pytest rc=0`（代价：客户端打印 `Xlib: extension "MIT-SHM" missing`，Wine 自动回退） |
 | 所有 wine 调用带 `timeout`，代码一律**写成 .py 文件**执行 | `wine python.exe -c "..."` 在该环境会挂起 |
 | 强制 `--platform linux/amd64` | 宿主为 Apple Silicon 时，本地 `ubuntu:22.04` 标签可能是 arm64；Wine 需要 amd64 容器 |
 

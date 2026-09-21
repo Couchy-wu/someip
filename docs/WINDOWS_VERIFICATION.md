@@ -2,7 +2,9 @@
 
 > 目的：在**没有 Windows 机器**的情况下，验证 HudAutoTest 在 Windows（Python 3.13）下各项功能是否正常。
 > 方法：在 Docker 容器内用 **Wine + Windows 版 CPython 3.13** 构造真实 Windows 运行时，逐项功能验证。
-> 结论：**18 项验证全部通过（18 PASS / 0 FAIL / 0 SKIP）**，并在此过程中发现并修复了多类真实缺陷。
+> 结论：**19 项验证全部通过（19 PASS / 0 FAIL / 0 SKIP）**，并在此过程中发现并修复了多类真实缺陷。
+>
+> 界面优化（v2.1）后重跑：`verify_report.json` 的 `summary.verdict = PASS`、容器退出码 `0`（此前为 1，原因是 Xvfb 在 Rosetta 下被 MIT-SHM 断言拖崩，已用 `-extension MIT-SHM` 修复，见 `docker/windows-sim/README.md` 排障表）。
 
 ---
 

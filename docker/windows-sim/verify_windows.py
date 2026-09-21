@@ -532,12 +532,19 @@ def t_someip_window():
     import tkinter as tk
     from tkinter import messagebox
     from someip_core import all_events
+    from someip_core import config as someip_config
     from someip_gui import open_replay_window
 
     # 无人值守：屏蔽模态弹窗（否则会阻塞验证）
     warns = []
     messagebox.showwarning = lambda *a, **k: warns.append(a[:1])
     messagebox.showerror = lambda *a, **k: warns.append(a[:1])
+
+    # 配置写入隔离：窗口关闭时会 save() 到 data/someip/replay_config.json，
+    # 验证套件不该改动仓库里的跟踪文件（实测会把 service_table 等键写进去）
+    # → 把配置路径指到临时目录，仍照常验证"关闭即保存"的行为。
+    tmp_cfg = Path(tempfile.mkdtemp(prefix="hudverify_someip_")) / "replay_config.json"
+    someip_config.config_path = lambda: tmp_cfg
 
     root = tk.Tk()
     root.withdraw()

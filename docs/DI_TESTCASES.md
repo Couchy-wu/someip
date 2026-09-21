@@ -232,6 +232,11 @@ tests/test_di_cases.py               33 项单测（解析/位写入/执行/校�
 - 标贴校验用合成画面跑通：命中、负向命中（判 fail）、无参考图（`unverifiable`）、
   无画面（`error`）。
 - 格式开关：默认 `legacy`、环境变量覆盖、非法值回退、按内容识别（单测断言）。
+- **中止链路**（GUI「停止执行」）：窗口的停止事件 → `run_cases(should_stop=…)` →
+  `RunReport.aborted / aborted_cases`；剩余用例未执行、**不计入失败**（verdict 不变），
+  报告与预览页签都会写明"剩余 N 条未执行"（`tests/test_di_gui.py` 断言）。
+- GUI 按钮状态机：空闲/扫描中/执行中/有报告 四种状态下的按钮可用性由规则表统一决定
+  （`tests/test_di_gui.py` 逐状态断言控件真实 `state`）。
 - SOME/IP 服务表代际：old/bplus 两代规模、切换开关、随仓库配置与代码表**逐条一致**、
   Di 用例在 bplus 代下对 `0x000C` 的缺失判定（`tests/test_someip_tables.py` 17 项）。
 
