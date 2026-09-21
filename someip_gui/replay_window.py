@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """someip_gui.replay_window —— SOME/IP 回放窗口（主类）
 
-窗口布局（1120×780，左右两大分区 + ①~⑤ 编号区块）：
+窗口布局（1280×780，左右两大分区 + ①~⑤ 编号区块）：
 
     ┌──────────────────────────────────────────────────────────────────────────────┐
     │ 工具栏（单行）：[打开服务][启动服务][停止服务][关闭服务] │ [重新检测库][导出服务表] │
@@ -54,7 +54,9 @@ class SomeipReplayWindow(ConfigPanelMixin, ControlPanelMixin):
     def __init__(self, master: tk.Misc, selected_file=None) -> None:
         self.window = tk.Toplevel(master)
         self.window.title("SOME/IP 回放（arhud 服务端）")
-        self.window.geometry("1120x780")
+        # 默认尺寸 1280x780：实测 1120x780 下 ④ 行的「发送该事件」只分到 4px、
+        # 状态栏（368px）也被裁到 322px；1280 宽时两者都放得下（控件摆放未变）
+        self.window.geometry("1280x780")
         self.window.minsize(980, 640)
         self.selected_file = selected_file
 
