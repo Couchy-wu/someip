@@ -130,8 +130,11 @@ CAN 测试界面（`can_gui/gui_test_flow.py`）与 Di 用例窗口在执行前�
 不可用时给出"设备不可用：被信号 SIGSEGV 终止…"的提示并退回体检/失败流程，**不会崩**。
 
 ```bash
-python -c "from can_core import probe_can_device as p; print(p().describe())"   # 单独探测
+python -c "from can_core import device_probe as d; print(d.probe_can_device().describe())"   # 单独探测
 ```
+
+界面入口：CAN 测试窗口的 **「检测设备」** 按钮（点一次 = 清缓存重新探测，结论进日志 + 弹窗，
+未插卡时给出排查建议），以及 Di 用例窗口点「执行」时的自动预检。
 
 ### 3.1 没有硬件时怎么验证
 

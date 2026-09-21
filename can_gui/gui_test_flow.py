@@ -50,6 +50,44 @@ class TestFlowMixin:
         threading.Thread(target=self.init_device, daemon=True).start()
 
 
+    # --------------------- 设备检测（子进程探测） ---------------------
+    def start_probe(self):
+        """点"检测设备"：在子进程里探测（忽略缓存），结论打到界面日志。"""
+        try:
+            self.probe_btn.config(state=tk.DISABLED)
+        except Exception:                                     # noqa: BLE001 - 按钮缺失也不影响探测
+            pass
+        threading.Thread(target=self.probe_device, daemon=True).start()
+
+    def probe_device(self):
+        """真正执行探测；完成后回主线程更新按钮与提示。"""
+        ok, message = False, ""
+        try:
+            from can_core import device_probe                    # 走模块属性，便于替换/测试
+            device_probe.reset_cache()                           # 手动检测即"重新检测"，不走缓存
+            result = device_probe.probe_can_device(use_cache=False)
+            ok, message = result.available, result.describe()
+        except Exception as exc:                              # noqa: BLE001
+            message = f"设备探测异常：{type(exc).__name__}: {exc}"
+        self.root.after(0, lambda: self._post_probe(ok, message))
+
+    def _post_probe(self, ok: bool, message: str) -> None:
+        """探测结果落到界面：日志 + 弹窗（未插卡时给出可读原因与排查建议）。"""
+        logging_setup.info("candata", message)
+        print(f"[CAN] {message}")
+        try:
+            self.probe_btn.config(state=tk.NORMAL)
+        except Exception:                                     # noqa: BLE001
+            pass
+        if ok:
+            messagebox.showinfo("设备检测", message + "\n\n可以点击「初始化设备」了。")
+        else:
+            messagebox.showwarning("设备检测",
+                                   message + "\n\n排查：\n"
+                                   "· 确认 USBCANFD 已插好（lsusb 能看到 ZLG 设备）\n"
+                                   "· 确认驱动库与架构匹配（thirdparty/zlg_can/<平台>-<架构>/）\n"
+                                   "· Linux 未插卡时底层 VCI 驱动会段错误，本检测已用子进程隔离")
+
     def init_device(self):
         """调用初始化函数并保存返回值
 
@@ -57,8 +95,8 @@ class TestFlowMixin:
         在主进程里直接 OpenDevice 会把整个上位机带走；探测失败则按"初始化失败"处理。
         """
         try:
-            from can_core import probe_can_device
-            probe = probe_can_device()
+            from can_core import device_probe
+            probe = device_probe.probe_can_device()
             if not probe.available:
                 logging_setup.error("candata", probe.describe())
                 print(f"[CAN] {probe.describe()}")            # 同步到界面日志

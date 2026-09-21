@@ -15,7 +15,10 @@ from pathlib import Path
 import pytest
 
 from can_data_tools import di_case_parser as parser
-from tools.di_range_fix import CSV_COLUMNS, scan_case, scan_cases, suggest_range, write_csv
+from tools.di_range_fix import (
+    CSV_COLUMNS, render_markdown, scan_case, scan_cases, suggest_range, write_csv,
+    write_markdown,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CASE_DIR = PROJECT_ROOT / parser.DEFAULT_CASE_DIR
@@ -120,3 +123,40 @@ def test_write_csv_creates_missing_dirs(tmp_path):
     path = write_csv([], tmp_path / "deep" / "fix.csv")
     assert path.is_file()
     assert path.read_text(encoding="utf-8-sig").strip().startswith("scenario_id")
+
+
+# --------------------------------------------------------------------------- 一页说明
+def test_render_markdown_one_pager_structure():
+    """给用例作者的一页说明：结论 + 汇总表 + 逐条明细 + 验证步骤，且表格列数自洽。"""
+    def unescaped_pipes(line: str) -> int:
+        return sum(1 for i, ch in enumerate(line) if ch == "|" and (i == 0 or line[i - 1] != "\\"))
+
+    cases = parser.load_cases(CASE_DIR)
+    issues = scan_cases(cases)
+    text = render_markdown(issues, cases_count=len(cases), case_dir=str(CASE_DIR),
+                           command="python -m tools.di_range_fix --md x.md")
+    assert text.startswith("# Di 用例位域问题说明（给用例作者）")
+    assert "7 个用例 / 11 条记录" in text
+    for section in ("## 汇总", "## 逐条明细", "## 改完怎么验证"):
+        assert section in text, f"缺少章节：{section}"
+    assert "0x2FD" in text and "4.4-5.1" in text and "重叠" in text
+    assert "复现命令" in text and "TestcaseCollection" in text
+
+    table_rows = [ln for ln in text.split("## 汇总", 1)[1].split("## 逐条明细", 1)[0].splitlines()
+                  if ln.startswith("| ") and "---" not in ln]
+    assert len(table_rows) == 1 + len(issues), "表头 + 每条记录"
+    for line in table_rows:
+        assert unescaped_pipes(line) == 9, f"汇总表应为 8 列：{line[:80]}"
+
+
+def test_render_markdown_handles_no_issues():
+    text = render_markdown([], cases_count=497)
+    assert "0 个用例 / 0 条记录" in text
+    assert "## 汇总" in text and "## 改完怎么验证" in text
+
+
+def test_write_markdown_creates_file(tmp_path):
+    issues = scan_cases(parser.load_cases(CASE_DIR))[:2]
+    path = write_markdown(issues, tmp_path / "deep" / "issues.md", cases_count=497)
+    assert path.is_file()
+    assert "位域问题说明" in path.read_text(encoding="utf-8")

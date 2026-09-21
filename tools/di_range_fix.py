@@ -144,6 +144,56 @@ def scan_cases(cases, include_edge: bool = False) -> list[RangeIssue]:
     return sorted(issues, key=lambda i: (i.scenario_id, i.signal_id, i.bit_range))
 
 
+def render_markdown(issues, cases_count: int = 0, case_dir: str = "",
+                    command: str = "") -> str:
+    """把扫描结果渲染成「给用例作者的一页说明」（结论 + 汇总表 + 逐条 + 验证方法）。"""
+    from tools.verify_report import md_cell
+
+    bad = [i for i in issues if not i.fits]
+    cases_hit = len({i.scenario_id for i in bad})
+    out: list[str] = ["# Di 用例位域问题说明（给用例作者）", "",
+                      f"**结论**：扫描 {cases_count or '?'} 个用例，发现 **{cases_hit} 个用例 / "
+                      f"{len(bad)} 条记录**的取值**超出其声明位域**。执行器对这种用例判 `error`，"
+                      f"**不会截断或掩码**（避免把数据问题伪装成通过），因此这些用例当前跑不出正确画面。", ""]
+    if command:
+        out.append(f"- 复现命令: `{command}`")
+    if case_dir:
+        out.append(f"- 用例目录: `{case_dir}`")
+    out += ["", "## 汇总", "",
+            "| 用例 | 信号 | 现位域 | 位数 | 上限 | 取值 | 建议位域 | 是否重叠 |",
+            "|------|------|--------|------|------|------|----------|----------|"]
+    for i in bad:
+        out.append(f"| {md_cell(i.scenario_id, 60)} | {i.signal_id} | `{i.bit_range}` | {i.width} | "
+                   f"{i.max_value} | {i.value} | `{i.suggested_range or '-'}` | "
+                   f"{'⚠ 是' if i.overlap else '否'} |")
+    out += ["", "## 逐条明细", ""]
+    for i in bad:
+        out += [f"### {i.scenario_id} — {i.signal_id} `{i.bit_range}`", "",
+                f"- 取值 `{i.value}`（需要 {i.needed_bits} 位；现位域 {i.width} 位，上限 {i.max_value}）",
+                f"- 原始说明：{md_cell(i.desc or '（无）', 300)}",
+                f"- 建议动作：{i.action}"]
+        if i.overlap:
+            out.append(f"- ⚠ 加宽后与同报文信号重叠：`{i.overlap}` —— 需确认位域划分，不能只看宽度")
+        out.append("")
+    out += ["## 改完怎么验证", "",
+            "1. 改用例位域后跑一次体检：`python -m scripts.run_di_cases --report logs/di_run.json`；",
+            "2. 报告的「失败与错误」里应不再出现「值超出位域范围（用例与位域定义矛盾）」；",
+            "3. 本工具复查：`python -m tools.di_range_fix`（应输出 0 条）；",
+            "4. 单测含一致性断言：`python -m pytest tests/test_di_range_fix.py -q`。",
+            ""]
+    return "\n".join(out).rstrip() + "\n"
+
+
+def write_markdown(issues, path: str | Path, cases_count: int = 0, case_dir: str = "",
+                   command: str = "") -> Path:
+    """写一页说明 Markdown。"""
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(render_markdown(issues, cases_count, case_dir, command),
+                 encoding="utf-8")
+    return p
+
+
 def write_csv(issues, path: str | Path) -> Path:
     """写 CSV（UTF-8 with BOM，Excel 直接打开不乱码）。"""
     p = Path(path)
@@ -161,6 +211,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--cases", default=str(parser.DEFAULT_CASE_DIR),
                     help="用例目录或单个文件（默认 TestcaseCollection/Di_testcases）")
     ap.add_argument("--out", default="logs/di_range_fix.csv", help="CSV 输出路径")
+    ap.add_argument("--md", default=None,
+                    help="同时写一份「给用例作者的一页说明」Markdown"
+                         "（建议 logs/di_range_issues.md）")
     ap.add_argument("--include-ok", action="store_true",
                     help="连「放得下但贴边（用掉位域最高位）」的记录也列出")
     args = ap.parse_args(argv)
@@ -178,6 +231,10 @@ def main(argv: list[str] | None = None) -> int:
     if len(issues) > 10:
         print(f"  …（其余 {len(issues) - 10} 条见 CSV）")
     print(f"修复建议已写入：{path}")
+    if args.md:
+        md = write_markdown(issues, args.md, cases_count=len(cases), case_dir=str(args.cases),
+                            command="python -m tools.di_range_fix --md " + str(args.md))
+        print(f"一页说明已写入：{md}")
     return 0
 
 

@@ -158,8 +158,12 @@ GUI 里同样的报告直接显示在 **[Di 测试用例]** 窗口的「报告�
 
 ```bash
 python -m tools.di_range_fix                       # 扫描用例集 → logs/di_range_fix.csv
+python -m tools.di_range_fix --md logs/di_range_issues.md   # 另出一页说明（可直接发给用例作者）
 python -m tools.di_range_fix --include-ok          # 连"贴边（用满位域最高位）"的记录也列出
 ```
+
+`--md` 产出的「位域问题说明」包含：结论（多少个用例/多少条记录）、汇总表（现位域/位数/上限/取值/
+建议位域/是否重叠）、逐条明细（含用例里的原始 desc 与建议动作）、以及**改完怎么验证**的四步。
 
 CSV 逐条给出：`suggested_range`（保持起始位、刚好放下取值的最小位域，如 `4.4-5.0` + 38 → `4.4-5.1`）、
 `overlap`（加宽后与同报文其它信号**重叠**则提示，需人工确认）、`action`（一句话结论）。

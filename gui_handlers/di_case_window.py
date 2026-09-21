@@ -242,8 +242,8 @@ class DiCaseWindow:
         note = ""
         can_sender = None
         try:
-            from can_core import probe_can_device
-            probe = probe_can_device()
+            from can_core import device_probe
+            probe = device_probe.probe_can_device()
             if not probe.available:
                 return None, None, None, ("[提示] " + probe.describe() +
                                           " → 本次只做体检（不实际下发）")

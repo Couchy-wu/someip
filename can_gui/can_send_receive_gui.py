@@ -257,6 +257,20 @@ class CANFDGUI(CameraMixin, TestFlowMixin, ConfigMixin):
         )
         self.init_btn.grid(row=0, column=0, pady=5, padx=10, sticky='ew')
 
+        # 按键：检测设备（子进程探测；未插卡时底层驱动会段错误，不能在主进程里试）
+        self.probe_btn = tk.Button(
+            root,
+            text="检测设备",
+            font=("微软雅黑", 12),
+            bg="#5BC0DE",    # 浅蓝
+            fg="white",
+            width=10,
+            height=1,
+            activebackground="#31B0D5",
+            command=self.start_probe,
+        )
+        self.probe_btn.grid(row=0, column=3, pady=5, padx=10, sticky='ew')
+
         # 按键：关闭设备按钮（初始不可用）
         self.close_btn = tk.Button(
             root,
