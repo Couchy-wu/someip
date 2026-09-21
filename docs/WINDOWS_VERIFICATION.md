@@ -6,6 +6,8 @@
 
 ---
 
+> 报告生成：`tools/verify_report.py`（Markdown + JSON，内置与上次运行对比；单测 `tests/test_verify_report.py`）。
+
 ## 1. 验证环境
 
 | 项目 | 值 |

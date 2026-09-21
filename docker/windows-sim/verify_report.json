@@ -1,102 +1,199 @@
 {
-  "platform": "Windows-2008ServerR2-6.1.7601-SP1",
-  "python": "3.13.15 (main, Sep  1 2026, 14:16:48) [MSC v.1944 64 bit (AMD64)]",
-  "executable": "C:\\Python313\\python.exe",
+  "schema": "hudautotest.verify-report/2",
+  "generated_at": "2026-09-21 14:10:08",
+  "label": "Windows（Wine 容器内 + Windows 版 CPython）",
+  "title": "HudAutoTest — 环境功能验证报告（Windows（Wine 容器内 + Windows 版 CPython））",
+  "command": "C:\\Python313\\python.exe verify_windows.py --expect win",
+  "environment": {
+    "平台": "Windows-2008ServerR2-6.1.7601-SP1",
+    "系统": "Windows 2008ServerR2",
+    "机器": "AMD64",
+    "Python": "3.13.15",
+    "解释器": "C:\\Python313\\python.exe",
+    "项目根": "Z:\\work",
+    "运行方式": "Wine 容器内运行 Windows 版 CPython",
+    "CAN 驱动": "Z:\\work\\drivers\\windows\\zlgcan.dll；  接口形态：unknown；  警告：接口形态无法识别（缺 ZCAN: ZCAN_OpenDevice, ZCAN_CloseDevice, ZCAN_InitCAN, ZCAN_StartCAN, ZCAN_Transmit, ZCAN_Receive, ZCAN_GetReceiveNum, ZCAN_SetValue, ZCAN_GetDeviceInf；缺 VCI: VCI_OpenDevice, VCI_CloseDevice, VCI_InitCAN, VCI_StartCAN, VCI_Transmit, VCI_Receive, VCI_GetReceiveNum）",
+    "SOME/IP 库": "未找到 SOME/IP 服务端库（libarhud_server.dll / arhud_server.dll）；  1) 把 libarhud_server.dll 放到 thirdparty/arhud_someip/windows/（或设置 HUD_SOMEIP_LIB=<完整路径>）；旧位置 drivers/someip/windows/ 仍兼容；  2) 当前仓库**暂无 Windows DLL 产物**：需用 MSVC 编译 arhud_python_server；     （编译方式见 docs/SOMEIP_REPLAY.md「Windows 支持」一节）；  3) 临时替代：在 Ubuntu 上运行本功能，或用 WSL/容器承载 SOME/IP 回放"
+  },
+  "summary": {
+    "total": 19,
+    "passed": 19,
+    "failed": 0,
+    "skipped": 0,
+    "pass_rate": 100.0,
+    "duration_s": 42.82,
+    "verdict": "PASS"
+  },
+  "failures": [],
+  "skips": [],
+  "diff": {
+    "available": true,
+    "previous_schema": "hudautotest.verify-report/2",
+    "legacy_previous": false,
+    "previous_at": "2026-09-21 14:09:15",
+    "previous_verdict": "PASS",
+    "regressions": [],
+    "fixed": [],
+    "still_failing": [],
+    "added": [],
+    "removed": []
+  },
+  "notes": [
+    "容器/虚拟显示内无法验证：真实 CAN 硬件、外部程序界面、GPU 路径（详见 docker/windows-sim/README.md §6）",
+    "逐项超时上限 180s（可用 HUD_VERIFY_TIMEOUT 调整），超时项判 FAIL 但会继续后续验证"
+  ],
   "results": [
     {
-      "name": "1. Windows 运行时环境",
+      "name": "1. 运行时环境（OS / Python / 架构）",
       "status": "PASS",
-      "detail": "platform.system()=Windows, sys.platform=win32, Python=3.13.15, arch=AMD64, 64bit=True, exe=python.exe"
+      "detail": "platform.system()=Windows, sys.platform=win32, Python=3.13.15, arch=AMD64, 64bit=True, exe=python.exe",
+      "duration_s": 0.06,
+      "index": 1,
+      "reproduce": ""
     },
     {
       "name": "2. hudcore 平台探测（system）",
       "status": "PASS",
-      "detail": "OS=Windows Python=3.13.15 arch=AMD64 | exe_suffix='.exe' | py_status=ok"
+      "detail": "OS=Windows Python=3.13.15 arch=AMD64 | exe_suffix='.exe' | py_status=ok",
+      "duration_s": 0.0,
+      "index": 2,
+      "reproduce": ""
     },
     {
       "name": "3. 路径层 + 中文路径读写",
       "status": "PASS",
-      "detail": "root=Z:\\work; 中文写入/读取成功"
+      "detail": "root=Z:\\work; 中文写入/读取成功",
+      "duration_s": 0.01,
+      "index": 3,
+      "reproduce": ""
     },
     {
       "name": "4. 界面字体与中文渲染字体",
       "status": "PASS",
-      "detail": "selected='微软雅黑', 可用字体=0, PIL字体=<_io.BytesIO object at 0x00000000011A4D60>"
+      "detail": "selected='微软雅黑', 可用字体=0, PIL字体=<_io.BytesIO object at 0x00000000017440E0>",
+      "duration_s": 0.14,
+      "index": 4,
+      "reproduce": ""
     },
     {
       "name": "5. Tk 窗口创建（虚拟显示）",
       "status": "PASS",
-      "detail": "Tk 8.6 创建并销毁成功, geometry=320x120+0+0"
+      "detail": "Tk 8.6 创建并销毁成功, geometry=320x120+0+0",
+      "duration_s": 2.24,
+      "index": 5,
+      "reproduce": ""
     },
     {
       "name": "6. Theme 样式 + TextRedirector 重定向",
       "status": "PASS",
-      "detail": "Theme 样式数=8, TextRedirector 捕获：'重定向-测试-中文'"
+      "detail": "Theme 样式数=8, TextRedirector 捕获：'重定向-测试-中文'",
+      "duration_s": 2.38,
+      "index": 6,
+      "reproduce": ""
     },
     {
       "name": "7. main.py 导入链（不启动 GUI 主循环）",
       "status": "PASS",
-      "detail": "import main 成功；MainWindow/TextRedirector 可用；导出=3 项"
+      "detail": "import main 成功；MainWindow/TextRedirector 可用；导出=3 项",
+      "duration_s": 1.99,
+      "index": 7,
+      "reproduce": ""
     },
     {
       "name": "8. 全部界面与工具模块导入",
       "status": "PASS",
-      "detail": "72/72 模块全部导入成功"
+      "detail": "72/72 模块全部导入成功",
+      "duration_s": 0.23,
+      "index": 8,
+      "reproduce": ""
     },
     {
       "name": "9. CAN 驱动库探测与加载（桩库）",
       "status": "PASS",
-      "detail": "桩库加载成功并通过调用验证：Py_GetVersion()=534918432；本机库 zlgcan.dll(接口=unknown)"
+      "detail": "桩库加载成功并通过调用验证：Py_GetVersion()=473576736；本机库 zlgcan.dll(接口=unknown)",
+      "duration_s": 0.02,
+      "index": 9,
+      "reproduce": ""
     },
     {
       "name": "10. CAN 驱动缺失时的报错友好性",
       "status": "PASS",
-      "detail": "已按 HUD_ZLG_LIB 覆盖路径"
+      "detail": "已按 HUD_ZLG_LIB 覆盖路径",
+      "duration_s": 0.01,
+      "index": 10,
+      "reproduce": ""
     },
     {
       "name": "11. 外部程序探测不抛异常",
       "status": "PASS",
-      "detail": "ffmpeg=命中; office=未找到; editor=未找到; terminal=未找到; where_python=命中"
+      "detail": "ffmpeg=命中; office=未找到; editor=未找到; terminal=未找到; where_python=命中",
+      "duration_s": 0.04,
+      "index": 11,
+      "reproduce": ""
     },
     {
       "name": "12. 图标相似度比较（dHash）",
       "status": "PASS",
-      "detail": "相同图→True, 不同图→False, hash 差异=32 bit"
+      "detail": "相同图→True, 不同图→False, hash 差异=32 bit",
+      "duration_s": 0.07,
+      "index": 12,
+      "reproduce": ""
     },
     {
       "name": "13. GIF 合成（Pillow，含中文输出路径）",
       "status": "PASS",
-      "detail": "结果.gif 生成成功, 5 帧, 723 bytes"
+      "detail": "结果.gif 生成成功, 5 帧, 723 bytes",
+      "duration_s": 0.06,
+      "index": 13,
+      "reproduce": ""
     },
     {
       "name": "14. 图像增强 / 透视标定模块可用（cv2 链路）",
       "status": "PASS",
-      "detail": "cv2 5.0.0 中文路径读写 OK；ImageEnhancer 方法数=1"
+      "detail": "cv2 5.0.0 中文路径读写 OK；ImageEnhancer 方法数=1",
+      "duration_s": 0.02,
+      "index": 14,
+      "reproduce": ""
     },
     {
       "name": "15. CAN 信号 → 数据字节（outputMatrix.csv）",
       "status": "PASS",
-      "detail": "信号 0x095/Eng_Start_Result_Fdbk_Info_S（位=1.0-1.1, 长度=8）: 枚举0→[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] 枚举1→[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] 值随枚举变化=True"
+      "detail": "信号 0x095/Eng_Start_Result_Fdbk_Info_S（位=1.0-1.1, 长度=8）: 枚举0→[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] 枚举1→[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] 值随枚举变化=True",
+      "duration_s": 0.73,
+      "index": 15,
+      "reproduce": ""
     },
     {
       "name": "16. 信号矩阵 XLSX → CSV 转换",
       "status": "PASS",
-      "detail": "openpyxl 读写 OK，模块入口=XlsmToCsvConverter"
+      "detail": "openpyxl 读写 OK，模块入口=XlsmToCsvConverter",
+      "duration_s": 0.31,
+      "index": 16,
+      "reproduce": ""
     },
     {
-      "name": "17. 项目自带自检脚本在 Windows 下可运行",
+      "name": "17. 项目自带自检脚本可运行",
       "status": "PASS",
-      "detail": "check_imports.py rc=0 (项目内部导入全部可解析 ✓); check_static.py rc=0 (静态检查通过 ✓); selftest.py rc=0 (============================================================)"
+      "detail": "check_imports.py rc=0 (项目内部导入全部可解析 ✓); check_static.py rc=0 (静态检查通过 ✓); selftest.py rc=0 (============================================================)",
+      "duration_s": 11.03,
+      "index": 17,
+      "reproduce": ""
     },
     {
       "name": "18. 单元测试（pytest）",
       "status": "PASS",
-      "detail": ".........ss                                                              [100%]"
+      "detail": ".........                                                                [100%]",
+      "duration_s": 21.16,
+      "index": 18,
+      "reproduce": ""
     },
     {
       "name": "19. SOME/IP 回放窗口（布局与降级）",
       "status": "PASS",
-      "detail": "23 个事件，字段数 {'RTK': 27, 'PilotStatus': 7, 'VehiclePosition': 34, 'HudNavmap': 3}；状态=SOME/IP 库不可用（动作已置灰）；库不可用(已降级)"
+      "detail": "23 个事件，字段数 {'RTK': 27, 'PilotStatus': 7, 'VehiclePosition': 34, 'HudNavmap': 3}；状态=SOME/IP 库不可用（动作已置灰）；库不可用(已降级)",
+      "duration_s": 2.32,
+      "index": 19,
+      "reproduce": ""
     }
   ]
 }

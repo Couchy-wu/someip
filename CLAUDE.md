@@ -141,6 +141,10 @@ python -m pytest tests -q        # 单元测试 + 架构规则守卫（需 pip i
 ./run.sh --check                # Linux 一键自检
 ```
 
+验证报告：`docker/windows-sim/verify_windows.py` 跑完后由 `tools/verify_report.py` 生成
+Markdown + JSON（自动判断运行环境标签、记录逐项耗时、列出失败/跳过原因，并与**上一次报告**做
+回归对比：新增失败 / 已修复 / 持续失败）。改报告格式请同步 `tests/test_verify_report.py`。
+
 ### Di 测试用例（can_data_tools/di_case_*，与旧链路并存）
 
 - **两套格式用开关区分**（`can_data_tools/case_format.py`，默认 `legacy`）：

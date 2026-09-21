@@ -28,8 +28,10 @@ import platform
 import shutil
 import subprocess
 import sys
+from datetime import datetime
 import tempfile
 import threading
+import time
 import traceback
 from pathlib import Path
 
@@ -38,10 +40,12 @@ from pathlib import Path
 RESULTS: list[dict] = []
 
 
-def record(name: str, status: str, detail: str = "") -> None:
-    RESULTS.append({"name": name, "status": status, "detail": detail})
+def record(name: str, status: str, detail: str = "", duration_s: float = 0.0) -> None:
+    RESULTS.append({"name": name, "status": status, "detail": detail,
+                    "duration_s": round(duration_s, 2), "index": len(RESULTS) + 1})
     icon = {"PASS": "[PASS]", "FAIL": "[FAIL]", "SKIP": "[SKIP]"}[status]
-    print(f"{icon} {name}" + (f"  — {detail}" if detail else ""), flush=True)
+    spent = f" ({duration_s:.1f}s)" if duration_s else ""
+    print(f"{icon} {name}{spent}" + (f"  — {detail}" if detail else ""), flush=True)
 
 
 # 单项超时（秒）：Windows 程序在 Wine / 无显示环境里可能挂起（例如 Tk 阻塞），
@@ -54,6 +58,7 @@ def test(name: str):
     def deco(fn):
         def wrapper():
             box: dict = {}
+            started = time.time()
 
             def run():
                 try:
@@ -69,17 +74,18 @@ def test(name: str):
                                   name=f"verify-{fn.__name__}")
             th.start()
             th.join(ITEM_TIMEOUT)
+            spent = time.time() - started
             if th.is_alive():
                 record(name, "FAIL", f"超时（>{ITEM_TIMEOUT}s）未返回，可能阻塞在 "
-                                     f"GUI/外部程序调用；已跳过并继续后续验证")
+                                     f"GUI/外部程序调用；已跳过并继续后续验证", spent)
                 return
             if "error" in box:
                 exc = box["error"]
-                record(name, "FAIL", f"{type(exc).__name__}: {exc}")
+                record(name, "FAIL", f"{type(exc).__name__}: {exc}", spent)
                 print(box.get("tb", ""), flush=True)
                 return
             status, detail = box.get("result", ("FAIL", "无返回值"))
-            record(name, status, detail)
+            record(name, status, detail, spent)
         wrapper.__name__ = fn.__name__
         return wrapper
     return deco
@@ -108,7 +114,7 @@ def exe_python() -> str:
 
 # ---------------------------------------------------------------- 1. 运行时
 
-@test("1. Windows 运行时环境")
+@test("1. 运行时环境（OS / Python / 架构）")
 def t_runtime():
     from hudcore.platform.system import IS_WINDOWS, PYTHON_VERSION, PYTHON_VERSION_INFO
     info = (f"platform.system()={platform.system()}, sys.platform={sys.platform}, "
@@ -483,7 +489,7 @@ def t_matrix_csv():
 
 # ---------------------------------------------------------------- 17. 项目自检
 
-@test("17. 项目自带自检脚本在 Windows 下可运行")
+@test("17. 项目自带自检脚本可运行")
 def t_project_scripts():
     outputs = []
     for script in ("tools/check_imports.py", "tools/check_static.py", "tools/selftest.py"):
@@ -579,6 +585,38 @@ def t_someip_window():
 
 # ---------------------------------------------------------------- main
 
+def _auto_label(explicit: str = "") -> str:
+    """报告标签：显式指定优先，否则按实际运行环境判断（Wine / Windows / Linux）。"""
+    if explicit:
+        return explicit
+    import os
+    if os.environ.get("WINEPREFIX"):
+        return "Windows（Wine 容器内 + Windows 版 CPython）"
+    if sys.platform == "win32":
+        return "Windows（本机）"
+    if sys.platform.startswith("linux"):
+        name = "Linux"
+        try:
+            os_release = Path("/etc/os-release").read_text(encoding="utf-8")
+            for line in os_release.splitlines():
+                if line.startswith("PRETTY_NAME="):
+                    name = line.split("=", 1)[1].strip().strip('"')
+                    break
+        except OSError:
+            pass
+        return f"{name}（容器内）"
+    return platform.platform()
+
+
+def _load_previous(json_path: Path):
+    """读取上一次报告（供回归对比）；失败/未开启时返回 None。"""
+    try:
+        from tools.verify_report import load_previous
+        return load_previous(json_path)
+    except Exception:                                  # noqa: BLE001
+        return None
+
+
 def main() -> int:
     global EXPECT
     ap = argparse.ArgumentParser()
@@ -586,11 +624,20 @@ def main() -> int:
     ap.add_argument("--report", default=str(Path(__file__).with_name("verify_report.md")))
     ap.add_argument("--json", default=str(Path(__file__).with_name("verify_report.json")))
     ap.add_argument("--skip", default="", help="逗号分隔的测试编号，跳过这些项")
+    ap.add_argument("--label", default="", help="报告标题里的运行环境标签（默认自动判断）")
+    ap.add_argument("--no-diff", action="store_true", help="不与上次 JSON 报告做回归对比")
     args = ap.parse_args()
     EXPECT = args.expect
 
+    from tools.verify_report import (Item, ReportMeta, collect_environment,
+                                     summarize, write_reports)
+
+    json_path = Path(args.json)
+    previous = None if args.no_diff else _load_previous(json_path)
+    started_at = time.time()
+
     print("=" * 72)
-    print(" HudAutoTest — Windows 环境功能验证")
+    print(f" HudAutoTest — 环境功能验证（{_auto_label(args.label)}）")
     print(f" 项目根: {PROJECT_ROOT}")
     print(f" 解释器: {sys.executable}")
     print(f" Python : {sys.version.split()[0]}  platform={platform.platform()}")
@@ -618,25 +665,30 @@ def main() -> int:
             print(f"   ✗ {r['name']}: {r['detail']}")
     print("=" * 72)
 
-    # 写报告
-    md = ["# HudAutoTest — Windows 环境功能验证报告", "",
-          f"- 运行环境: `{platform.platform()}`",
-          f"- 解释器: `{sys.executable}`",
-          f"- Python: `{sys.version.split()[0]}`",
-          f"- 项目根: `{PROJECT_ROOT}`", "",
-          f"**结果：{passed} 通过 / {len(failed)} 失败 / {skipped} 跳过**", "",
-          "| # | 验证项 | 结果 | 证据 |", "|---|--------|------|------|"]
-    for i, r in enumerate(RESULTS, 1):
-        # 注意：转义与截断放在 f-string 之外完成 —— Python < 3.12 的 f-string
-        # 表达式内不允许出现反斜杠，否则整个模块会语法错误。
-        detail = r["detail"].replace("|", "\\|")[:220]
-        md.append(f"| {i} | {r['name']} | {r['status']} | {detail} |")
-    Path(args.report).write_text("\n".join(md) + "\n", encoding="utf-8")
-    Path(args.json).write_text(json.dumps(
-        {"platform": platform.platform(), "python": sys.version,
-         "executable": sys.executable, "results": RESULTS},
-        ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"报告: {args.report}\nJSON: {args.json}")
+    # 写报告（Markdown + JSON；含环境块、耗时、失败/跳过清单与上次对比）
+    items = [Item(name=r["name"], status=r["status"], detail=r["detail"],
+                  duration_s=r.get("duration_s", 0.0), index=r.get("index", i))
+             for i, r in enumerate(RESULTS, 1)]
+    meta = ReportMeta(
+        label=_auto_label(args.label),
+        command=" ".join([sys.executable, str(Path(__file__).name), f"--expect {args.expect}"]
+                         + ([f"--skip {args.skip}"] if args.skip else [])),
+        environment=collect_environment(PROJECT_ROOT),
+        generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        notes=[
+            "容器/虚拟显示内无法验证：真实 CAN 硬件、外部程序界面、GPU 路径（详见 docker/windows-sim/README.md §6）",
+            f"逐项超时上限 {ITEM_TIMEOUT}s（可用 HUD_VERIFY_TIMEOUT 调整），超时项判 FAIL 但会继续后续验证",
+        ],
+    )
+    md_path, json_written = write_reports(meta, items, args.report, args.json, previous)
+    stats = summarize(items)
+    if previous:
+        from tools.verify_report import diff_runs
+        d = diff_runs(previous, items)
+        if d.get("available"):
+            print(f" 与上次对比: 新增失败 {len(d['regressions'])}、已修复 {len(d['fixed'])}、"
+                  f"持续失败 {len(d['still_failing'])}（上次 {d.get('previous_at') or '未知时间'}）")
+    print(f" 总耗时 {stats['duration_s']}s｜报告: {md_path}\n JSON: {json_written}")
     return 1 if failed else 0
 
 
