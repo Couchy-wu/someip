@@ -37,3 +37,4 @@ thirdparty/zlg_can/**
 # 报告产物（验证套件 / Di 用例执行报告；按需生成，不入库）
 logs/*.md
 logs/*.json
+logs/*.png

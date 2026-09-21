@@ -10,25 +10,23 @@
 设计：以 Mixin 提供能力，由 CANFDGUI 组合；行为与拆分前一致。
 依赖：Tkinter / PIL / OpenCV / camera_tools（预览、标定、错误图检测）/ image_testing（相似度）。
 """
-import os
-import tkinter as tk
-from tkinter import messagebox, ttk
-import threading
-from can_core import device
-import re
-import time
-import xml.etree.ElementTree as ET
-from can_data_tools.testcase_runner import LogParser
-from PIL import Image, ImageTk, ImageDraw, ImageFont
-from camera_tools.camera_preview import CameraViewer, rotate_image_180, set_exposure
-import cv2
-from camera_tools.perspective_calibration import PerspectiveCalibrator
-import tempfile, glob
-import numpy as np
-from camera_tools.error_image_detection import is_error_image
 import datetime
+import glob
 import json
+import os
 import queue
+import threading
+import time
+import tkinter as tk
+from tkinter import messagebox
+
+import cv2
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont, ImageTk
+
+from camera_tools.camera_preview import CameraViewer, rotate_image_180, set_exposure
+from camera_tools.error_image_detection import is_error_image
+from camera_tools.perspective_calibration import PerspectiveCalibrator
 from image_testing.image_similarity import compare_with_precomputed_hash
 
 # 判断是否被 import 调用
@@ -386,10 +384,9 @@ class CameraMixin:
         if hasattr(self, "_camera_viewer") and self._camera_viewer is not None:
             cap = getattr(self._camera_viewer, "cap", None)
             if cap is not None and cap.isOpened():
-                # 调用 camera_preview 中封装好的 set_exposure
-                success = set_exposure(cap, new_exp, verbose=True)
-                # if not success:
-                #     print(f"[WARN] 曝光值 {new_exp} 设置失败，保持原值")
+                # 调用 camera_preview 中封装好的 set_exposure（返回是否成功；失败仅告警）
+                if not set_exposure(cap, new_exp, verbose=True):
+                    print(f"[WARN] 曝光值 {new_exp} 设置失败，保持原值")
             # 同时更新实例内部的 exposure 属性，防止后续 restart 时使用旧值
             self._camera_viewer.exposure = new_exp
         else:

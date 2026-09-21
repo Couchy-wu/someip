@@ -2,9 +2,12 @@
 """tests/test_can_gui_probe.py —— CAN 界面「检测设备」入口（gui_test_flow 的探测逻辑）
 
 不构造整个 CAN GUI（依赖相机/视频等重资源），只验证探测这条链路的编排：
-  · `start_probe()` 禁用按钮并起线程；
+  · `start_probe()` 切到"检测中"状态（按钮由状态机置灰）并起线程；
   · `probe_device()` **忽略缓存**重新探测，并把结论回主线程；
-  · `_post_probe()` 恢复按钮、写日志，并按结果弹提示（未插卡时给排查建议）。
+  · `_post_probe()` 结束"检测中"状态、写日志，并按结果弹提示（未插卡时给排查建议）。
+
+按钮可用性自本次重构起由 `can_gui.gui_layout.RULES` 规则表统一决定，
+因此这里用真实的 `ButtonGroup` 承载一个假按钮，断言"对外可见的状态变化"。
 """
 from __future__ import annotations
 
@@ -15,6 +18,8 @@ import pytest
 
 from can_core import device_probe
 from can_gui import gui_test_flow
+from can_gui.gui_layout import RULES, LayoutMixin
+from hudcore.ui import BUSY_NONE, BUSY_PROBE, ButtonGroup
 
 
 class _FakeButton:
@@ -24,6 +29,8 @@ class _FakeButton:
     def config(self, **kwargs):
         if "state" in kwargs:
             self.states.append(str(kwargs["state"]))
+
+    configure = config                      # 状态机统一走 configure(state=...)
 
     @property
     def state(self) -> str:
@@ -42,10 +49,20 @@ class _FakeRoot:
         return "id"
 
 
+class _Harness(gui_test_flow.TestFlowMixin, LayoutMixin):
+    """只组合"流程 + 按钮状态机"两个 Mixin（不含相机/配置），足够覆盖探测链路。"""
+
+
 def _harness():
-    obj = gui_test_flow.TestFlowMixin()
+    """只搭"探测链路"需要的部件：假按钮 + 假主线程 + 真实状态机。"""
+    obj = _Harness()
     obj.probe_btn = _FakeButton()
     obj.root = _FakeRoot()
+    obj._busy = BUSY_NONE
+    obj.device_handle = None
+    obj.buttons = ButtonGroup("can_gui_test")
+    obj.buttons.add("probe", obj.probe_btn, RULES["probe"])
+    obj._apply_ui_state()                  # 初始态：空闲且无设备 → 可点
     return obj
 
 
@@ -63,6 +80,7 @@ def test_start_probe_disables_button_and_spawns_thread(monkeypatch):
                         lambda self: done.set())
     obj.start_probe()
     assert obj.probe_btn.state == "disabled", "探测期间应禁用按钮，避免重复点击"
+    assert obj._busy == BUSY_PROBE, "应进入「检测中」状态（其它按钮据此一并置灰）"
     assert done.wait(5), "应在后台线程里执行探测"
 
 
@@ -113,7 +131,7 @@ def test_post_probe_restores_button_logs_and_warns(monkeypatch, capsys):
     monkeypatch.setattr(gui_test_flow.messagebox, "showinfo",
                         lambda *a, **k: shown.append(a))
     obj = _harness()
-    obj.probe_btn.config(state="disabled")
+    obj.buttons.force("disabled", "probe")   # 模拟"探测中"（状态机维护的置灰）
 
     obj._post_probe(False, "CAN 设备不可用：被信号 SIGSEGV 终止")
     assert obj.probe_btn.state == "normal", "探测结束后应恢复按钮"

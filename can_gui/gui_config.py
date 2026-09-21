@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """can_gui.gui_config —— 配置读写与子窗口管理（Mixin）
 
 从 can_send_receive_gui.py 拆出：
@@ -6,30 +5,22 @@
   · 子窗口打开与关闭处理
 
 设计：以 Mixin 提供能力，由 CANFDGUI 组合；行为与拆分前一致。
+样式（字体）统一走 hudcore.ui.Theme，不再硬编码「微软雅黑」。
 """
+from __future__ import annotations
+
 import os
-import tkinter as tk
-from tkinter import messagebox, ttk
-import threading
-from can_core import device
 import re
 import time
+import tkinter as tk
 import xml.etree.ElementTree as ET
-from can_data_tools.testcase_runner import LogParser
-from PIL import Image, ImageTk, ImageDraw, ImageFont
-from camera_tools.camera_preview import CameraViewer, rotate_image_180, set_exposure
-import cv2
-from camera_tools.perspective_calibration import PerspectiveCalibrator
-import tempfile, glob
-import numpy as np
-from camera_tools.error_image_detection import is_error_image
-import datetime
-import json
-import queue
-from image_testing.image_similarity import compare_with_precomputed_hash
+from tkinter import messagebox, ttk
+
+from hudcore.ui import Theme
 
 # 判断是否被 import 调用
 IS_STANDALONE = __name__ == "__main__"
+
 
 
 
@@ -61,8 +52,9 @@ class ConfigMixin:
         if self.sub_window is not None and self.sub_window.winfo_exists():
             return  
 
-        # 禁用按钮
-        self.sub_btn.config(state=tk.DISABLED)
+        # 子窗口视为"已打开"：交给状态机置灰（规则表里 sub 的规则是"空闲即可用"）
+        self._subwindow_open = True
+        self._apply_ui_state()
 
         # 创建子窗口
         self.sub_window = tk.Toplevel(self.root)
@@ -92,7 +84,7 @@ class ConfigMixin:
         frame.pack(pady=50, padx=60, fill="both", expand=True)
 
         # --- 1. 选择设备 ---
-        tk.Label(frame, text="选择设备:", font=("微软雅黑", 10)).grid(row=0, column=0, sticky='w', pady=10)
+        tk.Label(frame, text="选择设备:", font=Theme.font_tuple(10)).grid(row=0, column=0, sticky='w', pady=10)
         self.device_var = tk.StringVar(value=device_default)
         device_combobox = ttk.Combobox(
             frame,
@@ -106,12 +98,12 @@ class ConfigMixin:
             ],
             state="readonly",
             width=30,
-            font=("微软雅黑", 10)
+            font=Theme.font_tuple(10)
         )
         device_combobox.grid(row=0, column=1, padx=10, pady=10)
 
         # --- 2. 是否启用合并接收 ---
-        tk.Label(frame, text="合并接收:", font=("微软雅黑", 10)).grid(row=1, column=0, sticky='w', pady=10)
+        tk.Label(frame, text="合并接收:", font=Theme.font_tuple(10)).grid(row=1, column=0, sticky='w', pady=10)
 
         # 映射：显示文本 → 实际值
         self.merge_display_to_value = {"不启用": 0, "启用": 1}
@@ -124,12 +116,12 @@ class ConfigMixin:
             values=["不启用", "启用"],
             state="readonly",
             width=30,
-            font=("微软雅黑", 10)
+            font=Theme.font_tuple(10)
         )
         merge_combobox.grid(row=1, column=1, padx=10, pady=10)
 
         # --- 3. 发送类型 ---
-        tk.Label(frame, text="发送类型:", font=("微软雅黑", 10)).grid(row=2, column=0, sticky='w', pady=10)
+        tk.Label(frame, text="发送类型:", font=Theme.font_tuple(10)).grid(row=2, column=0, sticky='w', pady=10)
         self.transmit_type_var = tk.StringVar(value=transmit_default)
         transmit_combobox = ttk.Combobox(
             frame,
@@ -137,12 +129,12 @@ class ConfigMixin:
             values=["正常发送", "单次发送", "自发自收", "单次自发自收"],
             state="readonly",
             width=30,
-            font=("微软雅黑", 10)
+            font=Theme.font_tuple(10)
         )
         transmit_combobox.grid(row=2, column=1, padx=10, pady=10)
 
         # --- 4. 选择通道 ---
-        tk.Label(frame, text="选择通道:", font=("微软雅黑", 10)).grid(row=3, column=0, sticky='w', pady=10)
+        tk.Label(frame, text="选择通道:", font=Theme.font_tuple(10)).grid(row=3, column=0, sticky='w', pady=10)
         self.chn_var = tk.StringVar(value=str(chn_default))
         chn_combobox = ttk.Combobox(
             frame,
@@ -150,7 +142,7 @@ class ConfigMixin:
             values=["0", "1"],
             state="readonly",
             width=30,
-            font=("微软雅黑", 10)
+            font=Theme.font_tuple(10)
         )
         chn_combobox.grid(row=3, column=1, padx=10, pady=10)
 
@@ -158,7 +150,7 @@ class ConfigMixin:
         save_btn = tk.Button(
             self.sub_window,
             text="保存配置",
-            font=("微软雅黑", 10),
+            font=Theme.font_tuple(10),
             bg="#4A90E2",
             fg="white",
             command=lambda: self.save_config_to_xml(
@@ -168,6 +160,10 @@ class ConfigMixin:
                 self.chn_var.get()  
             )
         )
+        tk.Label(self.sub_window, justify="left", anchor="w",
+                 **Theme.hint_label(text="说明：设备类型/通道号需与现场硬件一致；"
+                                         "「自发自收」用于无总线时的自测。")
+                 ).pack(fill="x", padx=20)
         save_btn.pack(pady=20)
 
 
@@ -180,7 +176,8 @@ class ConfigMixin:
             except tk.TclError:
                 pass
             self.sub_window = None
-        self.sub_btn.config(state=tk.NORMAL)
+        self._subwindow_open = False
+        self._apply_ui_state()
 
 
     # 加载 XML 配置
@@ -270,13 +267,14 @@ class ConfigMixin:
         try:
             with open(config_file, 'w', encoding='utf-8') as f:
                 f.write(current_content)
-            messagebox.showinfo("成功", f"配置已保存")
+            messagebox.showinfo("成功", "配置已保存")
 
             # 主动关闭并清理
             if self.sub_window is not None:
                 self.sub_window.destroy()
             self.sub_window = None
-            self.sub_btn.config(state=tk.NORMAL)
+            self._subwindow_open = False
+            self._apply_ui_state()
         except Exception as e:
             messagebox.showerror("错误", f"保存配置失败: {e}")
 

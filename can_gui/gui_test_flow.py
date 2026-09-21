@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """can_gui.gui_test_flow —— 测试流程编排与设备收发（Mixin）
 
 从 can_send_receive_gui.py 拆出：
@@ -7,34 +6,28 @@
   · 自动化测试执行、状态文本与暂停/恢复、完成提示
   · 窗口关闭与清理
 
-设计：以 Mixin 提供能力，由 CANFDGUI 组合；行为与拆分前一致。
-依赖：can_core（设备收发）/ can_data_tools（用例解析）。
+设计：以 Mixin 提供能力，由 CANFDGUI 组合。
+按钮可用性**不在这里逐条 config** —— 动作只改状态（`_set_busy()` / `_set_testing()`），
+由 `can_gui.gui_layout` 的规则表统一刷新（见 hudcore.ui.state）。
+
+依赖：can_core（设备收发）/ can_data_tools（用例解析）/ hudcore（日志、按钮状态机）。
 """
+from __future__ import annotations
+
 import os
-import tkinter as tk
-from tkinter import messagebox, ttk
 import threading
+import tkinter as tk
+from tkinter import messagebox
+
 from hudcore import logging_setup
+from hudcore.ui import BUSY_ACT, BUSY_CLOSE, BUSY_INIT, BUSY_PROBE, Theme
 
 from can_core import device
-import re
-import time
-import xml.etree.ElementTree as ET
 from can_data_tools.testcase_runner import LogParser
-from PIL import Image, ImageTk, ImageDraw, ImageFont
-from camera_tools.camera_preview import CameraViewer, rotate_image_180, set_exposure
-import cv2
-from camera_tools.perspective_calibration import PerspectiveCalibrator
-import tempfile, glob
-import numpy as np
-from camera_tools.error_image_detection import is_error_image
-import datetime
-import json
-import queue
-from image_testing.image_similarity import compare_with_precomputed_hash
 
 # 判断是否被 import 调用
 IS_STANDALONE = __name__ == "__main__"
+
 
 
 
@@ -45,18 +38,15 @@ class TestFlowMixin:
 
     # --------------------- CAN设备初始化 ---------------------
     def start_init(self):
-        """点击“初始化设备”后，启动子线程执行真正的初始化逻辑"""
-        self.init_btn.config(state=tk.DISABLED)   # 防止重复点击
+        """点击「初始化设备」：先切到"忙"状态（按钮由规则表自动置灰），再起后台线程。"""
+        self._set_busy(BUSY_INIT)
         threading.Thread(target=self.init_device, daemon=True).start()
 
 
     # --------------------- 设备检测（子进程探测） ---------------------
     def start_probe(self):
         """点"检测设备"：在子进程里探测（忽略缓存），结论打到界面日志。"""
-        try:
-            self.probe_btn.config(state=tk.DISABLED)
-        except Exception:                                     # noqa: BLE001 - 按钮缺失也不影响探测
-            pass
+        self._set_busy(BUSY_PROBE)                            # 按钮可用性交给规则表
         threading.Thread(target=self.probe_device, daemon=True).start()
 
     def probe_device(self):
@@ -75,10 +65,7 @@ class TestFlowMixin:
         """探测结果落到界面：日志 + 弹窗（未插卡时给出可读原因与排查建议）。"""
         logging_setup.info("candata", message)
         print(f"[CAN] {message}")
-        try:
-            self.probe_btn.config(state=tk.NORMAL)
-        except Exception:                                     # noqa: BLE001
-            pass
+        self._clear_busy()                                    # 结束"检测中"，按钮回到规则表状态
         if ok:
             messagebox.showinfo("设备检测", message + "\n\n可以点击「初始化设备」了。")
         else:
@@ -122,24 +109,23 @@ class TestFlowMixin:
 
 
     def _post_init(self):
-        """初始化结束后的 UI 更新"""
+        """初始化结束后的 UI 更新。
+
+        按钮/输入框的可用性**全部**由状态机按 ``device_open`` 推导（见 gui_layout.RULES），
+        这里只需结束"忙"状态并提示失败原因 —— 不再逐条 ``config(state=...)``。
+        """
+        self._clear_busy()
         if self.device_handle is None:
-            # 初始化失败，恢复“初始化设备”按钮
-            self.init_btn.config(state=tk.NORMAL)
-            messagebox.showerror("错误", "CANFD 设备初始化失败！")
-        else:
-            # 成功后让“关闭设备”等按钮可用
-            self.close_btn.config(state=tk.NORMAL)
-            self.send_btn.config(state=tk.NORMAL)
-            self.off_btn.config(state=tk.NORMAL)
-            self.test_btn.config(state=tk.NORMAL)
-            self._update_repeat_entry_state()  # 控制输入框
+            messagebox.showerror(
+                "错误",
+                "CANFD 设备初始化失败！\n"
+                "可先点「检测设备」确认硬件与驱动状态（未插卡时底层驱动可能异常）。")
 
 
     # --------------------- CAN设备关闭 ---------------------
     def start_close(self):
         """点击“关闭设备”后，启动子线程执行关闭逻辑"""
-        self.close_btn.config(state=tk.DISABLED)   # 防止重复点击
+        self._set_busy(BUSY_CLOSE)
         threading.Thread(target=self.close_device, daemon=True).start()
 
 
@@ -158,18 +144,13 @@ class TestFlowMixin:
 
 
     def _post_close(self):
-        """关闭结束后的 UI 更新"""
-        self.init_btn.config(state=tk.NORMAL)       # 重新允许初始化
-        self.close_btn.config(state=tk.DISABLED)    # 关闭按钮保持不可用
-        self.send_btn.config(state=tk.DISABLED)     # ON 电禁用
-        self.off_btn.config(state=tk.DISABLED)      # OFF电禁用
-        self.test_btn.config(state=tk.DISABLED)     # 开始测试按键保持不可用
-        self._update_repeat_entry_state()           # 自动禁用输入框
+        """关闭结束后的 UI 更新：句柄已清空 → 规则表自动回到"未初始化"状态"""
+        self._clear_busy()
 
 
     #----------------------ON档电信号发送---------------------------
     def start_send_on_signal(self):
-        self.send_btn.config(state=tk.DISABLED)
+        self._set_busy(BUSY_ACT)                    # 发送期间不允许其它动作
         threading.Thread(target=self.send_can_on_signal, daemon=True).start()
 
 
@@ -196,13 +177,13 @@ class TestFlowMixin:
             error_msg = str(e)
             print(f"ON档电信号发送失败: {error_msg}") 
         finally:
-            self.root.after(0, lambda: self.send_btn.config(state=tk.NORMAL))
+            self.root.after(0, self._clear_busy)
 
 
 
     #----------------------OFF档电信号发送---------------------------
     def start_send_off_signal(self):
-        self.off_btn.config(state=tk.DISABLED)
+        self._set_busy(BUSY_ACT)
         threading.Thread(target=self.send_can_off_signal, daemon=True).start()
 
 
@@ -229,16 +210,14 @@ class TestFlowMixin:
             error_msg = str(e)
             print(f"OFF档电信号发送失败: {error_msg}") 
         finally:
-            self.root.after(0, lambda: self.off_btn.config(state=tk.NORMAL))
+            self.root.after(0, self._clear_busy)
 
 
     def start_testing(self):
         """启动自动化测试，调用 testcase_runner.py 中的逻辑"""
-        self.test_btn.config(state=tk.DISABLED)  # 防止重复点击
-        self.send_btn.config(state=tk.DISABLED)  # 禁用ON
-        self.off_btn.config(state=tk.DISABLED)   # 禁用OFF
-        self.repeat_entry.config(state=tk.DISABLED) # 禁用用例重复测试次数的输入框
-        self.rounds_entry.config(state=tk.DISABLED)  # 禁用完整测试轮数的输入框
+        self.parser = None                           # 清掉上一轮的解析器引用
+        self._set_testing(True)                      # 开始测试：发送/开始/输入框自动禁用，
+                                                     # 「暂停测试」「强制终止测试」自动可用
         threading.Thread(target=self.run_automation_test, daemon=True).start()
 
 
@@ -323,12 +302,12 @@ class TestFlowMixin:
 
 
     def _post_test_finish(self, success=False):
-        """测试结束后的 UI 恢复，并弹出独立提示窗口"""
-        # 恢复主界面按钮状态
-        self.test_btn.config(state=tk.NORMAL)
-        self.send_btn.config(state=tk.NORMAL)
-        self.off_btn.config(state=tk.NORMAL)
-        self._update_repeat_entry_state()
+        """测试结束后的 UI 恢复，并弹出独立提示窗口。
+
+        注意：按钮是否可点由 ``device_open`` 决定 —— 若用户在测试期间关闭了设备，
+        「开始测试」不会被错误地点亮（原实现会，属于状态不一致的 bug）。
+        """
+        self._set_testing(False)
         # 成功完成才弹出提示
         if success:
             self.show_test_completed_window()
@@ -368,14 +347,14 @@ class TestFlowMixin:
         tk.Label(
             container,
             text="测试已完成！",
-            font=("微软雅黑", 12, "bold"),
+            font=Theme.font_tuple(12, "bold"),
             fg="#4A90E2"
         ).pack(pady=5)
 
         tk.Label(
             container,
             text="所有测试用例已执行完毕",
-            font=("微软雅黑", 10)
+            font=Theme.font_tuple(10)
         ).pack(pady=5)
 
 
@@ -402,19 +381,6 @@ class TestFlowMixin:
             return False
 
 
-    def _update_repeat_entry_state(self):
-        """根据按钮状态决定是否允许编辑重复次数和完整轮数输入框"""
-        init_btn_disabled = self.init_btn['state'] == tk.DISABLED
-        test_btn_enabled = self.test_btn['state'] == tk.NORMAL
-
-        if init_btn_disabled and test_btn_enabled:
-            self.repeat_entry.config(state=tk.NORMAL)
-            self.rounds_entry.config(state=tk.NORMAL)
-        else:
-            self.repeat_entry.config(state=tk.DISABLED)
-            self.rounds_entry.config(state=tk.DISABLED)
-
-
     def toggle_pause_resume(self):
         """切换暂停/继续测试状态，完全基于 _pause_event 当前状态判断，不依赖额外标志"""
         if not hasattr(self, 'parser') or self.parser is None:
@@ -422,13 +388,11 @@ class TestFlowMixin:
     
         # 核心判断：使用已存在的 _pause_event.is_set() 状态
         if self.parser._pause_event.is_set():
-            # 当前正在运行 → 执行暂停
-            self.parser.pause_test()
-            self.toggle_pause_resume_btn.config(text="继续测试")
+            self.parser.pause_test()                 # 当前正在运行 → 执行暂停
+            self.set_paused(True)                    # 文案由状态机同步为「继续测试」
         else:
-            # 当前已暂停（_pause_event 为 clear）→ 执行继续
-            self.parser.resume_test()
-            self.toggle_pause_resume_btn.config(text="暂停测试")
+            self.parser.resume_test()                # 当前已暂停 → 执行继续
+            self.set_paused(False)
 
 
 
@@ -451,8 +415,8 @@ class TestFlowMixin:
         4 终止实时工况刷新线程
         5 最终销毁根窗口。
         """
-        # 检查 CAN 设备是否已经关闭
-        if self.close_btn.winfo_exists() and str(self.close_btn['state']) == 'normal':
+        # 检查 CAN 设备是否已经关闭（看句柄，而不是按钮状态——按钮状态是推导结果）
+        if getattr(self, "device_handle", None) is not None:
             import tkinter.messagebox as messagebox
             messagebox.showwarning(
                 "无法退出",

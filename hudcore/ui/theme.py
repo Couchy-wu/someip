@@ -25,10 +25,19 @@ class Theme:
     # ---- 配色 ----
     PRIMARY = "#4A90E2"          # 主操作（蓝）
     PRIMARY_HOVER = "#357ABD"
-    DANGER = "#D9534F"           # 图像/视频类操作（红）
+    DANGER = "#D9534F"           # 危险/终止类操作（红）
     DANGER_HOVER = "#C9302C"
     SUCCESS = "#5CB85C"          # 数据/工具类操作（绿）
     SUCCESS_HOVER = "#4CAE4C"
+    INFO = "#5BC0DE"             # 查询/探测类操作（浅蓝）
+    INFO_HOVER = "#31B0D5"
+    WARN = "#F0AD4E"             # 暂停/临时操作（橙）
+    WARN_HOVER = "#EB983A"
+    NEUTRAL = "#6C757D"          # 中性操作（灰）
+    NEUTRAL_HOVER = "#5A6268"
+    STATE_BG = "#222222"         # 工况显示条：黑底绿字
+    STATE_FG = "#00FF00"
+    HINT_FG = "#555555"          # 说明文字
     BG_LIGHT = "#F0F0F0"
     FG_DARK = "#000000"
     FG_WHITE = "#FFFFFF"
@@ -78,6 +87,68 @@ class Theme:
     def success_button(cls, **kw: Any) -> Dict[str, Any]:
         """数据/工具类按钮（绿）"""
         return cls._button(cls.SUCCESS, cls.SUCCESS_HOVER, **kw)
+
+    @classmethod
+    def info_button(cls, **kw: Any) -> Dict[str, Any]:
+        """查询/探测类按钮（浅蓝）"""
+        return cls._button(cls.INFO, cls.INFO_HOVER, **kw)
+
+    @classmethod
+    def warn_button(cls, **kw: Any) -> Dict[str, Any]:
+        """暂停/临时操作按钮（橙）"""
+        return cls._button(cls.WARN, cls.WARN_HOVER, **kw)
+
+    @classmethod
+    def neutral_button(cls, **kw: Any) -> Dict[str, Any]:
+        """中性操作按钮（灰）"""
+        return cls._button(cls.NEUTRAL, cls.NEUTRAL_HOVER, **kw)
+
+    # ---- 常用小控件样式 ----
+    @classmethod
+    def hint_label(cls, **kw: Any) -> Dict[str, Any]:
+        """说明文字（小号灰字，用于区块内提示）"""
+        style: Dict[str, Any] = {
+            "font": cls.font_tuple(9, "normal"),
+            "fg": cls.HINT_FG,
+            "anchor": "w",
+            "justify": "left",
+        }
+        style.update(kw)
+        return style
+
+    @classmethod
+    def field_label(cls, **kw: Any) -> Dict[str, Any]:
+        """表单左侧标签（字段名）"""
+        style: Dict[str, Any] = {
+            "font": cls.font_tuple(10, "normal"),
+            "anchor": "w",
+        }
+        style.update(kw)
+        return style
+
+    @classmethod
+    def check_button(cls, **kw: Any) -> Dict[str, Any]:
+        """勾选框统一样式（跨平台字体，不再硬编码字体名）"""
+        style: Dict[str, Any] = {
+            "font": cls.font_tuple(10, "normal"),
+            "anchor": "w",
+        }
+        style.update(kw)
+        return style
+
+    @classmethod
+    def state_banner(cls, **kw: Any) -> Dict[str, Any]:
+        """工况显示条样式（黑底绿字、左对齐）"""
+        style: Dict[str, Any] = {
+            "font": cls.font_tuple(11, "bold"),
+            "bg": cls.STATE_BG,
+            "fg": cls.STATE_FG,
+            "anchor": "w",
+            "padx": 8,
+            "pady": 3,
+        }
+        style.update(kw)
+        return style
 
     # ---- 文本控件 ----
     @classmethod
