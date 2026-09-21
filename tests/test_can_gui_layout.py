@@ -15,14 +15,14 @@
 """
 from __future__ import annotations
 
-import os
 
 import pytest
 
 tk = pytest.importorskip("tkinter")
 
-if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
-    pytest.skip("无显示环境（需 Xvfb/桌面），跳过 GUI 布局测试", allow_module_level=True)
+from tests import gui_support                     # noqa: E402
+
+gui_support.require_display()                     # 无图形环境整模块跳过（Windows 本机不跳）
 
 from hudcore.ui import BUSY_INIT, BUSY_NONE, audit_widget_tree, describe_collisions  # noqa: E402
 

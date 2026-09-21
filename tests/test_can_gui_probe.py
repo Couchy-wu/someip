@@ -12,8 +12,6 @@
 from __future__ import annotations
 
 import threading
-from types import SimpleNamespace
-
 import pytest
 
 from can_core import device_probe

@@ -17,6 +17,10 @@ import pytest
 tk = pytest.importorskip("tkinter")                     # 无显示环境（无 tkinter）时跳过
 
 from gui_handlers import di_case_window as win_mod      # noqa: E402
+
+from tests import gui_support                     # noqa: E402
+
+gui_support.require_display()                     # 无图形环境整模块跳过（Windows 本机不跳）
 from can_data_tools import case_format                  # noqa: E402
 from hudcore.ui.state import BUSY_EXECUTE, BUSY_NONE, BUSY_SCAN  # noqa: E402
 

@@ -16,7 +16,6 @@ from pathlib import Path
 
 import pytest
 
-from hudcore.platform.paths import paths
 from someip_core import (
     TABLE_BPLUS, TABLE_OLD, ReplayConfig, active_table, all_events, available_tables,
     describe_tables, find_event, normalize_table, registrable, services, set_table,

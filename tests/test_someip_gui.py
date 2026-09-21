@@ -17,15 +17,15 @@
 """
 from __future__ import annotations
 
-import os
 import time
 
 import pytest
 
 tk = pytest.importorskip("tkinter")
 
-if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
-    pytest.skip("无显示环境（需 Xvfb/桌面），跳过 GUI 测试", allow_module_level=True)
+from tests import gui_support                     # noqa: E402
+
+gui_support.require_display()                     # 无图形环境整模块跳过（Windows 本机不跳）
 
 
 class _FakeButton:
@@ -273,96 +273,9 @@ def test_config_persisted_on_close(window, tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 按钮规则表 + 状态流转（本次界面重构的核心断言）
+# 按钮规则表（纯函数）已移到 tests/test_someip_ui_rules.py —— 那里没有
+# DISPLAY 守卫，无头 CI 也能覆盖；本文件保留需要真实窗口的用例。
 # ---------------------------------------------------------------------------
-def test_rule_table_pure_transitions():
-    """规则表逐状态断言（不建窗口，直接看 ButtonGroup.snapshot）。
-
-    覆盖验收要求：库不可用全灰 → 未打开 → 已打开未启动 → 已启动 → 回放中 → 关闭后，
-    以及 busy（打开中/启动中）期间相关按钮置灰。
-    """
-    from hudcore.ui import BUSY_ACT, BUSY_CLOSE, BUSY_INIT, BUSY_NONE
-    from someip_gui import ui_rules as R
-
-    group, _widgets = _fake_group()
-    assert len(group) == len(R.ALL_KEYS) == 10
-
-    # ① 库不可用：需要库的动作按钮全部 disabled（既有测试的断言在此扩展为全量）
-    snap = _apply(group, library_ok=False)
-    print("① 库不可用：", _fmt(snap))
-    for key in R.LIBRARY_ACTION_KEYS:
-        assert snap[key] == "disabled", f"库不可用时 {key} 应置灰"
-    # "重新检测库/导出服务表/保存配置"不依赖库：否则库一旦找不到就再也点不回来
-    for key in R.LIBRARY_FREE_KEYS:
-        assert snap[key] == "normal", f"{key} 不应因库不可用而置灰"
-    status = R.compose_status(R.UiState(library_ok=False), reason="未找到 SOME/IP 服务端库")
-    print("   状态栏：", status)
-    assert "不可用" in status and "原因：未找到 SOME/IP 服务端库" in status
-
-    # ② 库可用、未打开实例：启动/停止/关闭置灰；开始回放/发送保持可用（会自动先开服务）
-    snap = _apply(group)
-    print("② 未打开：", _fmt(snap))
-    assert (snap[R.KEY_OPEN], snap[R.KEY_START], snap[R.KEY_STOP], snap[R.KEY_CLOSE]) == (
-        "normal", "disabled", "disabled", "disabled")
-    assert snap[R.KEY_REPLAY_START] == "normal" and snap[R.KEY_SEND] == "normal"
-    assert snap[R.KEY_REPLAY_STOP] == "disabled"
-    assert R.phase_text(R.UiState()) == "未打开"
-
-    # ③ 已打开未启动：启动可用、停止置灰、关闭可用
-    snap = _apply(group, opened=True)
-    print("③ 已打开：", _fmt(snap))
-    assert (snap[R.KEY_START], snap[R.KEY_STOP], snap[R.KEY_CLOSE]) == ("normal", "disabled",
-                                                                       "normal")
-    # 「打开服务」按语义置灰（实例已存在；重复打开由 controller 忽略，理由见 ui_rules 模块头）
-    assert snap[R.KEY_OPEN] == "disabled"
-    assert R.phase_text(R.UiState(flags={"opened": True})) == "已打开"
-
-    # ④ 已启动：停止可用、启动置灰、关闭可用
-    snap = _apply(group, opened=True, started=True)
-    print("④ 已启动：", _fmt(snap))
-    assert (snap[R.KEY_START], snap[R.KEY_STOP], snap[R.KEY_CLOSE]) == ("disabled", "normal",
-                                                                       "normal")
-    assert R.phase_text(R.UiState(flags={"opened": True, "started": True})) == "已启动"
-
-    # ⑤ 回放中：开始回放置灰、停止回放可用
-    snap = _apply(group, opened=True, started=True, replaying=True)
-    print("⑤ 回放中：", _fmt(snap))
-    assert snap[R.KEY_REPLAY_START] == "disabled" and snap[R.KEY_REPLAY_STOP] == "normal"
-    status = R.compose_status(
-        R.UiState(flags={"opened": True, "started": True, "replaying": True}),
-        sent=1234, services=11, events=23)
-    print("   状态栏：", status)
-    assert status == "库就绪｜阶段：回放中｜回放中（已发 1234）｜服务 11/事件 23"
-
-    # ⑥ busy（打开中 = BUSY_INIT；启动中/发送中 = BUSY_ACT；停止/关闭 = BUSY_CLOSE）：
-    #    相关按钮置灰，阶段文字指路
-    busy_cases = (
-        (BUSY_INIT, "打开中", {"opened": False, "started": False, "replaying": False}),
-        (BUSY_ACT, "启动中", {"opened": True, "started": False, "replaying": False}),
-        (BUSY_ACT, "发送中", {"opened": True, "started": True, "replaying": False}),
-        (BUSY_CLOSE, "停止/关闭中", {"opened": True, "started": True, "replaying": True}),
-    )
-    for busy, phase, flags in busy_cases:
-        state = R.UiState(busy=busy, flags=flags)
-        snap = _apply(group, busy=busy, **flags)
-        print(f"⑥ busy={busy or '-'}：", _fmt(snap))
-        for key in (R.KEY_OPEN, R.KEY_START, R.KEY_STOP, R.KEY_CLOSE,
-                    R.KEY_REPLAY_START, R.KEY_SEND):
-            assert snap[key] == "disabled", f"{busy} 期间 {key} 应置灰"
-        assert R.phase_text(state) == phase
-    # 动作结束（busy 清空）→ 恢复
-    snap = _apply(group, opened=True, started=True, replaying=True, busy=BUSY_NONE)
-    print("⑥ 动作结束：", _fmt(snap))
-    assert snap[R.KEY_REPLAY_STOP] == "normal" and snap[R.KEY_STOP] == "normal"
-
-    # ⑦ 关闭后回到未打开态
-    snap = _apply(group)
-    print("⑦ 关闭后：", _fmt(snap))
-    assert (snap[R.KEY_OPEN], snap[R.KEY_START], snap[R.KEY_STOP], snap[R.KEY_CLOSE]) == (
-        "normal", "disabled", "disabled", "disabled")
-    assert snap[R.KEY_REPLAY_START] == "normal" and snap[R.KEY_REPLAY_STOP] == "disabled"
-
-
 def test_no_grid_collisions(window):
     """整窗不允许两个控件占用同一个 (row, column)（含 field_table 内部的 grid）。"""
     from hudcore.ui.layout import audit_widget_tree, describe_collisions

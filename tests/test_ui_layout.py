@@ -15,7 +15,6 @@
 """
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 
@@ -23,8 +22,9 @@ import pytest
 
 tk = pytest.importorskip("tkinter")
 
-if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
-    pytest.skip("无显示环境（需 Xvfb/桌面），跳过布局测试", allow_module_level=True)
+from tests import gui_support                     # noqa: E402
+
+gui_support.require_display()                     # 无图形环境整模块跳过（Windows 本机不跳）
 
 from hudcore.ui import (                                   # noqa: E402
     ActionBar, BUSY_INIT, SectionStack, Theme, UiState, audit_widget_tree,

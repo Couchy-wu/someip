@@ -28,6 +28,10 @@ import pytest
 import main as main_module
 from hudcore.ui.layout import audit_widget_tree, describe_collisions
 
+from tests import gui_support                     # noqa: E402
+
+gui_support.require_display()                     # 无图形环境整模块跳过（Windows 本机不跳）
+
 #: (kind, 打开方法, 关闭方法, 按钮属性名, 窗口属性名, 状态标志)
 SINGLETONS = [
     ("can", "open_can_gui", "_on_can_window_close",

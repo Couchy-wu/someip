@@ -208,7 +208,7 @@ def _open_and_init(adapter, fake, *, nominal=None, data_baud=None, merge=None, r
     dev = adapter.OpenDevice(dr.ZCAN_USBCANFD_200U, 0, 0)
     assert dev, "OpenDevice 应返回有效句柄"
     if nominal is not None:
-        assert adapter.ZCAN_SetValue(dev, f"0/canfd_abit_baud_rate".encode(), str(nominal).encode()) \
+        assert adapter.ZCAN_SetValue(dev, "0/canfd_abit_baud_rate".encode(), str(nominal).encode()) \
             == dr.ZCAN_STATUS_OK
     if data_baud is not None:
         assert adapter.ZCAN_SetValue(dev, b"0/canfd_dbit_baud_rate", str(data_baud).encode()) \
