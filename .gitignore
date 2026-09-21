@@ -33,3 +33,7 @@ thirdparty/arhud_someip/**/*.dylib
 # ZLG CAN Linux 驱动（由 tools/fetch_thirdparty_libs.py 联网获取，不进仓库）
 thirdparty/zlg_can/**
 !thirdparty/zlg_can/README.md
+
+# 报告产物（验证套件 / Di 用例执行报告；按需生成，不入库）
+logs/*.md
+logs/*.json
