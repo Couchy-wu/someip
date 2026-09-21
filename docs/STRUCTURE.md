@@ -130,8 +130,9 @@ HudAutoTest/
 1. ~~`can_gui/can_send_receive_gui.py` 的 `__init__` 仍是 367 行的界面构建方法~~
    **已解决（v2.1 界面优化）**：界面构建拆到 `can_gui/gui_layout.py`（`LayoutMixin`），
    主类缩到 70 行的"组装 + 起线程"；按钮可用性收敛为 `UiState` + `RULES` 规则表，
-   布局改用 `SectionStack`/`ActionBar` 自动排布，并补了 headless 交互测试
-   （`tests/test_ui_layout.py`、`tests/test_can_gui_layout.py`：零格子冲突 + 状态流转）。
+   并补了 headless 交互测试（`tests/test_ui_layout.py`、`tests/test_can_gui_layout.py`：
+   零格子冲突 + 状态流转）。**控件摆放按用户要求保持改造前的原样**，只把原实现里
+   三处互相盖住的控件挪到空闲格（`平台`/`曝光值` 两组）。
 2. **`auto_labeling/draw_boxes.py` / `draw_boxes_v2.py` 仍是两套独立实现**（747 / 1387 行）——
    二者仅 `ensure_dir` 等少数函数逐字相同，其余逻辑不同，合并需先确认业务口径。
 3. **`camera_tools/perspective_calibration.py`(806) / `image_enhancement.py`(632) /

@@ -136,38 +136,45 @@ ZLG 在不同平台给出**两套形态**的库，业务层只按 Windows 的 **
 10. 移动/拆分模块后**必须**跑 `python tools/check_static.py` —— 容器验证覆盖不到
     硬件与界面路径，`undefined name` 这类问题只能靠静态检查拦住。
 
-### 界面统一写法（hudcore/ui：按钮状态机 + 声明式布局）
+### 界面统一写法（hudcore/ui：按钮状态机 + 布局约定）
 
-界面优化（v2.1）后的硬性约定，新代码请照此写：
+界面优化（v2.1）后的约定，新代码请照此写：
 
-1. **按钮位置**用 `SectionStack`（往下依次放区块，行号自动分配）+ `ActionBar`
-   （一行内自动换行）声明，**不要**手写 `grid(row=…, column=…)`；
-   按钮条的行数由 `SectionStack` 在"下一次放置"时按**实际占用**结算，
-   所以不必自己去数按钮个数（`columns` 给小了也只会让按钮条内部换行，不会撞格）——
-   原 CAN 界面就出现过
-   「平台」标签与「检测设备」按钮、曝光下拉框与摄像头画面各占同一格（Tk 不报错，
-   只是互相盖住，肉眼很难定位）；
-2. **按钮可用性**用 `hudcore.ui.state.UiState`（不可变状态：`busy` + 业务标志）+
-   模块级**规则表**（如 `can_gui.gui_layout.RULES`）+ `ButtonGroup.apply(state)` 统一刷新；
-   动作里只改状态（`_set_busy()` / `_set_testing()` / `_set_flag()`），
+1. **布局：各窗口沿用自己既有的摆放，不做重组**（这是用户明确要求，不要为了"好看"再引入
+   分组区块/卡片）。新增界面可以用 `SectionStack` + `ActionBar`
+   （`hudcore/ui/action_bar.py`：区块/按钮条顺序排布、行号自动分配，按钮多于 `columns`
+   时在块内换行且**不会**与后续区块撞格），已经用它们的窗口也可以保留；
+2. **同样重要的是别让控件抢同一格**：Tk 会把它们叠在一起而不报错（原 CAN 界面就出现过
+   「平台」标签与「检测设备」按钮、`平台` 下拉框与工况标签、「曝光值」与摄像头画面各占一格）。
+   手写 `grid(row=…, column=…)` 时务必确认格子空闲，改完跑一次
+   `hudcore.ui.layout.audit_widget_tree()`（见第 5 条）；
+3. **按钮可用性**用 `hudcore.ui.state.UiState`（不可变状态：`busy` + 业务标志）+
+   模块级**规则表**（如 `can_gui/gui_layout.RULES`、`someip_gui/ui_rules.RULES`、
+   `gui_handlers/di_case_window.BUTTON_RULES`）+ `ButtonGroup.apply(state)` 统一刷新；
+   动作里只改状态（`_set_busy()` / `_set_testing()` / `_set_state()`），
    **不要**在各回调里各写 `btn.config(state=…)`（原实现散在 6 处，规则互相打架：
    例如设备已关闭时"测试结束"仍会把「开始测试」点亮）；
-3. `busy` 用 `BUSY_*` 常量表达"当前占用的串行动作"，天然保证"同一时刻只做一件事"；
-4. 样式（字体/配色）一律走 `Theme`，**不要**硬编码字体名（Ubuntu 上没有「微软雅黑」）；
+4. `busy` 用 `BUSY_*` 常量表达"当前占用的串行动作"，天然保证"同一时刻只做一件事"；
+   样式（字体/配色）一律走 `Theme`，**不要**硬编码字体名（Ubuntu 上没有「微软雅黑」）；
 5. 新增/改动界面后跑
-   `xvfb-run -a python -m pytest tests/test_ui_layout.py tests/test_can_gui_layout.py -q`
+   `xvfb-run -a python -m pytest tests/test_ui_layout.py tests/test_can_gui_layout.py tests/test_main_window.py tests/test_di_gui.py tests/test_someip_gui.py -q`
    —— 其中 `audit_widget_tree()` 会断言**整窗零格子冲突**，源码里硬编码字体名也会被拦下；
 6. 需要"只建界面"的测试（不起相机/校验线程、不碰设备）用
    `CANFDGUI._build_layout_only(root)`，避免把硬件依赖带进 CI。
 
-已落地的四处参考实现（改界面前先看它们，别另起炉灶）：
+各窗口的现状（改之前先看这里的布局列，别改别人的摆放）：
 
-| 窗口 | 布局 | 按钮规则表 | 界面测试 |
-|------|------|-----------|----------|
-| 主窗口 `main.py` | `SectionStack` 四个区块 + `ActionBar` | `_enable_when_window_closed()`（单例子窗口） | `tests/test_main_window.py` |
-| CAN 收发 `can_gui/` | `can_gui/gui_layout.py` 五个区块 + 右侧画面 | `can_gui/gui_layout.RULES` | `tests/test_can_gui_layout.py` |
-| Di 用例 `gui_handlers/di_case_window.py` | 三个区块 + Notebook 输出区 | `di_case_window.BUTTON_RULES` | `tests/test_di_gui.py` |
-| SOME/IP 回放 `someip_gui/` | 工具栏三组 + 左配置/右控制 | `someip_gui/ui_rules.RULES` | `tests/test_someip_gui.py` |
+| 窗口 | 布局（**保持既有样式**） | 按钮规则表 | 界面测试 |
+|------|------------------------|-----------|----------|
+| 主窗口 `main.py` | 平铺 grid：按钮 row 0~2 / column 0~4，日志面板 `row=0, column=5, rowspan=5`（`GRID_ROWS=5`） | `_enable_when_window_closed()`（单例子窗口置灰） | `tests/test_main_window.py` |
+| CAN 收发 `can_gui/gui_layout.py` | 平铺 grid：左侧按钮 0~2 行、输入框/勾选框 3~6 行，右侧画面 `column=4`（1~5 行摄像头、6~10 行变换） | `can_gui/gui_layout.RULES` | `tests/test_can_gui_layout.py` |
+| Di 用例 `gui_handlers/di_case_window.py` | 全 `pack`：格式开关 → 目录行 → 动作行（含「停止执行」）→ 汇总行 → Notebook 输出区 | `di_case_window.BUTTON_RULES` | `tests/test_di_gui.py` |
+| SOME/IP 回放 `someip_gui/` | 工具栏单行 `pack`（原生 `ttk.Button`）+ 左配置 / 右控制 | `someip_gui/ui_rules.RULES` | `tests/test_someip_gui.py` |
+
+> 已知取舍（回退布局后仍在）：SOME/IP 单行工具栏给状态栏只剩约 322px，库不可用时完整原因
+> 放不下（已 `anchor="w"` 保证先看到"库不可用 + 原因"开头，完整提示在⑤日志区）；
+> ④ 行的「发送该事件」在原布局里就被挤到右边缘。要彻底解决需加宽默认窗口，属布局改动，
+> 需先与用户确认。
 
 ### 自检与自测
 
