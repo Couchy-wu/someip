@@ -284,9 +284,12 @@ class MainWindow:
         self._di_window.protocol("WM_DELETE_WINDOW", self._on_di_window_close)
 
     def _on_di_window_close(self) -> None:
-        """Di 窗口关闭回调。"""
+        """Di 窗口关闭回调（先停轮询，再销毁窗口）。"""
         win = self._di_window
         try:
+            app = getattr(win, "di_app", None) if win is not None else None
+            if app is not None:
+                app.stop()
             if win is not None and win.winfo_exists():
                 win.destroy()
         except tk.TclError:

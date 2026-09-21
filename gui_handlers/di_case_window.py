@@ -43,6 +43,8 @@ class DiCaseWindow:
         self._worker: threading.Thread | None = None
         self._cases: list[parser.DiCase] = []
         self._report: runner.RunReport | None = None
+        self._poll_id: str | None = None
+        self._closed = False
 
         root.title("Di 测试用例（CAN + SOME/IP + 标贴校验）")
         root.geometry("1080x640")
@@ -80,21 +82,37 @@ class DiCaseWindow:
         tk.Button(actions, text="执行（需 CAN 设备）", command=self.execute).pack(side=tk.LEFT, padx=2)
         self.var_only_auto = tk.BooleanVar(value=False)
         tk.Checkbutton(actions, text="只跑可全自动用例", variable=self.var_only_auto).pack(side=tk.LEFT, padx=8)
-        tk.Button(actions, text="导出 JSON 报告", command=self.export_report).pack(side=tk.LEFT, padx=2)
-        tk.Button(actions, text="清空", command=lambda: self._set_text("")).pack(side=tk.LEFT, padx=2)
+        tk.Button(actions, text="导出报告（Markdown + JSON）",
+                  command=self.export_report).pack(side=tk.LEFT, padx=2)
+        tk.Button(actions, text="清空", command=self._clear_output).pack(side=tk.LEFT, padx=2)
 
         self.var_summary = tk.StringVar(value="（尚未扫描）")
         tk.Label(self.root, textvariable=self.var_summary, anchor=tk.W,
                  justify=tk.LEFT).pack(fill=tk.X, padx=8)
 
     def _build_output(self) -> None:
+        """两个页签：执行日志 + 报告预览（Markdown，执行完自动填充）。"""
         frame = tk.Frame(self.root)
         frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=6)
-        self.text = tk.Text(frame, wrap=tk.NONE, height=20)
-        yscroll = tk.Scrollbar(frame, command=self.text.yview)
-        self.text.configure(yscrollcommand=yscroll.set)
-        yscroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.notebook = ttk.Notebook(frame)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
+
+        log_tab = tk.Frame(self.notebook)
+        self.notebook.add(log_tab, text="执行日志")
+        self.text = tk.Text(log_tab, wrap=tk.NONE, height=20)
+        log_yscroll = tk.Scrollbar(log_tab, command=self.text.yview)
+        self.text.configure(yscrollcommand=log_yscroll.set)
+        log_yscroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        preview_tab = tk.Frame(self.notebook)
+        self.notebook.add(preview_tab, text="报告预览（Markdown）")
+        self.preview = tk.Text(preview_tab, wrap=tk.NONE, height=20)
+        preview_yscroll = tk.Scrollbar(preview_tab, command=self.preview.yview)
+        self.preview.configure(yscrollcommand=preview_yscroll.set)
+        preview_yscroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.preview.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.preview.insert(tk.END, "（执行后这里显示 Markdown 报告；也可用“导出 JSON 报告”写成 .md/.json 两个文件）")
 
     # ------------------------------------------------------------ 交互
     def _on_switch(self) -> None:
@@ -208,15 +226,30 @@ class DiCaseWindow:
         self._post("summary", f"执行完成：{report.summary['status']}｜"
                               f"画面校验 {report.summary['frame_status']}")
         self._post("text", report.describe(limit=40))
+        # 报告预览：Markdown 原文（评审可直接复制；导出按钮会落成 .md/.json）
+        self._post("preview", report.render_markdown())
         if closer:
             closer()
         if exec_runner.someip_controller is not None:
             exec_runner.someip_controller.close()
 
     def _prepare_senders(self):
-        """准备 CAN / SOME/IP 下发实现；拿不到就退回体检模式并说明原因。"""
+        """准备 CAN / SOME/IP 下发实现；拿不到就退回体检模式并说明原因。
+
+        注意：先做**子进程探测** —— Linux 上未插卡时底层 VCI 驱动会段错误，
+        直接在主进程里调 `Initialize_Canfd_Device()` 会把整个上位机带走。
+        """
         note = ""
         can_sender = None
+        try:
+            from can_core import probe_can_device
+            probe = probe_can_device()
+            if not probe.available:
+                return None, None, None, ("[提示] " + probe.describe() +
+                                          " → 本次只做体检（不实际下发）")
+        except Exception as exc:                    # noqa: BLE001 - 探测本身失败也退回体检
+            note = f"[提示] 设备探测异常（{exc}）→ 本次只做体检（不实际下发）"
+            return None, None, None, note
         try:
             from can_core import device
             dev, handles, threads = device.Initialize_Canfd_Device()
@@ -262,16 +295,37 @@ class DiCaseWindow:
 
     # ------------------------------------------------------------ 输出
     def _poll_queue(self) -> None:
+        """定时把后台线程的结果搬到界面（窗口关闭后必须停止，否则会打到已销毁的控件）。"""
+        if self._closed:
+            return
         try:
             while True:
-                kind, message = self._queue.get_nowait()
+                try:
+                    kind, message = self._queue.get_nowait()
+                except queue.Empty:
+                    break
                 if kind == "summary":
                     self.var_summary.set(message)
+                elif kind == "preview":
+                    self._show_preview(message)
                 else:
                     self._append(message)
-        except queue.Empty:
-            pass
-        self.root.after(200, self._poll_queue)
+        except tk.TclError:                      # 控件已销毁（窗口正在关闭）
+            return
+        try:
+            self._poll_id = self.root.after(200, self._poll_queue)
+        except tk.TclError:
+            self._poll_id = None
+
+    def stop(self) -> None:
+        """停止轮询与后台任务（关闭窗口时调用；可重复调用）。"""
+        self._closed = True
+        if self._poll_id is not None:
+            try:
+                self.root.after_cancel(self._poll_id)
+            except tk.TclError:
+                pass
+            self._poll_id = None
 
     def _post(self, kind: str, message: str) -> None:
         self._queue.put((kind, message))
@@ -280,10 +334,25 @@ class DiCaseWindow:
         self.text.insert(tk.END, message + "\n")
         self.text.see(tk.END)
 
+    def _show_preview(self, markdown: str) -> None:
+        """把 Markdown 报告填进预览页签（并自动切到该页签，省得手动点）。"""
+        self.preview.delete("1.0", tk.END)
+        self.preview.insert(tk.END, markdown)
+        self.preview.see("1.0")
+        try:
+            self.notebook.select(1)
+        except tk.TclError:                      # pragma: no cover - 页签不存在时忽略
+            pass
+
     def _set_text(self, value: str) -> None:
         self.text.delete("1.0", tk.END)
         if value:
             self.text.insert(tk.END, value)
+
+    def _clear_output(self) -> None:
+        """清空日志与报告预览。"""
+        self._set_text("")
+        self.preview.delete("1.0", tk.END)
 
 
 def open_di_case_window(root: tk.Misc) -> tk.Toplevel:
@@ -292,6 +361,12 @@ def open_di_case_window(root: tk.Misc) -> tk.Toplevel:
     win.transient(root)
     app = DiCaseWindow(win)
     setattr(win, "di_app", app)                          # 便于测试与关闭回调取用
+
+    def _on_close() -> None:
+        app.stop()
+        win.destroy()
+
+    win.protocol("WM_DELETE_WINDOW", _on_close)
     return win
 
 

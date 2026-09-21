@@ -89,6 +89,8 @@ ZLG 在不同平台给出**两套形态**的库，业务层只按 Windows 的 **
 - 同目录依赖按 SONAME 互相引用而文件名常与 SONAME 不一致（`libusb-1.0.so` vs
   `libusb-1.0.so.0`），`hudcore.can.backend.preload_sibling_libraries()` 会在 dlopen 前预加载，
   因此不需要手工软链或 `LD_LIBRARY_PATH`；
+- ⚠ **未插卡时底层 VCI 驱动会段错误**（实测 rc=139，try/except 拦不住）→ 任何"打开设备"之前
+  先跑 `can_core.probe_can_device()`（子进程探测，结果带 30s 缓存）；界面初始化路径已接入；
 - 无硬件验证：`./docker/can-sim/run_check.sh`（VCI 桩库 + 适配层单测 + 业务层收发回环）；
 - 现场可能需要微调：`HUD_VCI_CLK`（默认 40 MHz）、`HUD_VCI_SAMPLE_POINT`（默认 80%）/
   `HUD_VCI_SAMPLE_POINT_DATA`（默认 75%）。
@@ -163,6 +165,9 @@ Markdown + JSON（自动判断运行环境标签、记录逐项耗时、列出�
 - 标贴校验：标签→参考图映射在 `data/DI_Config/label_map.json`，参考图/位置来自
   `data/UI_Config/*.json` + `Resources/ImageUI/`，比对用 `image_testing` 的 dHash；
   没有参考图的标签记为 `no_reference`（不算通过）；
+- **值超出位域**的用例（报告里的 `error`）用 `python -m tools.di_range_fix` 生成修复建议 CSV
+  （按"保持起始位、刚好放下取值"给出最小位域，并提示是否与同报文其它信号重叠）；
+- GUI **[Di 测试用例]** 窗口执行完会在"报告预览（Markdown）"页签直接显示报告原文；
 - 入口：`python -m scripts.run_di_cases`（体检/执行/报告）、GUI 主界面 **[Di 测试用例]** 按钮；
 - **报告**：`RunReport.render_markdown()/write_reports()` 产出 Markdown+JSON（复用
   `tools/verify_report.py` 的转义与对比工具）；含结论统计/环境块/失败与错误归类（按原因）/

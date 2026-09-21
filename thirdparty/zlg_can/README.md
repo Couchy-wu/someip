@@ -117,6 +117,22 @@ sudo apt install -y libusb-1.0-0 libusb-1.0-0-dev
   `RTLD_GLOBAL` 预加载同目录依赖，因此**不需要手工造软链或设 `LD_LIBRARY_PATH`**；
   否则探测会静默回退到不支持 CANFD 的 `libusbcan.so`（表现为"能连上却发不出 CANFD"）。
 
+### 3.0 ⚠ 未插卡时会**段错误**（必须用子进程探测）
+
+实测（Ubuntu aarch64 容器，`thirdparty/zlg_can/linux-aarch64/libusbcanfd.so`）：
+**没有插卡**时调用 `VCI_OpenDevice` 会让进程直接 **SIGSEGV 退出（rc=139）**，
+`try/except` 拦不住 —— 如果直接在 GUI 进程里初始化设备，点一下"初始化设备/执行"
+整个上位机就没了。
+
+规避：`can_core/device_probe.py` 把"打开设备→关闭设备"放进**子进程**跑一遍，
+只看退出码（0=可用；非 0/被信号杀死=不可用；超时=不可用），结果带 30s 缓存。
+CAN 测试界面（`can_gui/gui_test_flow.py`）与 Di 用例窗口在执行前都会先探测：
+不可用时给出"设备不可用：被信号 SIGSEGV 终止…"的提示并退回体检/失败流程，**不会崩**。
+
+```bash
+python -c "from can_core import probe_can_device as p; print(p().describe())"   # 单独探测
+```
+
 ### 3.1 没有硬件时怎么验证
 
 ```bash

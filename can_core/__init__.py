@@ -25,6 +25,7 @@ from .can_state import CanState, state  # noqa: F401
 from .driver_factory import (  # noqa: F401
     describe_driver_status, driver_kind, open_can_driver,
 )
+from .device_probe import ProbeResult, probe_can_device, reset_cache  # noqa: F401
 
 __all__ = [
     # 驱动与设备操作
@@ -37,10 +38,13 @@ __all__ = [
     "state", "CanState",
     # 驱动后端选择（Windows ZCAN / Linux VCI）
     "open_can_driver", "driver_kind", "describe_driver_status",
+    # 设备可用性探测（子进程隔离，避免底层驱动崩溃带走主进程）
+    "probe_can_device", "ProbeResult", "reset_cache",
     # 子模块
     "driver", "driver_factory", "vci_driver", "vci_adapter",
     "device", "can_state", "receive", "transmit", "bit_utils",
 ]
 from . import (  # noqa: E402,F401
-    bit_utils, can_state, driver, driver_factory, receive, transmit, vci_adapter, vci_driver,
+    bit_utils, can_state, device_probe, driver, driver_factory, receive, transmit,
+    vci_adapter, vci_driver,
 )

@@ -14,6 +14,8 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 import threading
+from hudcore import logging_setup
+
 from can_core import device
 import re
 import time
@@ -49,7 +51,25 @@ class TestFlowMixin:
 
 
     def init_device(self):
-        """调用初始化函数并保存返回值"""
+        """调用初始化函数并保存返回值
+
+        先做**子进程探测**：Linux 上未插卡时底层 VCI 驱动会段错误（SIGSEGV），
+        在主进程里直接 OpenDevice 会把整个上位机带走；探测失败则按"初始化失败"处理。
+        """
+        try:
+            from can_core import probe_can_device
+            probe = probe_can_device()
+            if not probe.available:
+                logging_setup.error("candata", probe.describe())
+                print(f"[CAN] {probe.describe()}")            # 同步到界面日志
+                self.device_handle = None
+                self.channel_handles = None
+                self.receive_threads = None
+                self.root.after(0, self._post_init)
+                return
+        except Exception as exc:                              # noqa: BLE001 - 探测异常也按失败处理
+            logging_setup.warning("candata", f"设备探测异常，跳过预检：{exc}")
+
         device_handle, channel_handles, receive_threads = device.Initialize_Canfd_Device(
             device_type=device.ZCAN_USBCANFD_200U,
             merge_receive=0,
