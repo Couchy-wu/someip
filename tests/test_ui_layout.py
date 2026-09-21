@@ -119,6 +119,29 @@ def test_section_stack_assigns_sequential_rows(root):
     assert audit_widget_tree(root) == []
 
 
+def test_action_bar_wrapping_does_not_overlap_next_block(root):
+    """按钮条在块内换行时，后续区块必须排到它**下面**（不能撞格）。
+
+    这是真实踩过的坑：`form_row` 里按钮多于 `columns` 会换行占两行，
+    若 `SectionStack` 只把行号 +1，下一个区块就盖到按钮条第二行上。
+    """
+    frame = tk.Frame(root)
+    frame.pack()
+    stack = SectionStack(frame, use_ttk=False)
+
+    bar = stack.action_bar(columns=2)                 # 故意少给列数
+    for i in range(5):                                # 5 个按钮 → 占 3 行
+        bar.add(f"b{i}", f"按钮{i}", lambda: None)
+    note = stack.note("说明行")
+
+    assert bar.rows_used() == 3
+    assert int(note.grid_info()["row"]) == 3, "说明行必须落在按钮条下面"
+    assert stack.next_row == 4
+    root.update_idletasks()
+    collisions = audit_widget_tree(root)
+    assert collisions == [], describe_collisions(collisions)
+
+
 def test_form_row_places_label_and_widget_side_by_side(root):
     frame = tk.Frame(root)
     frame.pack()

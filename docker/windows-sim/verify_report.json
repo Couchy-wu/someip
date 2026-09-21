@@ -1,6 +1,6 @@
 {
   "schema": "hudautotest.verify-report/2",
-  "generated_at": "2026-09-21 15:33:58",
+  "generated_at": "2026-09-21 15:37:13",
   "label": "Windows（Wine 容器内 + Windows 版 CPython）",
   "title": "HudAutoTest — 环境功能验证报告（Windows（Wine 容器内 + Windows 版 CPython））",
   "command": "C:\\Python313\\python.exe verify_windows.py --expect win",
@@ -21,7 +21,7 @@
     "failed": 0,
     "skipped": 0,
     "pass_rate": 100.0,
-    "duration_s": 88.59,
+    "duration_s": 88.48,
     "verdict": "PASS"
   },
   "failures": [],
@@ -30,7 +30,7 @@
     "available": true,
     "previous_schema": "hudautotest.verify-report/2",
     "legacy_previous": false,
-    "previous_at": "2026-09-21 15:23:25",
+    "previous_at": "2026-09-21 15:33:58",
     "previous_verdict": "PASS",
     "regressions": [],
     "fixed": [],
@@ -47,7 +47,7 @@
       "name": "1. 运行时环境（OS / Python / 架构）",
       "status": "PASS",
       "detail": "platform.system()=Windows, sys.platform=win32, Python=3.13.15, arch=AMD64, 64bit=True, exe=python.exe",
-      "duration_s": 0.06,
+      "duration_s": 0.07,
       "index": 1,
       "reproduce": ""
     },
@@ -71,7 +71,7 @@
       "name": "4. 界面字体与中文渲染字体",
       "status": "PASS",
       "detail": "selected='微软雅黑', 可用字体=0, PIL字体=<_io.BytesIO object at 0x00000000012F0360>",
-      "duration_s": 0.15,
+      "duration_s": 0.16,
       "index": 4,
       "reproduce": ""
     },
@@ -79,7 +79,7 @@
       "name": "5. Tk 窗口创建（虚拟显示）",
       "status": "PASS",
       "detail": "Tk 8.6 创建并销毁成功, geometry=320x120+0+0",
-      "duration_s": 2.23,
+      "duration_s": 2.24,
       "index": 5,
       "reproduce": ""
     },
@@ -95,7 +95,7 @@
       "name": "7. main.py 导入链（不启动 GUI 主循环）",
       "status": "PASS",
       "detail": "import main 成功；MainWindow/TextRedirector 可用；导出=3 项",
-      "duration_s": 2.07,
+      "duration_s": 1.92,
       "index": 7,
       "reproduce": ""
     },
@@ -103,7 +103,7 @@
       "name": "8. 全部界面与工具模块导入",
       "status": "PASS",
       "detail": "72/72 模块全部导入成功",
-      "duration_s": 0.27,
+      "duration_s": 0.28,
       "index": 8,
       "reproduce": ""
     },
@@ -127,7 +127,7 @@
       "name": "11. 外部程序探测不抛异常",
       "status": "PASS",
       "detail": "ffmpeg=命中; office=未找到; editor=未找到; terminal=未找到; where_python=命中",
-      "duration_s": 0.06,
+      "duration_s": 0.05,
       "index": 11,
       "reproduce": ""
     },
@@ -159,7 +159,7 @@
       "name": "15. CAN 信号 → 数据字节（outputMatrix.csv）",
       "status": "PASS",
       "detail": "信号 0x095/Eng_Start_Result_Fdbk_Info_S（位=1.0-1.1, 长度=8）: 枚举0→[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] 枚举1→[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] 值随枚举变化=True",
-      "duration_s": 0.76,
+      "duration_s": 0.69,
       "index": 15,
       "reproduce": ""
     },
@@ -167,7 +167,7 @@
       "name": "16. 信号矩阵 XLSX → CSV 转换",
       "status": "PASS",
       "detail": "openpyxl 读写 OK，模块入口=XlsmToCsvConverter",
-      "duration_s": 0.39,
+      "duration_s": 0.41,
       "index": 16,
       "reproduce": ""
     },
@@ -175,15 +175,15 @@
       "name": "17. 项目自带自检脚本可运行",
       "status": "PASS",
       "detail": "check_imports.py rc=0 (项目内部导入全部可解析 ✓); check_static.py rc=0 (静态检查通过 ✓); selftest.py rc=0 (============================================================)",
-      "duration_s": 13.15,
+      "duration_s": 12.68,
       "index": 17,
       "reproduce": ""
     },
     {
       "name": "18. 单元测试（pytest）",
       "status": "PASS",
-      "detail": ".ss.......................................                               [100%]",
-      "duration_s": 64.1,
+      "detail": ".ss........................................                              [100%]",
+      "duration_s": 64.7,
       "index": 18,
       "reproduce": ""
     },
@@ -191,7 +191,7 @@
       "name": "19. SOME/IP 回放窗口（布局与降级）",
       "status": "PASS",
       "detail": "23 个事件，字段数 {'RTK': 27, 'PilotStatus': 7, 'VehiclePosition': 34, 'HudNavmap': 3}；状态=SOME/IP 库不可用（动作已置灰）｜原因：未找到 S；库不可用(已降级)",
-      "duration_s": 2.77,
+      "duration_s": 2.7,
       "index": 19,
       "reproduce": ""
     }

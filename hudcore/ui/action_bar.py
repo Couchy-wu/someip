@@ -172,16 +172,34 @@ class SectionStack:
         self.sticky = sticky
         self._row = 0
         self._blocks: List[object] = []
+        self._pending_bar: Optional[ActionBar] = None   # 待结算行数的按钮条
 
     # ---- 行号 ----
     @property
     def next_row(self) -> int:
+        self._flush()
         return self._row
+
+    def _flush(self) -> None:
+        """把上一条按钮条**实际占用**的行数并入行号。
+
+        按钮条创建时还不知道会有几个按钮（`action_bar()` 之后才 `add()`），
+        而按钮多于 ``columns`` 时会在块内换行占多行 —— 若只按 1 行结算，
+        下一个区块就会盖到按钮条的第二行上（实测会撞格）。
+        因此在"下一次放置"时才结算，写布局的人不必自己数按钮个数。
+        """
+        bar = self._pending_bar
+        if bar is None:
+            return
+        self._pending_bar = None
+        self._row = max(self._row, bar.row + max(1, bar.rows_used()))
 
     def grid(self, widget, *, columnspan: int = 1, sticky: Optional[str] = None,
              padx: Optional[int] = None, pady: Optional[int] = None,
              row: Optional[int] = None):
         """把一个控件放到下一行（指定 ``row`` 可覆盖，用于并列排布）。"""
+        if row is None:
+            self._flush()
         use_row = self._row if row is None else row
         widget.grid(row=use_row, column=self.column, columnspan=columnspan,
                     padx=self.padx if padx is None else padx,
@@ -202,16 +220,22 @@ class SectionStack:
     def action_bar(self, *, columns: int = 4, sticky: str = "w", padx: int = 4,
                    pady: int = 3, group: Optional[ButtonGroup] = None,
                    on_change: Optional[Callable[[Dict[str, str]], None]] = None) -> ActionBar:
-        """紧跟其后的一条按钮条（占一行；按钮多于 columns 时在块内自动换行）。"""
+        """紧跟其后的一条按钮条（按钮多于 ``columns`` 时在块内自动换行）。
+
+        行号由 :meth:`_flush` 在"下一次放置"时按实际占用行数结算，
+        所以调用方**不需要**保证 ``columns >= 按钮个数``。
+        """
+        self._flush()
         bar = ActionBar(self.parent, row=self._row, column=self.column, columns=columns,
                         sticky=sticky, padx=padx, pady=pady, use_ttk=self.use_ttk,
                         group=group, on_change=on_change)
-        self._row += 1
+        self._pending_bar = bar
         self._blocks.append(bar)
         return bar
 
     def row(self, *widgets, sticky: str = "w", pady: Optional[int] = None):
         """把若干控件并排放在当前行（各占一列，列号自动递增）。"""
+        self._flush()
         use_pady = self.pady if pady is None else pady
         for index, widget in enumerate(widgets):
             widget.grid(row=self._row, column=self.column + index,
@@ -227,6 +251,7 @@ class SectionStack:
         """
         import tkinter as tk
         from .theme import Theme
+        self._flush()
         use_pady = self.pady if pady is None else pady
         column = self.column
         for label_text, widget in pairs:
