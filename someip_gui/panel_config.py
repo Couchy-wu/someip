@@ -18,8 +18,8 @@ from hudcore.platform.executables import open_with_default_app
 from hudcore.ui import Theme
 
 from someip_core import (
-    TABLE_OLD, active_table, all_events, available_tables, registrable, services,
-    set_table, shipped_config_path,
+    TABLE_OLD, active_table, available_tables, registrable, services, set_table,
+    shipped_config_path,
 )
 from someip_core.api import default_ip
 

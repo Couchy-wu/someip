@@ -9,6 +9,11 @@
 
 设计：与 can_gui 的相机/测试流程面板同一风格（Mixin 组合），
       面板只调用 `ReplayController`，不直接触碰 ctypes 库。
+
+按钮可用性：③④ 的「开始回放 / 停止回放 / 发送该事件」登记进窗口的
+`self.buttons`（ButtonGroup），规则来自 `someip_gui.ui_rules.RULES` ——
+与工具栏同一个状态源，面板里**不写** `configure(state=...)`；
+按钮位置由 `ActionBar` 自动分配（避免手写 grid 坐标撞格）。
 """
 from __future__ import annotations
 
@@ -16,11 +21,12 @@ import datetime
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from hudcore.ui import Theme
+from hudcore.ui import ActionBar, Theme
 
 from someip_core import parse_summary
 from someip_core.api import STRUCT_TYPES
 
+from . import ui_rules as rules
 from .field_table import FieldTable
 
 
@@ -63,16 +69,17 @@ class ControlPanelMixin:
         ttk.Label(opts, text="（0=按 pcap 原始时序；>0 用于加速回放）",
                   foreground=Theme.FG_DARK).pack(side="left", padx=6)
 
-        btns = ttk.Frame(box)
-        btns.grid(row=2, column=1, columnspan=3, sticky="w", padx=6, pady=(3, 6))
-        self.btn_replay_start = ttk.Button(btns, text="开始回放", width=11,
-                                           command=self.on_replay_start)
-        self.btn_replay_start.pack(side="left")
-        self.btn_replay_stop = ttk.Button(btns, text="停止回放", width=11,
-                                          command=self.on_replay_stop)
-        self.btn_replay_stop.pack(side="left", padx=6)
-        self.lbl_replay_stat = ttk.Label(btns, text="已发送 0 条", foreground=Theme.PRIMARY)
-        self.lbl_replay_stat.pack(side="left", padx=12)
+        btns = ActionBar(box, row=2, column=1, columns=2, group=self.buttons)
+        self.btn_replay_start = btns.add(
+            rules.KEY_REPLAY_START, "开始回放", self.on_replay_start, kind="primary",
+            width=11, height=1, enabled_when=rules.RULES[rules.KEY_REPLAY_START],
+            tooltip="未打开/未启动服务时会自动先执行「打开 + 启动」")
+        self.btn_replay_stop = btns.add(
+            rules.KEY_REPLAY_STOP, "停止回放", self.on_replay_stop, kind="danger",
+            width=11, height=1, enabled_when=rules.RULES[rules.KEY_REPLAY_STOP],
+            tooltip="停止库内回放线程（服务保持启动）")
+        self.lbl_replay_stat = ttk.Label(box, text="已发送 0 条", foreground=Theme.PRIMARY)
+        self.lbl_replay_stat.grid(row=2, column=3, sticky="w", padx=12)
         self.lbl_pcap_info = ttk.Label(box, text="（未解析 pcap）", foreground=Theme.FG_DARK,
                                        wraplength=520, justify="left")
         self.lbl_pcap_info.grid(row=3, column=0, columnspan=4, sticky="w", padx=6, pady=(0, 6))
@@ -82,29 +89,40 @@ class ControlPanelMixin:
         box = ttk.LabelFrame(parent, text="④ 单条发送（结构化赋值 → C++ 序列化 → 发送）")
         box.grid(row=1, column=0, sticky="nsew", padx=6, pady=4)
         box.grid_columnconfigure(0, weight=1)
-        box.grid_rowconfigure(1, weight=1)
+        box.grid_rowconfigure(2, weight=1)              # 字段表所在行可伸展
 
+        # 第 1 行：类型下拉 + 字段辅助按钮（按钮由 ActionBar 排布并纳入状态机）
         bar = ttk.Frame(box)
         bar.grid(row=0, column=0, sticky="ew", padx=6, pady=3)
-        ttk.Label(bar, text="数据类型").pack(side="left")
+        ttk.Label(bar, text="数据类型").grid(row=0, column=0, sticky="w")
         self.var_kind = tk.StringVar(value=self.config.last_event_kind or STRUCT_TYPES[0])
         kind_menu = ttk.Combobox(bar, textvariable=self.var_kind, values=list(STRUCT_TYPES),
-                                 width=16, state="readonly")
-        kind_menu.pack(side="left", padx=6)
+                                 width=14, state="readonly")
+        kind_menu.grid(row=0, column=1, sticky="w", padx=6)
         kind_menu.bind("<<ComboboxSelected>>", lambda e: self._on_kind_changed())
-        ttk.Button(bar, text="载入示例值", width=11,
-                   command=self._on_fill_sample).pack(side="left", padx=4)
-        ttk.Button(bar, text="清零字段", width=9,
-                   command=lambda: self.field_table.clear()).pack(side="left", padx=4)
-        self.btn_send = ttk.Button(bar, text="发送该事件", width=12,
-                                   command=self.on_send_struct)
-        self.btn_send.pack(side="right")
+        actions = ActionBar(bar, row=0, column=2, columns=2, group=self.buttons)
+        actions.add("fill_sample", "载入示例值", self._on_fill_sample, kind="neutral",
+                    width=9, height=1, tooltip="按类型填入一组有意义的示例值")
+        actions.add("clear_fields", "清零字段", lambda: self.field_table.clear(),
+                    kind="neutral", width=7, height=1, tooltip="把可编辑字段重置为默认值")
 
+        # 第 2 行：主操作「发送该事件」独占一行 —— 右半区只有 ~470px 宽，
+        # 与上面几个按钮挤在一行会把主操作顶到可视区之外（实测 x=471 > 453，按钮被裁掉）。
+        send_row = ttk.Frame(box)
+        send_row.grid(row=1, column=0, sticky="w", padx=6, pady=(0, 3))
+        send_bar = ActionBar(send_row, row=0, column=0, columns=1, group=self.buttons)
+        self.btn_send = send_bar.add(
+            rules.KEY_SEND, "发送该事件", self.on_send_struct, kind="primary", width=11,
+            height=1, enabled_when=rules.RULES[rules.KEY_SEND],
+            tooltip="未打开/未启动服务时会自动先执行「打开 + 启动」")
+
+        # 第 3 行：字段编辑表（滚动）
         self.field_table = FieldTable(box, self.var_kind.get(), on_log=self.log)
-        self.field_table.grid(row=1, column=0, sticky="nsew", padx=6, pady=(0, 6))
+        self.field_table.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 6))
 
+        # 第 4 行：目标 service/event 提示
         self.lbl_target = ttk.Label(box, foreground=Theme.FG_DARK, text=self._target_text())
-        self.lbl_target.grid(row=2, column=0, sticky="w", padx=6, pady=(0, 6))
+        self.lbl_target.grid(row=3, column=0, sticky="w", padx=6, pady=(0, 6))
 
     # ---------------- ⑤ 日志 ----------------
     def _build_log_box(self, parent: ttk.Frame) -> None:

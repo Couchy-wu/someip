@@ -10,7 +10,11 @@
     field_table.py   结构化发送的字段编辑器（按 ctypes 结构体自动生成）
     panel_config.py  左侧配置面板（ConfigPanelMixin）
     panel_control.py 右侧控制面板（ControlPanelMixin）
-    replay_window.py 窗口主类（布局组装 + 生命周期 + 异常提示）
+    ui_rules.py      按钮规则表 + 状态栏文案（纯函数，UiState -> bool，可脱离 Tk 单测）
+    replay_window.py 窗口主类（布局组装 + 生命周期 + 状态机刷新入口 + 异常提示）
+
+按钮可用性：工具栏与③④的按钮都登记进同一个 `ButtonGroup`，规则来自 `ui_rules.RULES`，
+刷新只有 `SomeipReplayWindow._apply_ui_state()` 一个入口（详见 docs/SOMEIP_REPLAY.md §1.1）。
 
 依赖约束：可依赖 someip_core（业务）与 hudcore（平台/UI）；不反向依赖 gui_handlers。
 
