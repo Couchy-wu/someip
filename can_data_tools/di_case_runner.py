@@ -43,6 +43,7 @@ STATUS_INPUTS_OK = "inputs-ok"           # 输入下发完成，但画面无法�
 STATUS_SKIPPED = "skipped"               # 没有可下发输入（需台架注入）
 STATUS_ERROR = "error"                   # 执行期间出错
 STATUS_DRY_RUN = "dry-run"               # 仅解析与合成，未下发
+STATUS_ABORTED = "aborted"               # 本次批量执行被用户中止：剩余用例未执行（**不计入失败**）
 
 
 # --------------------------------------------------------------------------- 结果结构
@@ -84,6 +85,21 @@ class RunReport:
     notes: tuple[str, ...] = ()
     previous: dict | None = None       # 上一次的 JSON 报告（用于回归对比）
     schema: str = "hudautotest.di-case-report/1"
+    # 中止信息（新增可选字段；未中止时保持默认值 → 旧报告/旧脚本读到的仍是老结构）
+    aborted: bool = False              # 本次执行是否被用户中止（STATUS_ABORTED 语义）
+    aborted_cases: int = 0             # 因中止而未执行的用例数（不计入失败）
+
+    # ---- 中止说明 ----
+    def abort_note(self) -> str:
+        """中止说明（未中止时为空串）。
+
+        报告与界面共用同一句话，避免两处措辞漂移；`STATUS_ABORTED` 即这里的
+        "本次被用户中止"语义（不进入 `failure_statuses`，因此不影响 verdict/失败数）。
+        """
+        if not self.aborted:
+            return ""
+        return (f"本次被用户中止（{STATUS_ABORTED}）：剩余 {self.aborted_cases} 条用例未执行，"
+                f"本报告的统计只覆盖已执行的 {len(self.results)} 条")
 
     # ---- 统计 ----
     @property
@@ -119,6 +135,9 @@ class RunReport:
             "dry_run": status.get(STATUS_DRY_RUN, 0),
             "pass_rate": round(100.0 * passed / cases, 1) if cases else 0.0,
             "verdict": "FAIL" if (failed or errors) else "PASS",
+            # 中止（新增；语义与 diff/JSON 顶层保持一致：aborted 是布尔，"多少条没跑"看 aborted_cases）
+            "aborted": bool(self.aborted),
+            "aborted_cases": self.aborted_cases,
             "duration_ms": duration_ms,
             "duration_s": round(duration_ms / 1000.0, 2),
             "unsupported_breakdown": _unsupported_breakdown(self.results),
@@ -142,6 +161,8 @@ class RunReport:
             "legacy_previous": bool(prev_schema) and prev_schema != self.schema,
             "previous_at": self.previous.get("started_at", ""),
             "previous_verdict": (self.previous.get("summary") or {}).get("verdict", ""),
+            # 中止run的对比仅供参考：未执行的用例会显示成 removed，别当成"用例被删了"
+            "aborted": bool(self.aborted),
             **diff_status_maps(prev, cur, failure_statuses=(STATUS_FAIL, STATUS_ERROR)),
         }
 
@@ -156,6 +177,8 @@ class RunReport:
                  f"下发 CAN {s['sent_can_total']} 条、SOME/IP {s['sent_someip_total']} 项；"
                  f"需台架注入 {s['unsupported_total']} 项",
                  f"画面校验 {s['frame_status']}"]
+        if self.aborted:
+            lines.append("⛔ " + self.abort_note())
         shown = [r for r in self.results if r.status in (STATUS_FAIL, STATUS_ERROR)]
         shown += [r for r in self.results if r.status not in (STATUS_FAIL, STATUS_ERROR)]
         for r in shown[:limit]:
@@ -170,6 +193,7 @@ class RunReport:
                 "case_dir": self.case_dir, "service_table": self.service_table,
                 "command": self.command, "environment": dict(self.environment),
                 "notes": list(self.notes),
+                "aborted": bool(self.aborted), "aborted_cases": int(self.aborted_cases),
                 "summary": self.summary,
                 "diff": self.diff,
                 "unsupported": _unsupported_breakdown(self.results),
@@ -196,6 +220,8 @@ class RunReport:
         out += [f"**{icon} 结果：{s['passed']} 通过 / {s['failed']} 失败 / {s['errors']} 错误 / "
                 f"{s['skipped']} 跳过 / {s['inputs_ok'] + s['dry_run']} 仅下发或体检**"
                 f"（共 {s['cases']} 个用例，耗时 {s['duration_s']}s）", ""]
+        if self.aborted:
+            out += [f"> ⛔ **{self.abort_note()}**", ""]
         if self.started_at:
             out.append(f"- 生成时间: `{self.started_at}`" +
                        (f" ~ `{self.finished_at}`" if self.finished_at else ""))
@@ -218,6 +244,9 @@ class RunReport:
                 f"- 画面校验：" + "、".join(f"{k} {v}" for k, v in sorted(s["frame_status"].items())),
                 f"- 下发量：CAN {s['sent_can_total']} 条、SOME/IP {s['sent_someip_total']} 项；"
                 f"需台架注入 {s['unsupported_total']} 项"]
+        if self.aborted:
+            out.append(f"- ⛔ 已中止：剩余 {s['aborted_cases']} 条用例未执行"
+                       f"（`{STATUS_ABORTED}` 不计入失败，verdict 仍为 {s['verdict']}）")
         if s["unsupported_breakdown"]:
             out.append("- 需台架注入明细：" + "、".join(
                 f"{k} {v}" for k, v in s["unsupported_breakdown"].items()))
@@ -476,6 +505,15 @@ class SomeipReplayController:
 
 
 # --------------------------------------------------------------------------- 执行器
+def _stop_requested(should_stop: Callable[[], bool]) -> bool:
+    """安全地询问"是否中止"：回调写错时**按中止处理**（宁可停下，也不继续下发）。"""
+    try:
+        return bool(should_stop())
+    except Exception as exc:                           # noqa: BLE001 - 回调不该把批量执行带崩
+        logging_setup.error(LOGGER_NAME, f"中止回调异常（按中止处理）：{exc}")
+        return True
+
+
 class DiCaseRunner:
     """Di 用例执行器（可注入全部外部依赖，便于无设备回归）。"""
 
@@ -604,13 +642,17 @@ class DiCaseRunner:
     # ---- 批量 ----
     def run_cases(self, cases: Iterable[parser.DiCase], *, limit: int | None = None,
                   only: str | None = None, only_auto: bool = False,
-                  previous: dict | None = None, command: str = "") -> RunReport:
+                  previous: dict | None = None, command: str = "",
+                  should_stop: Callable[[], bool] | None = None) -> RunReport:
         """批量执行。
 
         :param only: 只跑 scenario_id 含该子串的用例
         :param only_auto: 只跑"输入可全部下发"的用例（`Support.level == "auto"`）
         :param previous: 上一次的 JSON 报告（给出后报告里会有回归对比）
         :param command: 复现本次执行的命令（写进报告）
+        :param should_stop: 中止回调（可选）。**每条用例之间**检查一次；返回 True 时跳出循环、
+            后续用例不再执行，报告标记 `aborted`（`STATUS_ABORTED`）与未执行条数。
+            只在下发/等待的间隙生效 —— 单条用例内部不会被打断（避免设备停在半下发状态）。
         """
         selected = list(cases)
         if only:
@@ -630,14 +672,25 @@ class DiCaseRunner:
                            environment=di_environment(case_dir),
                            notes=(
                                "状态含义：pass=下发完成且画面校验通过；inputs-ok=下发完成但画面无法校验；"
-                               "skipped=无任何可下发输入（需台架注入）；error=执行出错；dry-run=仅体检",
+                               "skipped=无任何可下发输入（需台架注入）；error=执行出错；dry-run=仅体检；"
+                               "aborted=本次被用户中止（剩余用例未执行，不计入失败）",
                                "需台架注入/不可下发的项按类型聚合在报告里，不会计入通过",
                            ))
         report.started_at = time.strftime("%Y-%m-%d %H:%M:%S")
+        executed = 0
         for case in selected:
+            if should_stop is not None and _stop_requested(should_stop):
+                report.aborted = True
+                report.aborted_cases = len(selected) - executed
+                self._log(f"[中止] 用户请求停止：已执行 {executed} 条，"
+                          f"剩余 {report.aborted_cases} 条未执行")
+                break
             result = self.run_case(case)
             report.results.append(result)
+            executed += 1
             self._log(result.describe())
+        if report.aborted:
+            report.notes = tuple(report.notes) + (report.abort_note(),)
         report.finished_at = time.strftime("%Y-%m-%d %H:%M:%S")
         return report
 
@@ -646,4 +699,4 @@ __all__ = ["DiCaseRunner", "CaseResult", "RunReport", "DeviceCanSender", "di_env
            "error_kind",
            "SomeipReplayController", "load_gate_defaults", "GATE_CONFIG",
            "STATUS_PASS", "STATUS_FAIL", "STATUS_INPUTS_OK", "STATUS_SKIPPED",
-           "STATUS_ERROR", "STATUS_DRY_RUN"]
+           "STATUS_ERROR", "STATUS_DRY_RUN", "STATUS_ABORTED"]
