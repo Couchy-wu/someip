@@ -130,12 +130,14 @@ class DiCaseWindow:
         if self._report is None:
             messagebox.showinfo("导出报告", "还没有执行结果，请先扫描/执行。")
             return
-        path = filedialog.asksaveasfilename(defaultextension=".json",
-                                            initialfile="di_run_report.json")
+        path = filedialog.asksaveasfilename(defaultextension=".md",
+                                            initialfile="di_run_report.md")
         if not path:
             return
-        written = self._report.dump(path)
-        messagebox.showinfo("导出报告", f"已写入：{written}")
+        md_path = Path(path)
+        written = self._report.write_reports(md_path, md_path.with_suffix(".json"))
+        messagebox.showinfo("导出报告",
+                            f"已写入：\n{written}\n{md_path.with_suffix('.json')}")
 
     # ------------------------------------------------------------ 后台任务
     def _start_worker(self, target, *args) -> None:

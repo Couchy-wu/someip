@@ -164,6 +164,10 @@ Markdown + JSON（自动判断运行环境标签、记录逐项耗时、列出�
   `data/UI_Config/*.json` + `Resources/ImageUI/`，比对用 `image_testing` 的 dHash；
   没有参考图的标签记为 `no_reference`（不算通过）；
 - 入口：`python -m scripts.run_di_cases`（体检/执行/报告）、GUI 主界面 **[Di 测试用例]** 按钮；
+- **报告**：`RunReport.render_markdown()/write_reports()` 产出 Markdown+JSON（复用
+  `tools/verify_report.py` 的转义与对比工具）；含结论统计/环境块/失败与错误归类（按原因）/
+  需台架注入归类（按类型）/最耗时用例/**与上次对比**（`error` 计入失败）；
+  `--report x.json` 会同时写同名 `.md`；改格式请同步 `tests/test_di_cases.py` 的报告用例；
 - 单测：`tests/test_di_cases.py`（解析/位写入/执行/校验/开关）。
 
 ### SOME/IP 回放（someip_core / someip_gui）

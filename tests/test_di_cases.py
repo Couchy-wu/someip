@@ -266,13 +266,107 @@ def test_runner_records_unsupported_inputs_honestly():
 
 
 def test_report_serialisation(tmp_path):
+    """JSON 报告：新旧键都在（兼容既有脚本），并带上环境/对比/归类信息。"""
     cases = parser.load_cases(CASE_DIR)[:5]
     report = runner.DiCaseRunner(dry_run=True).run_cases(cases)
     path = report.dump(tmp_path / "report.json")
     data = json.loads(path.read_text(encoding="utf-8"))
+    # 旧键（既有脚本/界面在用）
     assert data["summary"]["cases"] == 5
     assert data["mode"] == "dry-run"
     assert "dry-run" in report.describe()
+    # 新键
+    assert data["schema"] == "hudautotest.di-case-report/1"
+    assert set(data) >= {"command", "environment", "summary", "diff", "failures",
+                         "unsupported", "results"}
+    assert data["environment"].get("SOME/IP 服务表代")
+    assert "pass_rate" in data["summary"] and "verdict" in data["summary"]
+    assert "error_breakdown" in data["summary"] and "unsupported_breakdown" in data["summary"]
+
+
+def test_report_markdown_sections_and_table_integrity(tmp_path):
+    """Markdown 报告：结论行 + 环境/统计/逐项章节；表格列数自洽（转义竖线不算列）。"""
+    def unescaped_pipes(line: str) -> int:
+        return sum(1 for i, ch in enumerate(line) if ch == "|" and (i == 0 or line[i - 1] != "\\"))
+
+    cases = parser.load_cases(CASE_DIR)[:6]
+    report = runner.DiCaseRunner(dry_run=True).run_cases(
+        cases, command="python -m scripts.run_di_cases --limit 6")
+    text = report.render_markdown()
+    assert text.startswith("# Di 测试用例执行报告（dry-run）")
+    for section in ("## 执行环境", "## 统计", "## 逐项结果", "## 说明"):
+        assert section in text, f"缺少章节：{section}"
+    assert "复现命令" in text and "python -m scripts.run_di_cases" in text
+    assert "用例目录" in text and "SOME/IP 服务表代" in text
+
+    body = text.split("## 逐项结果", 1)[1]
+    rows = [ln for ln in body.splitlines() if ln.startswith("| ") and "---" not in ln]
+    assert len(rows) == 1 + len(cases), "表头 + 每个用例一行"
+    for line in rows:
+        assert unescaped_pipes(line) == 10, f"逐项表应为 9 列：{line[:80]}"
+
+    env = text.split("## 执行环境", 1)[1].split("## ", 1)[0]
+    for line in [ln for ln in env.splitlines() if ln.startswith("| ") and "---" not in ln]:
+        assert unescaped_pipes(line) == 3, f"环境表应为 2 列：{line[:80]}"
+
+    written = report.write_reports(tmp_path / "di.md", tmp_path / "di.json")
+    assert written.is_file() and (tmp_path / "di.json").is_file()
+
+
+def test_report_groups_unsupported_and_errors():
+    """不可下发项按类型聚合、错误按原因归类 —— 这是评审最需要的两处归纳。"""
+    cases = parser.load_cases(CASE_DIR)
+    report = runner.DiCaseRunner(dry_run=True, gate_defaults={}).run_cases(cases)
+    breakdown = report.summary["unsupported_breakdown"]
+    assert breakdown.get("mem 内部状态量", 0) > 400, "样例里有大量 mem 内部状态量"
+    assert breakdown.get("仅门控说明、无位域报文", 0) > 100, "样例里有大量无位域的门控报文"
+    assert breakdown.get("SOME/IP 字段不可下发", 0) > 0
+
+    # 注入一条值超出位域的错误，验证归类
+    bad = parser.parse_case_obj({
+        "scenario_id": "TC-BAD-RANGE", "input_combination": {
+            "can": [{"signal_id": "0x100", "sub_id": "", "bit_range": "0.0-0.2", "value": 9}]},
+        "expected_output": {}, "wait_ms": 0})
+    text = runner.DiCaseRunner(dry_run=False, can_sender=lambda *a: 1,
+                               gate_defaults={}).run_cases([bad]).render_markdown()
+    assert "## 失败与错误（1）" in text
+    assert "值超出位域范围（用例与位域定义矛盾）" in text
+    assert runner.error_kind("值 8 超出位域 6.0-6.2 的 3 位范围（<8）") == "值超出位域范围（用例与位域定义矛盾）"
+
+
+def test_report_diff_against_previous_run():
+    """与上次运行对比：按 scenario_id 匹配；error 也要算"失败"（Di 的 error 是执行出错）。"""
+    cases = parser.load_cases(CASE_DIR)[:3]
+    previous = runner.DiCaseRunner(dry_run=True).run_cases(cases).to_dict()
+    previous["results"] = [{"scenario_id": c.scenario_id, "status": runner.STATUS_PASS}
+                           for c in cases]
+
+    # 让执行必然出错（不发 CAN 实现），此时应为 error → 对比里算"新增失败"
+    failing = runner.DiCaseRunner(dry_run=False, can_sender=None).run_cases(
+        cases, previous=previous)
+    assert all(r.status == runner.STATUS_ERROR for r in failing.results)
+    diff = failing.diff
+    assert diff["regressions"] == [c.scenario_id for c in cases], "error 应被计为新增失败"
+    assert diff["fixed"] == [] and diff["still_failing"] == []
+    text = failing.render_markdown()
+    assert "## 与上次运行对比" in text and "新增失败（3）" in text
+
+
+def test_report_diff_marks_fixed_when_error_disappears():
+    """上次 error、本次通过 → 记入"已修复"。"""
+    cases = parser.load_cases(CASE_DIR)[:2]
+    previous = runner.DiCaseRunner(dry_run=True).run_cases(cases).to_dict()
+    previous["results"] = [{"scenario_id": c.scenario_id, "status": runner.STATUS_ERROR}
+                           for c in cases]
+    ok = runner.DiCaseRunner(dry_run=True).run_cases(cases, previous=previous)
+    assert ok.diff["fixed"] == [c.scenario_id for c in cases]
+    assert "已修复（2）" in ok.render_markdown()
+
+
+def test_report_without_previous_has_no_diff_section():
+    cases = parser.load_cases(CASE_DIR)[:2]
+    text = runner.DiCaseRunner(dry_run=True).run_cases(cases).render_markdown()
+    assert "## 与上次运行对比" not in text
 
 
 # =========================================================================== 标贴校验

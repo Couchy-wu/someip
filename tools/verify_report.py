@@ -103,6 +103,53 @@ def summarize(items: Sequence[Item]) -> dict:
     }
 
 
+def diff_status_maps(previous: dict, current: dict,
+                     failure_statuses: Iterable[str] = ("FAIL",)) -> dict:
+    """通用状态对比：`{名称: 状态}` × `{名称: 状态}` → 回归差异（两种报告共用）。
+
+    :param failure_statuses: 视为"失败"的状态集合。验证套件只有 FAIL；
+                             Di 用例报告还要算上 ERROR，因此可传入 {"FAIL", "ERROR"}
+    :return: regressions（新增失败）/ fixed（已修复）/ still_failing（持续失败）/
+             added（本次新增）/ removed（上次有本次没有）
+    """
+    failures = {str(x).upper() for x in failure_statuses}
+    regressions, fixed, still_failing, added = [], [], [], []
+    for name, status in current.items():
+        old = previous.get(name)
+        now_bad = str(status).upper() in failures
+        was_bad = str(old).upper() in failures if old is not None else False
+        if old is None:
+            added.append(name)
+        elif now_bad and not was_bad:
+            regressions.append(name)
+        elif was_bad and not now_bad:
+            fixed.append(name)
+        elif now_bad and was_bad:
+            still_failing.append(name)
+    removed = [name for name in previous if name not in current]
+    return {"regressions": regressions, "fixed": fixed, "still_failing": still_failing,
+            "added": added, "removed": removed}
+
+
+def diff_section_lines(diff: dict) -> list[str]:
+    """把对比结果渲染成 Markdown 列表项（两个报告渲染器共用）。"""
+    lines = [f"- 上次运行: `{diff.get('previous_at') or '未知时间'}`"
+             f"（判定 {diff.get('previous_verdict') or '未知'}）"]
+    if diff.get("legacy_previous"):
+        lines.append(f"- 上次报告为旧格式（`{diff.get('previous_schema')}`），"
+                     f"仅按「名称 + 状态」对比，不含耗时/环境差异")
+    for key, text in (("regressions", "新增失败"), ("fixed", "已修复"),
+                      ("still_failing", "持续失败"), ("added", "本次新增"),
+                      ("removed", "上次有、本次没有")):
+        names = diff.get(key) or []
+        if names:
+            lines.append(f"- {text}（{len(names)}）：" + "、".join(f"`{n}`" for n in names))
+    if not any(diff.get(k) for k in ("regressions", "fixed", "still_failing",
+                                    "added", "removed")):
+        lines.append("- 无变化（与上次逐项一致）")
+    return lines
+
+
 def diff_runs(previous: dict | None, items: Sequence[Item]) -> dict:
     """与上一次运行对比（按验证项名称匹配）。
 
@@ -114,19 +161,6 @@ def diff_runs(previous: dict | None, items: Sequence[Item]) -> dict:
         return {"available": False}
     prev = {r.get("name"): r.get("status") for r in previous["results"]}
     cur = {i.name: i.status for i in items}
-
-    regressions, fixed, still_failing, added = [], [], [], []
-    for name, status in cur.items():
-        old = prev.get(name)
-        if old is None:
-            added.append(name)
-        elif status == "FAIL" and old != "FAIL":
-            regressions.append(name)
-        elif status != "FAIL" and old == "FAIL":
-            fixed.append(name)
-        elif status == "FAIL" and old == "FAIL":
-            still_failing.append(name)
-    removed = [name for name in prev if name not in cur]
     prev_schema = previous.get("schema", "")
     return {
         "available": True,
@@ -134,11 +168,7 @@ def diff_runs(previous: dict | None, items: Sequence[Item]) -> dict:
         "legacy_previous": bool(prev_schema) and prev_schema != SCHEMA,
         "previous_at": previous.get("generated_at", ""),
         "previous_verdict": (previous.get("summary") or {}).get("verdict", ""),
-        "regressions": regressions,
-        "fixed": fixed,
-        "still_failing": still_failing,
-        "added": added,
-        "removed": removed,
+        **diff_status_maps(prev, cur),
     }
 
 
@@ -206,19 +236,7 @@ def render_markdown(meta: ReportMeta, items: Sequence[Item],
         out += ["## 与上次运行对比", "",
                 f"- 上次运行: `{diff.get('previous_at') or '未知时间'}`"
                 f"（判定 {diff.get('previous_verdict') or '未知'}）"]
-        if diff.get("legacy_previous"):
-            out.append(f"- 上次报告为旧格式（`{diff.get('previous_schema')}`），"
-                       f"仅按「验证项名称 + 状态」对比，不含耗时/环境差异")
-        for key, text in (("regressions", "新增失败"), ("fixed", "已修复"),
-                          ("still_failing", "持续失败"), ("added", "本次新增项"),
-                          ("removed", "上次有、本次没有")):
-            names = diff.get(key) or []
-            if names:
-                out.append(f"- {text}（{len(names)}）：" + "、".join(f"`{n}`" for n in names))
-        if not any(diff.get(k) for k in ("regressions", "fixed", "still_failing",
-                                         "added", "removed")):
-            out.append("- 无变化（与上次逐项一致）")
-        out += [""]
+        out += diff_section_lines(diff) + [""]
 
     # ---- 逐项明细 ----
     out += ["## 逐项结果", "",
@@ -349,7 +367,8 @@ def collect_previous(json_path: str | Path) -> dict | None:
 
 __all__ = [
     "Item", "ReportMeta", "SCHEMA", "STATUS_ICON", "CELL_LIMIT",
-    "md_cell", "summarize", "diff_runs", "load_previous",
+    "md_cell", "summarize", "diff_runs", "diff_status_maps", "diff_section_lines",
+    "load_previous",
     "render_markdown", "render_json", "write_reports",
     "collect_environment", "collect_previous",
 ]

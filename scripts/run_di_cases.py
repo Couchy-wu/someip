@@ -25,6 +25,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from can_data_tools import case_format, di_case_parser as parser, di_case_runner as runner  # noqa: E402
@@ -121,6 +122,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--camera-index", type=int, default=0, help="相机序号（默认 0）")
     ap.add_argument("--wait-scale", type=float, default=1.0, help="wait_ms 缩放系数")
     ap.add_argument("--report", default=None, help="把 JSON 报告写到该路径")
+    ap.add_argument("--report-md", default=None,
+                    help="把 Markdown 报告写到该路径（给 --report 时默认同名的 .md）")
+    ap.add_argument("--no-diff", action="store_true", help="不与上次 JSON 报告做回归对比")
     ap.add_argument("--summary-only", action="store_true", help="只打印汇总，不逐条列出")
     ap.add_argument("--someip-table", default=None, choices=["old", "bplus"],
                     help="SOME/IP 服务表代（默认跟随 HUD_SOMEIP_TABLE / old）")
@@ -200,12 +204,24 @@ def main(argv: list[str] | None = None) -> int:
     if args.execute and exec_runner.can_sender is None and any(c.can for c in cases):
         print("[警告] 没有可用的 CAN 下发实现，含 CAN 输入的用例会记为 error")
 
+    previous = None
+    if args.report and not args.no_diff:
+        from tools.verify_report import load_previous
+        previous = load_previous(args.report)
     report = exec_runner.run_cases(cases, limit=args.limit, only=args.only,
-                                   only_auto=args.auto_only)
+                                   only_auto=args.auto_only, previous=previous,
+                                   command=" ".join([sys.executable, "-m", "scripts.run_di_cases"]
+                                                    + sys.argv[1:]))
     print(report.describe(limit=1 if args.summary_only else 12))
-    if args.report:
-        path = report.dump(args.report)
-        print(f"报告已写入：{path}")
+    if report.diff.get("available"):
+        d = report.diff
+        print(f" 与上次对比：新增失败 {len(d['regressions'])}、已修复 {len(d['fixed'])}、"
+              f"持续失败 {len(d['still_failing'])}（上次 {d.get('previous_at') or '未知时间'}）")
+    if args.report or args.report_md:
+        # Markdown 路径：显式 --report-md 优先，否则由 --report 的 json 路径推导同名 .md
+        md_path = args.report_md or (str(Path(args.report).with_suffix(".md")) if args.report else None)
+        written = report.write_reports(md_path, args.report)
+        print(f"报告已写入：{written}" + (f"（JSON: {args.report}）" if args.report else ""))
 
     if exec_runner.someip_controller is not None:
         exec_runner.someip_controller.close()

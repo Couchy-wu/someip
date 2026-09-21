@@ -99,6 +99,19 @@ def test_diff_reports_still_failing():
     assert diff["regressions"] == []
 
 
+def test_diff_status_maps_supports_custom_failure_statuses():
+    """Di 用例报告把 error 也算失败：通用对比接口必须支持自定义失败状态集合。"""
+    from tools.verify_report import diff_status_maps
+    prev = {"a": "PASS", "b": "ERROR", "c": "PASS"}
+    cur = {"a": "ERROR", "b": "PASS", "c": "PASS"}
+    diff = diff_status_maps(prev, cur, failure_statuses=("FAIL", "ERROR"))
+    assert diff["regressions"] == ["a"], "PASS → ERROR 应算新增失败"
+    assert diff["fixed"] == ["b"], "ERROR → PASS 应算已修复"
+    assert diff["still_failing"] == []
+    default = diff_status_maps(prev, cur)          # 默认只认 FAIL（验证套件语义）
+    assert default["regressions"] == [] and default["fixed"] == []
+
+
 def test_diff_without_previous_is_unavailable():
     assert diff_runs(None, _items()) == {"available": False}
     assert diff_runs({"results": []}, _items()) == {"available": False}

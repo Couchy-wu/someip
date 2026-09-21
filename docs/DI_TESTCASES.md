@@ -114,6 +114,43 @@ python -m scripts.run_di_cases --execute --camera --camera-index 0
 
 ---
 
+## 3.5 执行报告（Markdown + JSON）
+
+`run_cases()` 返回的 `RunReport` 同时产出两种报告（渲染复用
+`tools/verify_report.py` 的安全转义/对比工具，见 `docs/…` 与 `docker/windows-sim/README.md`）：
+
+```bash
+python -m scripts.run_di_cases --report logs/di_run.json          # 同时生成同名 .md
+python -m scripts.run_di_cases --report-md logs/di_run.md --no-diff
+```
+
+Markdown 结构（评审用）：结论行（各状态计数 + 耗时）→ 执行环境 → 统计 → 失败与错误 →
+需台架注入/不可下发 → 与上次对比 → 逐项结果 → 说明。
+
+| 内容 | JSON 字段 | 说明 |
+|------|-----------|------|
+| 判定与统计 | `summary` | 结论分布、支持度分布、画面校验分布、下发量、通过率、`verdict`、总耗时；**保留旧键**（`cases/status/frame_status/sent_*_total/unsupported_total`） |
+| 错误归类 | `summary.error_breakdown` + `failures[].reason` | 按原因聚合：值超出位域 / 位域写法非法 / 缺下发实现 / 发送失败 / 其它 |
+| 不可下发归类 | `unsupported` + `summary.unsupported_breakdown` | mem 内部状态量 / SOME/IP 字段 / 仅门控无位域报文 / 其它 |
+| 运行环境 | `environment` | 平台、Python、项目根、git 提交、CAN 驱动、SOME/IP 库、**服务表代**、用例目录、门控配置是否已补、标贴参考图配置 |
+| 最耗时用例 | `summary.slowest` | Top5（现场先把慢的挑出来看） |
+| 与上次对比 | `diff` | 按 `scenario_id` 匹配；**`error` 也算失败**（Di 的执行出错不等于通过），给出新增失败/已修复/持续失败/新增/消失 |
+| 逐项结果 | `results` | 每个用例的结论、支持度、下发内容、不可下发项、画面结论、耗时 |
+
+### 报告发现的一处用例集数据矛盾（待评审确认）
+
+首次跑全量报告即发现 **7 个用例的值超出其声明的位域范围**（运行器如实判为 `error`，不掩盖）：
+
+| 用例 | 位域 | 取值 | 位域可表示范围 |
+|------|------|------|----------------|
+| `TC-AVH-EX04` / `TC-AVH-EX05` | `6.0-6.2` | 8 / 9 | 0~7 |
+| `TC-LVDS-STANDBY-HIDDEN` | `2.0-2.1` | 7 | 0~3 |
+| `TC-PATTERN-EX02` / `EX03` / `LASTPATTERN-SHOW` / `PATTERNOVER-HIDDEN` | `4.4-5.0` | 38 / 40 | 0~31 |
+
+其中 `warp_PatternNum` 这个信号在同一用例集里被赋过 0~40 多种取值，全部落在 `4.4-5.0`（5 位）之内 ——
+**更像是用例的位域写得过窄**（或该信号实际位宽更大），需要用例作者用 CAN 矩阵确认；
+执行器不会截断或掩码，避免把数据问题伪装成通过。
+
 ## 4. 三类输入的支持程度（诚实说明）
 
 | 输入 | 支持 | 做法 / 现状 |

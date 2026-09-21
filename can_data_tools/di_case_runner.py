@@ -27,6 +27,8 @@ from typing import Callable, Iterable, Sequence
 
 from hudcore import logging_setup
 
+from tools.verify_report import diff_status_maps
+
 from . import can_bit_writer as bitw
 from . import di_case_parser as parser
 from .label_verify import LabelVerifier, LabelVerifierError
@@ -69,26 +71,81 @@ class CaseResult:
 
 @dataclass
 class RunReport:
+    """一次批量执行的报告（Markdown 面向评审、JSON 面向程序与回归对比）。"""
+
     mode: str
     results: list[CaseResult] = field(default_factory=list)
     started_at: str = ""
     finished_at: str = ""
     case_dir: str = ""
     service_table: str = ""            # 本次执行依据的 SOME/IP 服务表代（old / bplus）
+    command: str = ""                  # 复现命令
+    environment: dict = field(default_factory=dict)
+    notes: tuple[str, ...] = ()
+    previous: dict | None = None       # 上一次的 JSON 报告（用于回归对比）
+    schema: str = "hudautotest.di-case-report/1"
 
     # ---- 统计 ----
     @property
     def summary(self) -> dict:
         status: dict[str, int] = {}
         frames: dict[str, int] = {}
+        support: dict[str, int] = {}
         for r in self.results:
             status[r.status] = status.get(r.status, 0) + 1
             frames[r.frame_status] = frames.get(r.frame_status, 0) + 1
-        return {"cases": len(self.results), "status": status, "frame_status": frames,
-                "sent_can_total": sum(len(r.sent_can) for r in self.results),
-                "sent_someip_total": sum(len(r.sent_someip) for r in self.results),
-                "unsupported_total": sum(len(r.unsupported) for r in self.results)}
+            if r.support:
+                support[r.support] = support.get(r.support, 0) + 1
+        cases = len(self.results)
+        passed = status.get(STATUS_PASS, 0)
+        failed = status.get(STATUS_FAIL, 0)
+        errors = status.get(STATUS_ERROR, 0)
+        duration_ms = sum(max(0, r.elapsed_ms) for r in self.results)
+        return {
+            # 兼容旧键（脚本/界面已在用）
+            "cases": cases,
+            "status": status,
+            "frame_status": frames,
+            "sent_can_total": sum(len(r.sent_can) for r in self.results),
+            "sent_someip_total": sum(len(r.sent_someip) for r in self.results),
+            "unsupported_total": sum(len(r.unsupported) for r in self.results),
+            # 新增
+            "support": support,
+            "passed": passed,
+            "failed": failed,
+            "errors": errors,
+            "skipped": status.get(STATUS_SKIPPED, 0),
+            "inputs_ok": status.get(STATUS_INPUTS_OK, 0),
+            "dry_run": status.get(STATUS_DRY_RUN, 0),
+            "pass_rate": round(100.0 * passed / cases, 1) if cases else 0.0,
+            "verdict": "FAIL" if (failed or errors) else "PASS",
+            "duration_ms": duration_ms,
+            "duration_s": round(duration_ms / 1000.0, 2),
+            "unsupported_breakdown": _unsupported_breakdown(self.results),
+            "error_breakdown": _error_breakdown(self.results),
+            "slowest": [{"scenario_id": r.scenario_id, "elapsed_ms": r.elapsed_ms}
+                        for r in sorted(self.results, key=lambda x: -x.elapsed_ms)
+                        if r.elapsed_ms > 0][:5],
+        }
 
+    # ---- 回归对比 ----
+    @property
+    def diff(self) -> dict:
+        if not self.previous or not self.previous.get("results"):
+            return {"available": False}
+        prev = {r.get("scenario_id"): r.get("status") for r in self.previous["results"]}
+        cur = {r.scenario_id: r.status for r in self.results}
+        prev_schema = self.previous.get("schema", "")
+        return {
+            "available": True,
+            "previous_schema": prev_schema,
+            "legacy_previous": bool(prev_schema) and prev_schema != self.schema,
+            "previous_at": self.previous.get("started_at", ""),
+            "previous_verdict": (self.previous.get("summary") or {}).get("verdict", ""),
+            **diff_status_maps(prev, cur, failure_statuses=(STATUS_FAIL, STATUS_ERROR)),
+        }
+
+    # ---- 文本/JSON/Markdown ----
     def describe(self, limit: int = 12) -> str:
         s = self.summary
         lines = [f"=== Di 用例执行报告（{self.mode}）===",
@@ -108,20 +165,193 @@ class RunReport:
         return "\n".join(lines)
 
     def to_dict(self) -> dict:
-        return {"mode": self.mode, "started_at": self.started_at, "finished_at": self.finished_at,
+        return {"schema": self.schema,
+                "mode": self.mode, "started_at": self.started_at, "finished_at": self.finished_at,
                 "case_dir": self.case_dir, "service_table": self.service_table,
+                "command": self.command, "environment": dict(self.environment),
+                "notes": list(self.notes),
                 "summary": self.summary,
+                "diff": self.diff,
+                "unsupported": _unsupported_breakdown(self.results),
+                "failures": [{"scenario_id": r.scenario_id, "status": r.status, "detail": r.detail,
+                              "reason": error_kind(r.detail)}
+                             for r in self.results if r.status in (STATUS_FAIL, STATUS_ERROR)],
+                "error_breakdown": _error_breakdown(self.results),
                 "results": [asdict(r) for r in self.results]}
 
     def dump(self, path: str | Path) -> Path:
+        """写 JSON 报告（兼容旧接口）。"""
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(self.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
         return p
 
+    def render_markdown(self) -> str:
+        """渲染 Markdown 报告（评审用）：结论 → 环境 → 统计 → 失败/不可下发 → 对比 → 逐项。"""
+        from tools.verify_report import (diff_section_lines, md_cell)
+
+        s = self.summary
+        out: list[str] = [f"# Di 测试用例执行报告（{self.mode}）", ""]
+        icon = "❌" if s["verdict"] == "FAIL" else "✅"
+        out += [f"**{icon} 结果：{s['passed']} 通过 / {s['failed']} 失败 / {s['errors']} 错误 / "
+                f"{s['skipped']} 跳过 / {s['inputs_ok'] + s['dry_run']} 仅下发或体检**"
+                f"（共 {s['cases']} 个用例，耗时 {s['duration_s']}s）", ""]
+        if self.started_at:
+            out.append(f"- 生成时间: `{self.started_at}`" +
+                       (f" ~ `{self.finished_at}`" if self.finished_at else ""))
+        if self.command:
+            out.append(f"- 复现命令: `{self.command}`")
+        if self.case_dir:
+            out.append(f"- 用例目录: `{self.case_dir}`")
+        out.append("")
+
+        if self.environment:
+            out += ["## 执行环境", "", "| 项 | 值 |", "|----|----|"]
+            for key, value in self.environment.items():
+                out.append(f"| {md_cell(key, 40)} | {md_cell(value)} |")
+            out += [""]
+
+        out += ["## 统计", "",
+                f"- 结论分布：" + "、".join(f"{k} {v}" for k, v in sorted(s["status"].items())),
+                f"- 支持度分布：" + ("、".join(f"{k} {v}" for k, v in sorted(s["support"].items()))
+                                     or "（无）"),
+                f"- 画面校验：" + "、".join(f"{k} {v}" for k, v in sorted(s["frame_status"].items())),
+                f"- 下发量：CAN {s['sent_can_total']} 条、SOME/IP {s['sent_someip_total']} 项；"
+                f"需台架注入 {s['unsupported_total']} 项"]
+        if s["unsupported_breakdown"]:
+            out.append("- 需台架注入明细：" + "、".join(
+                f"{k} {v}" for k, v in s["unsupported_breakdown"].items()))
+        if s["slowest"]:
+            out.append("- 最耗时用例：" + "、".join(
+                f"`{x['scenario_id']}` {x['elapsed_ms']}ms" for x in s["slowest"]))
+        out += [""]
+
+        bad = [r for r in self.results if r.status in (STATUS_FAIL, STATUS_ERROR)]
+        if bad:
+            out += [f"## 失败与错误（{len(bad)}）", "",
+                    "| 原因归类 | 用例数 |", "|----------|--------|"]
+            for kind, count in s["error_breakdown"].items():
+                out.append(f"| {md_cell(kind, 40)} | {count} |")
+            out += ["", "| 用例 | 结论 | 原因 |", "|------|------|------|"]
+            for r in bad:
+                out.append(f"| {md_cell(r.scenario_id, 60)} | {r.status} | "
+                           f"{md_cell(r.detail or '（无详情）', 400)} |")
+            out += [""]
+
+        if s["unsupported_breakdown"]:
+            out += ["## 需台架注入 / 不可下发（按类型聚合）", "",
+                    "| 类型 | 项数 | 示例 |", "|------|------|----|"]
+            for kind, count in s["unsupported_breakdown"].items():
+                sample = next((u for r in self.results for u in r.unsupported
+                               if _unsupported_kind(u) == kind), "")
+                out.append(f"| {md_cell(kind, 40)} | {count} | {md_cell(sample, 200)} |")
+            out += [""]
+
+        diff = self.diff
+        if diff.get("available"):
+            out += ["## 与上次运行对比", ""] + diff_section_lines(diff) + [""]
+
+        out += ["## 逐项结果", "",
+                "| # | 用例 | 结论 | 支持度 | CAN | SOME/IP | 画面 | 耗时(ms) | 说明 |",
+                "|---|------|------|--------|-----|---------|------|----------|------|"]
+        for i, r in enumerate(self.results, 1):
+            out.append(f"| {i} | {md_cell(r.scenario_id, 60)} | {md_cell(r.status, 24)} | "
+                       f"{md_cell(r.support or '-', 12)} | {len(r.sent_can)} | "
+                       f"{len(r.sent_someip)} | {md_cell(r.frame_status, 20)} | {r.elapsed_ms} | "
+                       f"{md_cell(r.detail, 300)} |")
+        out += [""]
+
+        if self.notes:
+            out += ["## 说明", ""] + [f"- {md_cell(n, 600)}" for n in self.notes] + [""]
+        return "\n".join(out).rstrip() + "\n"
+
+    def write_reports(self, md_path: str | Path, json_path: str | Path | None = None) -> Path:
+        """写 Markdown（+ 可选 JSON）报告；返回 Markdown 路径。"""
+        md = Path(md_path)
+        md.parent.mkdir(parents=True, exist_ok=True)
+        md.write_text(self.render_markdown(), encoding="utf-8")
+        if json_path is not None:
+            self.dump(json_path)
+        return md
+
+
+# --------------------------------------------------------------------------- 不可下发的归类
+_UNSUPPORTED_KINDS = (
+    ("mem 内部状态量", lambda u: u.startswith("mem.")),
+    ("SOME/IP 字段不可下发", lambda u: u.startswith("SOME/IP")),
+    ("仅门控说明、无位域报文", lambda u: u.startswith("CAN 0x")),
+)
+
+
+def _unsupported_kind(entry: str) -> str:
+    """把一条"不可下发"记录归类（供报告聚合）。"""
+    for kind, match in _UNSUPPORTED_KINDS:
+        if match(entry):
+            return kind
+    return "其它"
+
+
+_ERROR_KINDS = (
+    ("值超出位域范围（用例与位域定义矛盾）", lambda d: "超出位域" in d),
+    ("位域写法非法", lambda d: "位域写法非法" in d or "位域超范围" in d or "位域为空" in d),
+    ("未提供下发实现（缺设备/库）", lambda d: "未提供" in d and "实现" in d),
+    ("发送失败", lambda d: "发送失败" in d),
+)
+
+
+def error_kind(detail: str) -> str:
+    """把错误原因归类（供报告聚合，便于一眼看出是用例数据问题还是环境问题）。"""
+    text = str(detail or "")
+    for kind, match in _ERROR_KINDS:
+        if match(text):
+            return kind
+    return "其它错误"
+
+
+def _error_breakdown(results: Sequence[CaseResult]) -> dict[str, int]:
+    """按原因统计失败/错误用例数。"""
+    counts: dict[str, int] = {}
+    for r in results:
+        if r.status in (STATUS_FAIL, STATUS_ERROR):
+            kind = error_kind(r.detail)
+            counts[kind] = counts.get(kind, 0) + 1
+    return dict(sorted(counts.items(), key=lambda kv: -kv[1]))
+
+
+def _unsupported_breakdown(results: Sequence[CaseResult]) -> dict[str, int]:
+    """按类型统计"需台架注入/不可下发"的项数。"""
+    counts: dict[str, int] = {}
+    for r in results:
+        for entry in r.unsupported:
+            kind = _unsupported_kind(entry)
+            counts[kind] = counts.get(kind, 0) + 1
+    return dict(sorted(counts.items(), key=lambda kv: -kv[1]))
+
 
 # --------------------------------------------------------------------------- 门控默认位
 GATE_CONFIG = Path("data") / "DI_Config" / "gate_frame.json"
+
+
+def di_environment(case_dir: str | Path | None = None) -> dict:
+    """Di 报告的环境块：通用环境（平台/Python/git/CAN/SOME-IP）+ 用例链路专属信息。"""
+    from tools.verify_report import collect_environment
+    try:
+        from hudcore.platform.paths import paths
+        env = collect_environment(paths.project_root)
+    except Exception as exc:                           # noqa: BLE001 - 环境收集失败不该影响报告
+        env = {"环境收集": f"跳过（{type(exc).__name__}）"}
+    env["SOME/IP 服务表代"] = _current_table()
+    if case_dir:
+        env["用例目录"] = str(case_dir)
+    env["门控默认位"] = ("已配置" if load_gate_defaults() else
+                         "未配置（无位域的报文会被记为不可编码）")
+    try:
+        from can_data_tools.label_verify import LabelVerifier
+        verifier = LabelVerifier()
+        env["标贴参考图配置"] = verifier._config_name
+    except Exception as exc:                           # noqa: BLE001
+        env["标贴参考图配置"] = f"不可用（{type(exc).__name__}）"
+    return env
 
 
 def _current_table() -> str:
@@ -373,11 +603,14 @@ class DiCaseRunner:
 
     # ---- 批量 ----
     def run_cases(self, cases: Iterable[parser.DiCase], *, limit: int | None = None,
-                  only: str | None = None, only_auto: bool = False) -> RunReport:
+                  only: str | None = None, only_auto: bool = False,
+                  previous: dict | None = None, command: str = "") -> RunReport:
         """批量执行。
 
         :param only: 只跑 scenario_id 含该子串的用例
         :param only_auto: 只跑"输入可全部下发"的用例（`Support.level == "auto"`）
+        :param previous: 上一次的 JSON 报告（给出后报告里会有回归对比）
+        :param command: 复现本次执行的命令（写进报告）
         """
         selected = list(cases)
         if only:
@@ -389,9 +622,17 @@ class DiCaseRunner:
         if limit is not None:
             selected = selected[:limit]
 
+        case_dir = str(selected[0].path.parent) if selected and selected[0].path else \
+            str(parser.DEFAULT_CASE_DIR)
         report = RunReport(mode="dry-run" if self.dry_run else "execute",
-                           case_dir=str(selected[0].path.parent) if selected and selected[0].path else "",
-                           service_table=self.service_table)
+                           case_dir=case_dir, service_table=self.service_table,
+                           command=command, previous=previous,
+                           environment=di_environment(case_dir),
+                           notes=(
+                               "状态含义：pass=下发完成且画面校验通过；inputs-ok=下发完成但画面无法校验；"
+                               "skipped=无任何可下发输入（需台架注入）；error=执行出错；dry-run=仅体检",
+                               "需台架注入/不可下发的项按类型聚合在报告里，不会计入通过",
+                           ))
         report.started_at = time.strftime("%Y-%m-%d %H:%M:%S")
         for case in selected:
             result = self.run_case(case)
@@ -401,7 +642,8 @@ class DiCaseRunner:
         return report
 
 
-__all__ = ["DiCaseRunner", "CaseResult", "RunReport", "DeviceCanSender",
+__all__ = ["DiCaseRunner", "CaseResult", "RunReport", "DeviceCanSender", "di_environment",
+           "error_kind",
            "SomeipReplayController", "load_gate_defaults", "GATE_CONFIG",
            "STATUS_PASS", "STATUS_FAIL", "STATUS_INPUTS_OK", "STATUS_SKIPPED",
            "STATUS_ERROR", "STATUS_DRY_RUN"]
