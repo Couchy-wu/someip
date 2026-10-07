@@ -10,8 +10,8 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(BUILD_SP "使用 SP 分支协议栈（仅 Linux）" OFF)
 
-# 数据层源码（平台无关）
-set(DATA_SRC src/arhud_pcap.cpp src/arhud_types.cpp)
+# 数据层源码（平台无关）：pcap 流式解析 + 回放引擎 + 结构体序列化
+set(DATA_SRC src/arhud_pcap.cpp src/arhud_replay.cpp src/arhud_types.cpp)
 
 if(WIN32)
     if(BUILD_SP)

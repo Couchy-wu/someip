@@ -14,6 +14,7 @@
 #include "arhud_server.h"
 #include "arhud_types.h"
 #include "arhud_pcap.h"
+#include "arhud_replay.h"
 #include "arhud_services.h"
 #include "vsomeip/someip_com.h"
 #include <zlib.h>
@@ -52,10 +53,6 @@ namespace {
 /* 服务/事件表来自 arhud_services.h（与参考实现逐条对齐，两代用 ARHUD_SERVICE_PROFILE 选择） */
 typedef arhud::EventRow EventDef;
 typedef arhud::ServiceRow ServiceDef;
-
-const std::vector<ServiceDef>& default_services() {
-    return arhud::services_for(arhud::profile_from_env());
-}
 
 std::string to_hex(uint16_t v) {
     char b[8];
@@ -150,21 +147,22 @@ struct arhud_server {
     SPInstance spi;
     bool spi_initialized = false;
     std::string config_path;
-    std::string profile;                  // 服务表代（old / bplus）
+    std::string profile;                  // 服务表代（old / old-capture / bplus）
     std::vector<ServiceDef> services;
     std::map<std::pair<uint16_t, uint16_t>, uint16_t> inst_map;
     std::atomic<bool> started{false};
 
-    std::thread replay_thread;
-    std::atomic<bool> replay_running{false};
-    std::atomic<uint64_t> replay_sent{0};       // 真正发送成功（notify 返回 0）
-    std::atomic<uint64_t> replay_attempted{0};  // 尝试发送（含未注册事件导致的失败）
+    arhud::ReplayEngine replay;           // pcap 回放引擎（流式 + 两种节奏 + 逐事件统计）
 
     std::mutex mtx;
 
     uint16_t instance_of(uint16_t svc, uint16_t event) const {
         auto it = inst_map.find({svc, event});
         return it != inst_map.end() ? it->second : svc;
+    }
+
+    bool has_event(uint16_t svc, uint16_t event) const {
+        return arhud::has_event(services, svc, event);
     }
 };
 
@@ -230,6 +228,7 @@ int arhud_server_add_service(arhud_server_t* srv, uint16_t service, uint16_t ins
     ServiceDef d;
     d.service = service; d.instance = instance; d.port = port;
     d.major = major; d.minor = minor;
+    d.tp_events = "";             // 必须显式置空：gen_sp_config 会解引用它
     srv->services.push_back(d);
     return 0;
 }
@@ -283,47 +282,89 @@ int arhud_server_notify(arhud_server_t* srv, uint16_t service, uint16_t event,
                               const_cast<uint8_t*>(data), len);
 }
 
+/* 把 C 选项翻译成引擎选项 */
+static arhud::ReplayOptions to_engine_opts(const arhud_replay_opts* o) {
+    arhud::ReplayOptions e;
+    if (!o) return e;
+    e.loop = o->loop != 0;
+    e.timing = (o->timing == arhud::kTimingCapture) ? arhud::kTimingCapture : arhud::kTimingInterval;
+    e.interval_ms = o->interval_ms;
+    e.speed = o->speed;
+    e.max_loops = o->max_loops;
+    e.start_delay_ms = o->start_delay_ms;
+    e.log_every = o->log_every;
+    return e;
+}
+
+int arhud_server_replay_start_ex(arhud_server_t* srv, const char* const* paths, int n_paths,
+                                 const arhud_replay_opts* opts) {
+    if (!srv || !paths || n_paths <= 0 || !srv->started.load()) return -1;
+    std::vector<std::string> ps;
+    for (int i = 0; i < n_paths; ++i)
+        if (paths[i] && *paths[i]) ps.push_back(paths[i]);
+    if (ps.empty()) return -1;
+
+    arhud::ReplayOptions e = to_engine_opts(opts);
+    /* 发送动作：走 notify（内部按服务表映射 instance）；未注册事件也照发（与参考实现一致） */
+    arhud::ReplayEngine::Sender sender = [srv](uint16_t svc, uint16_t ev,
+                                                const uint8_t* data, uint32_t len) -> int {
+        return arhud_server_notify(srv, svc, ev, data, len) == 0 ? arhud::kSendOk : arhud::kSendErr;
+    };
+    arhud::ReplayEngine::Registered reg = [srv](uint16_t svc, uint16_t ev) {
+        return srv->has_event(svc, ev);
+    };
+    std::string err;
+    if (!srv->replay.start(ps, e, sender, reg, &err)) {
+        arhud_set_last_error(err.c_str());
+        return -1;
+    }
+    return 0;
+}
+
 int arhud_server_replay_start(arhud_server_t* srv, const char* pcap_path,
                               int loop, uint32_t interval_ms) {
-    if (!srv || !pcap_path || !srv->started.load()) return -1;
-    if (srv->replay_running.load()) return -1;
-
-    std::vector<arhud::PcapMessage> msgs;
-    if (!arhud::parse_pcap(pcap_path, msgs) || msgs.empty()) return -1;
-
-    srv->replay_running = true;
-    srv->replay_sent = 0;
-    srv->replay_attempted = 0;
-    srv->replay_thread = std::thread([srv, msgs = std::move(msgs), loop, interval_ms]() {
-        while (srv->replay_running.load()) {
-            for (const auto& m : msgs) {
-                if (!srv->replay_running.load()) break;
-                const int rc = arhud_server_notify(srv, m.service, m.event, m.payload.data(),
-                                                  (uint32_t)m.payload.size());
-                srv->replay_attempted++;
-                if (rc == 0) srv->replay_sent++;   // 未注册的事件（如换用别的 profile）不计入成功
-                if (interval_ms)
-                    std::this_thread::sleep_for(std::chrono::milliseconds(interval_ms));
-            }
-            if (!loop) break;
-        }
-        srv->replay_running = false;
-    });
-    return 0;
+    if (!pcap_path) return -1;
+    const char* paths[1] = {pcap_path};
+    arhud_replay_opts o;
+    arhud_replay_opts_default(&o);
+    o.loop = loop ? 1 : 0;
+    o.timing = arhud::kTimingInterval;
+    o.interval_ms = interval_ms;
+    return arhud_server_replay_start_ex(srv, paths, 1, &o);
 }
 
 void arhud_server_replay_stop(arhud_server_t* srv) {
     if (!srv) return;
-    srv->replay_running = false;
-    if (srv->replay_thread.joinable()) srv->replay_thread.join();
+    srv->replay.stop();
 }
 
 uint64_t arhud_server_replay_sent(arhud_server_t* srv) {
-    return srv ? srv->replay_sent.load() : 0;
+    return srv ? srv->replay.snapshot().sent : 0;
 }
 
 uint64_t arhud_server_replay_attempted(arhud_server_t* srv) {
-    return srv ? srv->replay_attempted.load() : 0;
+    return srv ? srv->replay.snapshot().parsed : 0;
+}
+
+uint64_t arhud_server_replay_parsed(arhud_server_t* srv) {
+    return srv ? srv->replay.snapshot().parsed : 0;
+}
+
+uint64_t arhud_server_replay_unregistered(arhud_server_t* srv) {
+    return srv ? srv->replay.snapshot().unregistered : 0;
+}
+
+int arhud_server_replay_running(arhud_server_t* srv) {
+    return srv && srv->replay.running() ? 1 : 0;
+}
+
+int arhud_server_replay_report(arhud_server_t* srv, char* buf, uint32_t buflen) {
+    if (!srv || !buf || buflen == 0) return -1;
+    const std::string js = srv->replay.report_json();
+    if (js.size() + 1 > buflen) return -1;
+    std::memcpy(buf, js.data(), js.size());
+    buf[js.size()] = '\0';
+    return (int)js.size();
 }
 
 const char* arhud_server_profile(arhud_server_t* srv) {
@@ -362,5 +403,9 @@ uint32_t arhud_pack_u64(uint8_t* out, uint64_t v) {
 }
 uint32_t arhud_pack_f32(uint8_t* out, float v) { uint32_t u; std::memcpy(&u, &v, 4); return arhud_pack_u32(out, u); }
 uint32_t arhud_pack_f64(uint8_t* out, double v) { uint64_t u; std::memcpy(&u, &v, 8); return arhud_pack_u64(out, u); }
+
+/* 注：arhud_replay_opts_default / arhud_pcap_events / arhud_pcap_error /
+ * arhud_profile_events / arhud_profile_name 与协议栈无关，定义在 arhud_replay.cpp，
+ * SP 版与标准 vsomeip 版共用同一份实现（同一份 arhud_replay.o）。 */
 
 }  // extern "C"

@@ -19,6 +19,7 @@
 #define ARHUD_SERVICES_H
 
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -82,8 +83,49 @@ inline const std::vector<ServiceRow>& services_old() {
     return svcs;
 }
 
-/* ---------------- 新一代接口（bplus）：6 服务 / 38 事件 ---------------- */
-inline const std::vector<ServiceRow>& services_bplus() {
+/* ---------------- old + 抓包实测事件（11 服务 / 33 事件）----------------
+ * 背景：参考配置 old/someip_arhud01_pcap_server.json 只声明了 23 个事件，
+ * 但该目录里的真实抓包（out.pcap / output3.pcap / outputblanket.pcap）里还出现
+ * 另外 10 个**已 offer 服务上**的事件（服务都在表里，只是事件没登记）：
+ *     0x0007:8003/8004   0x0017:8002   0x8202:8001/8006/8007/8008/8009/800A/800B
+ * 不登记它们，回放时这些数据就"发不出去"（协议栈侧没有对应事件，拿不到订阅者）。
+ *
+ * 这是**可选扩展**，默认不开（`ARHUD_SERVICE_PROFILE` 不设或 =old 时与参考配置逐条一致），
+ * 需要完整回放抓包时设 `ARHUD_SERVICE_PROFILE=old-capture`（别名 old+pcap / capture）。
+ * 事件名参考配置里没有，故用 ext_<service>_<event> 记号；事件组按同服务既有事件取 0x1101。
+ * 详见 PCAP_REPLAY.md。 */
+inline const std::vector<ServiceRow>& services_old_capture() {
+    static const std::vector<ServiceRow> svcs = [] {
+        std::vector<ServiceRow> v = services_old();
+        struct Extra { uint16_t service; uint16_t event; const char* name; };
+        static const Extra extra[] = {
+            {0x0007, 0x8003, "ext_0007_8003"},
+            {0x0007, 0x8004, "ext_0007_8004"},
+            {0x0017, 0x8002, "ext_0017_8002"},
+            {0x8202, 0x8001, "ext_8202_8001"},
+            {0x8202, 0x8006, "ext_8202_8006"},
+            {0x8202, 0x8007, "ext_8202_8007"},
+            {0x8202, 0x8008, "ext_8202_8008"},
+            {0x8202, 0x8009, "ext_8202_8009"},
+            {0x8202, 0x800A, "ext_8202_800A"},
+            {0x8202, 0x800B, "ext_8202_800B"},
+        };
+        for (const Extra& e : extra) {
+            for (auto& s : v) {
+                if (s.service != e.service) continue;
+                bool exists = false;
+                for (const auto& row : s.events)
+                    if (row.event == e.event) exists = true;
+                if (!exists) s.events.push_back({e.event, 0x1101, e.name});
+                break;
+            }
+        }
+        return v;
+    }();
+    return svcs;
+}
+
+/* ---------------- 新一代接口（bplus）：6 服务 / 38 事件 ---------------- */inline const std::vector<ServiceRow>& services_bplus() {
     static const std::vector<ServiceRow> svcs = {
         {0x001A, 0x001A, 51211, 1, 0, {{0x8001, 0x1101, "vehiclePositionInfoNotify"},
                                        {0x8002, 0x1102, "rtkNotify"},
@@ -128,15 +170,21 @@ inline const std::vector<ServiceRow>& services_bplus() {
 }
 
 inline const std::vector<ServiceRow>& services_by_name(const std::string& name) {
-    return name == "bplus" ? services_bplus() : services_old();
+    if (name == "bplus") return services_bplus();
+    if (name == "old-capture") return services_old_capture();
+    return services_old();
 }
 
-/* 环境变量选择 profile（默认 old）；非法值回退 old */
+/* 环境变量选择 profile（默认 old）；非法值回退 old。
+ * 取值：old / bplus / old-capture（别名 old+pcap、old+pcap-capture、capture、old-ext） */
 inline std::string profile_from_env() {
     const char* env = std::getenv("ARHUD_SERVICE_PROFILE");
     std::string name = (env && *env) ? env : "old";
     for (auto& c : name) c = (char)std::tolower((unsigned char)c);
     if (name == "bplus" || name == "b+" || name == "new") return "bplus";
+    if (name == "old-capture" || name == "old+capture" || name == "old+pcap" ||
+        name == "capture" || name == "old-ext" || name == "old_full" || name == "full")
+        return "old-capture";
     return "old";
 }
 
@@ -148,6 +196,9 @@ inline ProfileMeta meta_for(const std::string& profile) {
     if (profile == "bplus")
         return {"bplus", "0x1443", 25, 13, "/tmp/someip_arhud01_bplus.log",
                 "BPlus/someip_arhud01_pcap_server_B+.json"};
+    if (profile == "old-capture")
+        return {"old-capture", "0x1001", 25, 13, "/tmp/someip_arhud01_capture.log",
+                "old/someip_arhud01_pcap_server.json + 抓包实测事件（PCAP_REPLAY.md）"};
     return {"old", "0x1001", 25, 13, "/tmp/someip_arhud01.log",
             "old/someip_arhud01_pcap_server.json"};
 }
@@ -156,6 +207,38 @@ inline size_t event_count(const std::vector<ServiceRow>& svcs) {
     size_t n = 0;
     for (const auto& s : svcs) n += s.events.size();
     return n;
+}
+
+/* 表里是否有该事件（回放前可用来判断"这条数据发得出去吗"） */
+inline bool has_event(const std::vector<ServiceRow>& svcs, uint16_t service, uint16_t event) {
+    for (const auto& s : svcs) {
+        if (s.service != service) continue;
+        for (const auto& e : s.events)
+            if (e.event == event) return true;
+    }
+    return false;
+}
+
+/* 把服务表导出成 JSON（Python 侧做覆盖率核对用） */
+inline std::string services_json(const std::vector<ServiceRow>& svcs) {
+    std::string out = "{\"services\":[";
+    for (size_t i = 0; i < svcs.size(); ++i) {
+        const ServiceRow& s = svcs[i];
+        char b[256];
+        if (i) out += ",";
+        std::snprintf(b, sizeof(b), "{\"service\":%u,\"instance\":%u,\"port\":%u,\"major\":%u,\"events\":[",
+                      s.service, s.instance, s.port, s.major);
+        out += b;
+        for (size_t j = 0; j < s.events.size(); ++j) {
+            if (j) out += ",";
+            std::snprintf(b, sizeof(b), "{\"event\":%u,\"group\":%u,\"name\":\"%s\"}",
+                          s.events[j].event, s.events[j].group, s.events[j].name);
+            out += b;
+        }
+        out += "]}";
+    }
+    out += "]}";
+    return out;
 }
 
 }  // namespace arhud

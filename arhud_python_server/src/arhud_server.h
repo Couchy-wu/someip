@@ -55,18 +55,70 @@ int arhud_server_notify(arhud_server_t* srv, uint16_t service, uint16_t event,
                         const uint8_t* data, uint32_t len);
 
 /*
- * pcap 回放（后台线程，自动做 SOME/IP-TP 分片重组）。
+ * pcap 回放（后台线程，流式解析 + SOME/IP-TP 自动重组）。
  * pcap_path: pcap 文件；loop: 1=循环；interval_ms: 每条之间的间隔毫秒。
  * 返回 0 成功（已解析 pcap），-1 失败。
+ * 注：需要"按抓包原始节奏回放 / 多文件 / 限速倍速 / 限轮数"时用下面的 _ex 版本。
  */
 int arhud_server_replay_start(arhud_server_t* srv, const char* pcap_path,
                               int loop, uint32_t interval_ms);
+
+/*
+ * 回放选项（_ex 接口）。字段含义见注释；先用 arhud_replay_opts_default() 取默认值再改。
+ */
+typedef struct arhud_replay_opts {
+    int      loop;            /* 0/1，是否循环回放 */
+    int      timing;          /* 0 = 固定间隔(interval_ms)；1 = 按 pcap 抓包时间戳 */
+    uint32_t interval_ms;     /* timing=0 时每条之间的间隔毫秒 */
+    double   speed;           /* timing=1 时的倍速：2.0 = 两倍速，<=0 视为 1.0 */
+    uint32_t max_loops;       /* 最大轮数，0 = 不限 */
+    uint32_t start_delay_ms;  /* 起播前等待毫秒（等客户端订阅稳定） */
+    int      log_every;       /* >0 时每 N 条打印一行进度（调试用） */
+} arhud_replay_opts;
+
+void arhud_replay_opts_default(arhud_replay_opts* opts);
+
+/*
+ * 多文件/目录回放（目录由调用方展开成文件列表，按传入顺序回放）。
+ * paths: 文件路径数组；n_paths: 个数；opts: NULL 时用默认（循环 + 10ms 固定间隔）。
+ * 返回 0 成功，-1 失败（含打不开文件）。
+ */
+int arhud_server_replay_start_ex(arhud_server_t* srv, const char* const* paths, int n_paths,
+                                 const arhud_replay_opts* opts);
+
 void arhud_server_replay_stop(arhud_server_t* srv);
-/* 已回放条数（供 Python 轮询） */
-/* 回放计数：sent = 真正发送成功（notify 返回 0）；attempted = 尝试次数（含未注册事件的失败）。
- * 两者差值即为"服务表不匹配/未注册"导致的跳过量，用它判断 profile 选得对不对。 */
+/* 回放计数：sent = 真正发送成功（notify 返回 0）；attempted = 已尝试发布的条数；
+ * parsed = 从 pcap 读到的消息数（= attempted）；两者差值 = 发送失败的条数。
+ * unregistered = 服务表里没有的事件（默认仍会尝试发布，与参考实现一致）。 */
 uint64_t arhud_server_replay_sent(arhud_server_t* srv);
 uint64_t arhud_server_replay_attempted(arhud_server_t* srv);
+uint64_t arhud_server_replay_parsed(arhud_server_t* srv);
+uint64_t arhud_server_replay_unregistered(arhud_server_t* srv);
+int arhud_server_replay_running(arhud_server_t* srv);
+
+/*
+ * 回放报告（JSON）：总数 + 逐 (service,event) 的 attempted/sent/unregistered。
+ * 写入 buf（含结尾 0），返回写入长度；buf 太小返回 -1。
+ */
+int arhud_server_replay_report(arhud_server_t* srv, char* buf, uint32_t buflen);
+
+/*
+ * 回放前体检：扫一组 pcap，返回出现过的 (service,event) 与条数（JSON 写入 buf）。
+ * 不需要服务端句柄，也不发送任何数据。返回写入长度，-1 失败。
+ */
+int arhud_pcap_events(const char* const* paths, int n_paths, char* buf, uint32_t buflen);
+/* 最近一次 pcap 相关调用的错误信息（静态缓冲，失败后调用） */
+const char* arhud_pcap_error(void);
+/* 内部：记录错误信息（由各服务端实现调用；定义在 arhud_replay.cpp） */
+void arhud_set_last_error(const char* msg);
+
+/*
+ * 服务表导出：profile=NULL/空 时用环境变量 ARHUD_SERVICE_PROFILE（默认 old）。
+ * 返回 JSON（写入 buf），-1 表示 buf 太小。
+ */
+int arhud_profile_events(const char* profile, char* buf, uint32_t buflen);
+/* 当前环境变量归一化后的服务表代（old / old-capture / bplus） */
+const char* arhud_profile_name(void);
 
 /* 服务表代诊断：old（11 服务/23 事件）/ bplus（6 服务/38 事件），由 ARHUD_SERVICE_PROFILE 选择 */
 const char* arhud_server_profile(arhud_server_t* srv);

@@ -9,12 +9,14 @@
       "enable": "false",
       "path": "/tmp/arhud_server.log"
     },
-    "dlt": "false"
+    "dlt": "false",
+    "dds_log_enable": "false",
+    "dmesg_log_enable": "false"
   },
   "applications": [
     {
       "name": "arhud01",
-      "id": "0x1443",
+      "id": "0x1001",
       "max_dispatchers": "25",
       "threads": "13"
     }

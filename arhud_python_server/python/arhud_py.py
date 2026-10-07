@@ -3,24 +3,37 @@
 """
 arhud_py.py —— Python 调用 C++ 服务端库（libarhud_server.so，ctypes）
 =========================================================================
-C++ 库负责 vsomeip 通信内核（offer 11 服务/23 事件、发送、pcap 回放、TP 重组），
-Python 负责业务：指定 pcap 回放、对数据结构赋值后组包发送。
+C++ 库负责通信内核（offer 服务/事件、发送、pcap 流式回放、TP 重组），
+Python 负责业务：指定 pcap 回放/发布、对数据结构赋值后组包发送。
 
 用法：
     from arhud_py import ArHudServer
+
     srv = ArHudServer(unicast="192.168.1.10")     # 自动探测 IP
     srv.start()
     srv.notify_fields("RTK", counter=1, longitude=116.397, latitude=39.908)  # 结构化赋值
     srv.notify_raw(0x000A, 0x8001, b"...")        # 原始字节
-    srv.replay("out.pcap", loop=True, interval_ms=10)   # 指定 pcap 回放
-    srv.replay_sent()                             # 已回放条数
-    srv.stop()
+
+    # ① 指定 pcap 回放（timing="capture" = 按抓包原始节奏，与参考实现一致）
+    srv.replay("out.pcap", timing="capture")
+    # ② 目录：目录下所有 *.pcap（out.pcap 优先）循环回放 + 发布
+    srv.replay_dir("/path/to/pcap_dir", loop=True, timing="capture", speed=1.0)
+    # ③ 回放前先看 pcap 里有什么、服务表覆不覆盖得住
+    print(ArHudServer.pcap_events(["/path/to/out.pcap"]))
 
 结构化类型（C++ 序列化，大端 + CRC32 自动补齐）：
     RTK / IMU / ChangeLane / PilotStatus / PilotAlarm / Broadcast /
     HudMappath / HudNavmap / VehiclePosition
+
+服务表代（profile）：
+    old          默认，11 服务/23 事件，与参考配置 old/someip_arhud01_pcap_server.json 逐条一致
+    old-capture  old + 抓包实测的 10 个事件（11 服务/33 事件），用于"完整回放/发布"参考抓包
+    bplus        新一代接口，6 服务/38 事件
+    auto         按 pcap 自动挑一个能覆盖住的最小的表（见 ArHudServer.for_pcaps）
 """
 import ctypes
+import glob
+import json
 import os
 import socket
 import sys
@@ -157,6 +170,100 @@ _lib.arhud_server_service_count.argtypes = [ctypes.c_void_p]
 _lib.arhud_server_event_count.restype = ctypes.c_int
 _lib.arhud_server_event_count.argtypes = [ctypes.c_void_p]
 
+
+# ---------------- 扩展接口（多文件/目录、按抓包节奏、统计报告、pcap 体检） ----------------
+
+class ReplayOpts(ctypes.Structure):
+    """与 C 的 arhud_replay_opts 对齐"""
+    _fields_ = [("loop", ctypes.c_int),
+                ("timing", ctypes.c_int),          # 0=固定间隔 1=按抓包时间戳
+                ("interval_ms", ctypes.c_uint32),
+                ("speed", ctypes.c_double),
+                ("max_loops", ctypes.c_uint32),
+                ("start_delay_ms", ctypes.c_uint32),
+                ("log_every", ctypes.c_int)]
+
+
+_lib.arhud_replay_opts_default.restype = None
+_lib.arhud_replay_opts_default.argtypes = [ctypes.POINTER(ReplayOpts)]
+_lib.arhud_server_replay_start_ex.restype = ctypes.c_int
+_lib.arhud_server_replay_start_ex.argtypes = [ctypes.c_void_p,
+                                              ctypes.POINTER(ctypes.c_char_p),
+                                              ctypes.c_int,
+                                              ctypes.POINTER(ReplayOpts)]
+_lib.arhud_server_replay_parsed.restype = ctypes.c_uint64
+_lib.arhud_server_replay_parsed.argtypes = [ctypes.c_void_p]
+_lib.arhud_server_replay_unregistered.restype = ctypes.c_uint64
+_lib.arhud_server_replay_unregistered.argtypes = [ctypes.c_void_p]
+_lib.arhud_server_replay_running.restype = ctypes.c_int
+_lib.arhud_server_replay_running.argtypes = [ctypes.c_void_p]
+_lib.arhud_server_replay_report.restype = ctypes.c_int
+_lib.arhud_server_replay_report.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_uint32]
+
+_lib.arhud_pcap_events.restype = ctypes.c_int
+_lib.arhud_pcap_events.argtypes = [ctypes.POINTER(ctypes.c_char_p), ctypes.c_int,
+                                   ctypes.c_char_p, ctypes.c_uint32]
+_lib.arhud_pcap_error.restype = ctypes.c_char_p
+_lib.arhud_pcap_error.argtypes = []
+_lib.arhud_profile_events.restype = ctypes.c_int
+_lib.arhud_profile_events.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint32]
+_lib.arhud_profile_name.restype = ctypes.c_char_p
+_lib.arhud_profile_name.argtypes = []
+
+_BUF = 1 << 22  # 4MB：足够放服务表/事件表 JSON
+
+
+def pcap_events(paths):
+    """扫一组 pcap（可传文件/目录/列表），返回出现过的 [(service, event), ...]（不发送数据）"""
+    if isinstance(paths, str):
+        paths = find_pcaps(paths)
+    paths = list(paths)
+    if not paths:
+        return []
+    arr = (ctypes.c_char_p * len(paths))(*[p.encode() for p in paths])
+    buf = ctypes.create_string_buffer(_BUF)
+    n = _lib.arhud_pcap_events(arr, len(paths), buf, _BUF)
+    if n < 0:
+        raise RuntimeError("arhud_pcap_events 失败: %s" % _lib.arhud_pcap_error().decode())
+    data = json.loads(buf.value.decode())
+    return [(e["service"], e["event"]) for e in data["events"]]
+
+
+def profile_events(profile=None):
+    """返回某个服务表代定义的全部 [(service, event), ...]"""
+    buf = ctypes.create_string_buffer(_BUF)
+    n = _lib.arhud_profile_events(profile.encode() if profile else None, buf, _BUF)
+    if n < 0:
+        raise RuntimeError("arhud_profile_events 失败（缓冲区不足？）")
+    data = json.loads(buf.value.decode())
+    out = []
+    for s in data["services"]:
+        for e in s["events"]:
+            out.append((s["service"], e["event"]))
+    return out
+
+
+def profile_name():
+    """当前环境变量归一化后的服务表代（old / old-capture / bplus）"""
+    return _lib.arhud_profile_name().decode()
+
+
+def find_pcaps(path):
+    """
+    路径展开：文件 → [文件]；目录 → 目录下 *.pcap（out.pcap 排最前，其余按名字排序）。
+    参考实现只读 <目录>/out.pcap；这里保留"out.pcap 优先"，并支持一个目录多个 pcap。
+    """
+    if os.path.isfile(path):
+        return [path]
+    if not os.path.isdir(path):
+        raise FileNotFoundError(path)
+    files = sorted(glob.glob(os.path.join(path, "*.pcap")))
+    files += sorted(glob.glob(os.path.join(path, "*.pcapng")))
+    prio = [f for f in files if os.path.basename(f) == "out.pcap"]
+    rest = [f for f in files if os.path.basename(f) != "out.pcap"]
+    return prio + rest
+
+
 U8 = ctypes.POINTER(ctypes.c_uint8)
 U32 = ctypes.POINTER(ctypes.c_uint32)
 
@@ -198,15 +305,71 @@ def _default_ip():
 class ArHudServer:
     """C++ 服务端库的 Python 封装"""
 
-    def __init__(self, unicast=None, config_path=None):
+    # 按 pcap 自动挑表时的候选顺序（越靠前越"保守"：表越小越好）
+    PROFILE_CANDIDATES = ("old", "old-capture", "bplus")
+
+    def __init__(self, unicast=None, config_path=None, profile=None):
+        """
+        profile: None=用环境变量（默认 old）/ "old" / "old-capture" / "bplus"。
+                 必须在 create 之前设置，因为 C++ 侧在 create 时读 ARHUD_SERVICE_PROFILE
+                 并据此生成 SP 配置（服务/事件表要在 SPInit 时就固定下来）。
+        """
+        if profile:
+            os.environ["ARHUD_SERVICE_PROFILE"] = str(profile)
+        self.profile = profile_name()
         self._handle = _lib.arhud_server_create(
             (unicast or _default_ip()).encode(), config_path.encode() if config_path else None)
         if not self._handle:
-            raise RuntimeError("arhud_server_create failed")
+            raise RuntimeError("arhud_server_create failed (profile=%s)" % self.profile)
+
+    # ---------- 服务表 / pcap 体检（静态方法，不需要已创建服务端） ----------
+
+    @staticmethod
+    def pcap_events(paths):
+        """扫 pcap，返回出现过的 [(service, event), ...]"""
+        return pcap_events(find_pcaps(paths) if isinstance(paths, str) else paths)
+
+    @staticmethod
+    def profile_events(profile=None):
+        """返回某个 profile 定义的全部 [(service, event), ...]"""
+        return profile_events(profile)
+
+    @classmethod
+    def best_profile_for_pcaps(cls, paths):
+        """
+        挑一个"能覆盖住这些 pcap 里所有事件"的最小的表。
+        返回 (profile, missing)：missing 是非空 set 时表示没有哪个表能全覆盖（已选覆盖最好的）。
+        """
+        if isinstance(paths, str):
+            paths = find_pcaps(paths)
+        used = set(cls.pcap_events(paths))
+        best, best_missing = None, None
+        for cand in cls.PROFILE_CANDIDATES:
+            missing = used - set(profile_events(cand))
+            if not missing:
+                return cand, set()
+            if best is None or len(missing) < len(best_missing):
+                best, best_missing = cand, missing
+        return best, best_missing
+
+    @classmethod
+    def for_pcaps(cls, paths, unicast=None, config_path=None):
+        """
+        按 pcap 内容自动选表并创建服务端（profile="auto" 的落地实现）。
+        用法：srv = ArHudServer.for_pcaps("/path/to/pcap_dir"); srv.start(); srv.replay_dir(...)
+        """
+        prof, missing = cls.best_profile_for_pcaps(paths)
+        if missing:
+            print("[arhud] 警告：没有哪个服务表能覆盖 pcap 里全部事件，缺少 %d 个：%s"
+                  % (len(missing), sorted("0x%04X:0x%04X" % m for m in missing)), file=sys.stderr)
+        srv = cls(unicast=unicast, config_path=config_path, profile=prof)
+        srv.profile = prof
+        return srv
 
     def start(self):
         if _lib.arhud_server_start(self._handle) != 0:
             raise RuntimeError("arhud_server_start failed")
+        return self
 
     def stop(self):
         _lib.arhud_server_stop(self._handle)
@@ -290,13 +453,79 @@ class ArHudServer:
 
     # ---------- pcap 回放 ----------
 
-    def replay(self, pcap_path, loop=True, interval_ms=10):
-        """指定 pcap 文件回放（后台线程，C++ 内做 SOME/IP-TP 重组）。返回已解析消息数。"""
-        return _lib.arhud_server_replay_start(self._handle, pcap_path.encode(),
-                                             1 if loop else 0, interval_ms)
+    def replay(self, pcap_path, loop=True, interval_ms=10, timing="interval",
+               speed=1.0, max_loops=0, start_delay_ms=0, log_every=0):
+        """
+        回放并发布 pcap（后台线程，C++ 流式解析 + SOME/IP-TP 重组）。
+
+        pcap_path : pcap 文件 **或目录**（目录→目录下所有 *.pcap，out.pcap 优先）
+        loop      : 是否循环
+        timing    : "capture" = 按抓包原始时间戳节奏（与参考实现一致）；
+                    "interval" = 固定 interval_ms 间隔（默认，兼容老行为）
+        speed     : timing="capture" 时的倍速（2.0=两倍速，0.5=放慢一半）
+        max_loops : 最大轮数（0=不限；loop=False 时只跑 1 轮）
+        start_delay_ms: 起播前等待（等客户端订阅稳定，建议 15000~25000）
+        log_every : >0 时每 N 条打印一行进度
+
+        返回 0 成功，其它失败（错误信息见 replay_status()）。
+        """
+        paths = find_pcaps(pcap_path) if isinstance(pcap_path, str) else list(pcap_path)
+        if not paths:
+            raise ValueError("没有找到 pcap 文件: %s" % pcap_path)
+        return self._replay_paths(paths, loop, interval_ms, timing, speed,
+                                  max_loops, start_delay_ms, log_every)
+
+    def replay_dir(self, directory, pattern="*.pcap", loop=True, **kw):
+        """回放一个目录下的 pcap（out.pcap 优先，其余按名字排序）。"""
+        import glob as _glob
+        paths = sorted(_glob.glob(os.path.join(directory, pattern)))
+        if not paths:
+            raise ValueError("目录下没有 %s: %s" % (pattern, directory))
+        paths = [p for p in paths if os.path.basename(p) == "out.pcap"] + \
+                [p for p in paths if os.path.basename(p) != "out.pcap"]
+        return self._replay_paths(paths, loop, kw.pop("interval_ms", 10),
+                                  kw.pop("timing", "capture"), kw.pop("speed", 1.0),
+                                  kw.pop("max_loops", 0), kw.pop("start_delay_ms", 0),
+                                  kw.pop("log_every", 0))
+
+    def _replay_paths(self, paths, loop, interval_ms, timing, speed, max_loops,
+                      start_delay_ms, log_every):
+        opts = ReplayOpts()
+        _lib.arhud_replay_opts_default(ctypes.byref(opts))
+        opts.loop = 1 if loop else 0
+        opts.timing = 1 if str(timing).lower() in ("capture", "pcap", "realtime", "real") else 0
+        opts.interval_ms = int(interval_ms)
+        opts.speed = float(speed)
+        opts.max_loops = int(max_loops)
+        opts.start_delay_ms = int(start_delay_ms)
+        opts.log_every = int(log_every)
+        arr = (ctypes.c_char_p * len(paths))(*[p.encode() for p in paths])
+        return _lib.arhud_server_replay_start_ex(self._handle, arr, len(paths),
+                                                 ctypes.byref(opts))
 
     def replay_stop(self):
         _lib.arhud_server_replay_stop(self._handle)
+
+    def replay_running(self):
+        return bool(_lib.arhud_server_replay_running(self._handle))
+
+    def replay_status(self):
+        """回放进度：{parsed, sent, attempted, unregistered, running}"""
+        return {
+            "parsed": _lib.arhud_server_replay_parsed(self._handle),
+            "sent": _lib.arhud_server_replay_sent(self._handle),
+            "attempted": _lib.arhud_server_replay_attempted(self._handle),
+            "unregistered": _lib.arhud_server_replay_unregistered(self._handle),
+            "running": self.replay_running(),
+        }
+
+    def replay_report(self):
+        """回放报告（dict）：总数 + 逐事件 attempted/sent/unregistered"""
+        buf = ctypes.create_string_buffer(_BUF)
+        n = _lib.arhud_server_replay_report(self._handle, buf, _BUF)
+        if n < 0:
+            raise RuntimeError("replay_report 失败（缓冲区不足）")
+        return json.loads(buf.value.decode())
 
     def replay_sent(self):
         return _lib.arhud_server_replay_sent(self._handle)

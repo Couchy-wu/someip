@@ -16,7 +16,7 @@ SP_LIBS  ?= $(CURDIR)/../libs/arm64
 endif
 
 # SP 版：链接 SP 分支库（libsomeip.so 等；SP 分支已静态链接 boost，仅需基础系统库 + zlib）
-SP_OBJS = arhud_server_sp.o arhud_pcap.o arhud_types.o
+SP_OBJS = arhud_server_sp.o arhud_pcap.o arhud_replay.o arhud_types.o
 SP_LIBS_LINK = -L$(SP_LIBS) -lsomeip -lsomeip-cfg -lsomeip-sd -lsomeip-e2e -lz
 
 # rpath 用 $ORIGIN：库与同目录的 libsomeip*.so 一起拷贝到任何位置都能加载
@@ -25,11 +25,11 @@ libarhud_server.so: $(SP_OBJS)
 	$(CXX) $(CXXFLAGS) -shared -o $@ $(SP_OBJS) $(SP_LIBS_LINK) -Wl,-rpath,'$$ORIGIN' -Wl,--enable-new-dtags
 
 # 标准版：链接标准 vsomeip 3.4.10
-STD_OBJS = arhud_server.o arhud_pcap.o arhud_types.o
+STD_OBJS = arhud_server.o arhud_pcap.o arhud_replay.o arhud_types.o
 libarhud_server_std.so: $(STD_OBJS)
 	$(CXX) $(CXXFLAGS) -shared -o $@ $(STD_OBJS) -L/usr/local/lib -lvsomeip3 -lz
 
-%.o: %.cpp arhud_server.h arhud_pcap.h arhud_types.h arhud_services.h
+%.o: %.cpp arhud_server.h arhud_pcap.h arhud_replay.h arhud_types.h arhud_services.h
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 arhud_server_sp.o: arhud_server_sp.cpp include/vsomeip/someip_com.h
